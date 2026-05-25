@@ -73,7 +73,7 @@ window.LeadsModule = {
       </div>
     </div>
     <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      ${window.GKData.leads.filter(l => l.followUpDate && l.followUpDate <= '2026-05-20').map(l => `
+      ${window.GKData.leads.filter(l => l.followUpDate && l.followUpDate <= new Date().toISOString().split('T')[0]).map(l => `
       <div class="p-4 bg-surface border border-border rounded-xl hover:border-muted transition-colors cursor-pointer" onclick="LeadsModule.showLeadDetail('${l.id}')">
         <div class="flex items-start justify-between mb-2">
           <div>
@@ -186,7 +186,7 @@ window.LeadsModule = {
       <td class="text-money text-gray-300">${l.budget ? '₹' + (l.budget/1000).toFixed(0) + 'K' : '—'}</td>
       <td><span class="badge badge-gray">${l.source}</span></td>
       <td class="text-gray-400 text-xs">${l.assignedTo}</td>
-      <td class="${l.followUpDate && l.followUpDate <= '2026-05-18' ? 'text-red-400' : 'text-yellow-400'} text-xs">${l.followUpDate || '—'}</td>
+      <td class="${l.followUpDate && l.followUpDate <= new Date().toISOString().split('T')[0] ? 'text-red-400' : 'text-yellow-400'} text-xs">${l.followUpDate || '—'}</td>
       <td>${this.statusBadge(l.status)}</td>
       <td>
         <div class="flex items-center gap-1.5" onclick="event.stopPropagation()">

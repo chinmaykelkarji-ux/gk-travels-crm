@@ -22,9 +22,10 @@
       { id: 2, name: 'Arjun Patel',  role: 'Operations',        trips: 0, tasks: 0, avatar: 'AP' },
       { id: 3, name: 'Deepak Verma', role: 'Operations',        trips: 0, tasks: 0, avatar: 'DV' }
     ],
-    reminders: [],
-    bookings:  [],
-    customers: []
+    reminders:   [],
+    bookings:    [],
+    customers:   [],
+    activityLog: []
   };
 
   // Load saved data from localStorage, merge with defaults for any missing keys
@@ -50,8 +51,9 @@
     monthlyStats: stored.monthlyStats,
     staff:        stored.staff,
     reminders:    stored.reminders,
-    bookings:     stored.bookings  || [],
-    customers:    stored.customers || [],
+    bookings:     stored.bookings     || [],
+    customers:    stored.customers    || [],
+    activityLog:  stored.activityLog  || [],
 
     // ── Persist everything to localStorage ──────────
     save() {
@@ -65,7 +67,8 @@
           staff:        this.staff,
           reminders:    this.reminders,
           bookings:     this.bookings,
-          customers:    this.customers
+          customers:    this.customers,
+          activityLog:  this.activityLog
         }));
       } catch (e) {
         console.error('GKCrm: could not save to localStorage', e);
@@ -114,6 +117,19 @@
       return 'CUS-' + year + '-' + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(4, '0');
     },
 
+    // ── Activity Log ─────────────────────────────────
+    logActivity(type, message, entityType, entityId) {
+      const entry = {
+        id:         'AL-' + Date.now() + '-' + Math.random().toString(36).substr(2,4),
+        type,       message, entityType, entityId,
+        timestamp:  new Date().toISOString(),
+        date:       new Date().toISOString().split('T')[0]
+      };
+      if (!this.activityLog) this.activityLog = [];
+      this.activityLog.unshift(entry);
+      if (this.activityLog.length > 300) this.activityLog = this.activityLog.slice(0, 300);
+    },
+
     // ── Finance Calculations ─────────────────────────
     calcBookingFinance(b) {
       const base        = Math.max(0, b.sellingPrice || 0);
@@ -131,12 +147,69 @@
       const base  = Math.max(0, trip.totalAmount || 0);
       trip.gstAmount    = Math.round(base * rate / 100);
       trip.totalPayable = base + trip.gstAmount;
-      trip.supplierCost = this.payments.supplierPayments
+      // Supplier cost = all linked supplier payments + standalone booking costs
+      const supplierFromPayments = this.payments.supplierPayments
         .filter(p => p.tripId === trip.id)
         .reduce((s, p) => s + (p.amount || 0), 0);
+      const supplierFromBookings = this.bookings
+        .filter(b => b.refId === trip.id && b.supplierCost > 0)
+        .reduce((s, b) => s + (b.supplierCost || 0), 0);
+      trip.supplierCost = Math.max(supplierFromPayments, supplierFromBookings);
       trip.grossProfit  = base - trip.supplierCost;
+      // Net profit: gross profit minus GST (GST is collected & remitted, not kept)
       trip.netProfit    = trip.grossProfit - trip.gstAmount;
       trip.marginPct    = base > 0 ? Math.round((trip.netProfit / base) * 100 * 10) / 10 : 0;
+      // Recalculate balance using totalPayable
+      const totalPaid = this.payments.customerPayments
+        .filter(p => p.tripId === trip.id && p.status === 'received')
+        .reduce((s, p) => s + (p.amount || 0), 0);
+      if (totalPaid > 0 || trip.paidAmount >= 0) {
+        trip.paidAmount = Math.max(trip.paidAmount || 0, totalPaid);
+        trip.balanceDue = Math.max(0, trip.totalPayable - trip.paidAmount);
+      }
+    },
+
+    // ── Monthly Analytics ────────────────────────────
+    getMonthlyStats(monthsBack) {
+      const now = new Date();
+      const d = new Date(now.getFullYear(), now.getMonth() - (monthsBack || 0), 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const received = this.payments.customerPayments
+        .filter(p => p.status === 'received' && (p.date || '').startsWith(key))
+        .reduce((s, p) => s + p.amount, 0);
+      const supplierPaid = this.payments.supplierPayments
+        .filter(p => p.status === 'paid' && (p.paidDate || '').startsWith(key))
+        .reduce((s, p) => s + p.amount, 0);
+      const tripsCreated = this.trips.filter(t => (t.createdDate || '').startsWith(key)).length;
+      const bookingsCreated = this.bookings.filter(b => (b.createdDate || '').startsWith(key)).length;
+      return { key, received, supplierPaid, profit: received - supplierPaid, tripsCreated, bookingsCreated };
+    },
+
+    // ── Global Activity Feed ─────────────────────────
+    getActivityFeed(limit) {
+      const items = [];
+      const today = new Date().toISOString().split('T')[0];
+
+      // From activityLog
+      (this.activityLog || []).forEach(a => {
+        items.push({ date: a.date, timestamp: a.timestamp, text: a.message, type: a.type, entityType: a.entityType, entityId: a.entityId });
+      });
+
+      // From trip timelines
+      this.trips.forEach(t => {
+        (t.timeline || []).forEach(ev => {
+          items.push({ date: ev.date || today, timestamp: ev.date || today, text: `[${t.id}] ${ev.event}`, type: ev.type || 'info', entityType: 'trip', entityId: t.id });
+        });
+      });
+
+      // From recent payments
+      this.payments.customerPayments.slice(-30).forEach(p => {
+        items.push({ date: p.date || today, timestamp: p.date || today, text: `Payment received: ₹${p.amount} from ${p.customer}`, type: 'payment', entityType: 'payment', entityId: p.id });
+      });
+
+      return items
+        .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+        .slice(0, limit || 20);
     },
 
     // ── Auto-Reminder Engine ─────────────────────────

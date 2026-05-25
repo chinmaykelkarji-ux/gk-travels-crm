@@ -83,16 +83,43 @@ window.GKApp = {
 
   updateNotificationBadge() {
     const unsent = (window.GKData.reminders || []).filter(r => !r.sent).length;
-    const badge  = document.getElementById('notif-count');
-    const list   = document.getElementById('notif-list');
-    if (badge) badge.textContent = unsent > 0 ? `${unsent} alert${unsent > 1 ? 's' : ''}` : 'No new alerts';
-    if (list && unsent > 0) {
-      const urgent = (window.GKData.reminders || []).filter(r => !r.sent).slice(0, 5);
-      const colors = { urgent:'text-red-400', high:'text-orange-400', medium:'text-yellow-400', low:'text-gray-400' };
-      list.innerHTML = urgent.map(r => `<div class="px-4 py-3 hover:bg-surface cursor-pointer" onclick="GKApp.navigate('reminders')">
-        <p class="text-xs font-medium ${colors[r.priority] || 'text-gray-400'}">${r.priority?.toUpperCase()}</p>
-        <p class="text-sm text-gray-300 mt-0.5">${r.message}</p>
-      </div>`).join('');
+    const countEl  = document.getElementById('notif-count');
+    const badgeEl  = document.getElementById('notif-badge');
+    const list     = document.getElementById('notif-list');
+
+    if (countEl) countEl.textContent = unsent > 0 ? `${unsent} alert${unsent > 1 ? 's' : ''}` : 'No new alerts';
+
+    if (badgeEl) {
+      if (unsent > 0) {
+        badgeEl.textContent = unsent > 9 ? '9+' : unsent;
+        badgeEl.classList.remove('hidden');
+      } else {
+        badgeEl.classList.add('hidden');
+      }
+    }
+
+    if (list) {
+      if (unsent > 0) {
+        const reminders = (window.GKData.reminders || []).filter(r => !r.sent)
+          .sort((a,b) => { const p={urgent:0,high:1,medium:2,low:3}; return (p[a.priority]||3)-(p[b.priority]||3); })
+          .slice(0, 8);
+        const colors = { urgent:'text-red-500 bg-red-50 border-red-100', high:'text-orange-500 bg-orange-50 border-orange-100', medium:'text-blue-500 bg-blue-50 border-blue-100', low:'text-gray-400 bg-gray-50 border-gray-100' };
+        const badges = { urgent:'URGENT', high:'HIGH', medium:'MEDIUM', low:'LOW' };
+        list.innerHTML = reminders.map(r => `
+<div class="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0" onclick="GKApp.navigate('reminders');toggleNotifications()">
+  <div class="flex items-center gap-2 mb-1">
+    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold ${colors[r.priority]||colors.low} border">${badges[r.priority]||'INFO'}</span>
+  </div>
+  <p class="text-xs text-gray-700 leading-snug">${(r.message||'').substring(0,80)}${(r.message||'').length>80?'…':''}</p>
+</div>`).join('');
+      } else {
+        list.innerHTML = `
+<div class="px-4 py-8 text-center">
+  <i data-lucide="check-circle" class="w-6 h-6 text-green-300 mx-auto mb-2" style="opacity:1"></i>
+  <p class="text-xs text-gray-400">All clear — no pending alerts</p>
+</div>`;
+        if (window.lucide) setTimeout(() => lucide.createIcons(), 0);
+      }
     }
   }
 };
@@ -183,6 +210,7 @@ function createTrip() {
   };
 
   window.GKData.trips.unshift(newTrip);
+  window.GKData.logActivity('trip_created', `Trip created: ${customer} → ${destination}`, 'trip', newTrip.id);
   window.GKData.save();
   window.GKData.generateReminders(newTrip);
 

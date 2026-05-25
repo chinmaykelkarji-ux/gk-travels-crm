@@ -83,6 +83,7 @@ window.GKWorkflow = {
     // 6. Generate reminders if departure is set
     window.GKData.generateReminders(trip);
 
+    window.GKData.logActivity('lead_converted', `Lead converted: ${lead.name} → ${trip.destination} (${trip.id})`, 'trip', trip.id);
     window.GKData.save();
     GKApp.updateNotificationBadge();
 
@@ -261,6 +262,7 @@ window.GKWorkflow = {
   onPaymentRecorded(tripId) {
     const trip = window.GKData.trips.find(t => t.id === tripId);
     if (!trip) return;
+    window.GKData.logActivity('payment_received', `Payment received — ${trip.customer} (${tripId})`, 'trip', tripId);
 
     // Recalculate paid amount from payment records
     const totalPaid = window.GKData.payments.customerPayments

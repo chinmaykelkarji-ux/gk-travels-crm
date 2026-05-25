@@ -51,12 +51,16 @@ window.OperationsModule = {
   </div>`}
 
   <div class="flex items-center gap-2 overflow-x-auto pb-1">
-    ${cats.map(c => `
+    ${cats.map(c => {
+      const cnt = c==='all' ? ops.length : ops.filter(o=>o.category===c).length;
+      const active = this.activeCategory === c;
+      return `
     <button onclick="OperationsModule.setCategory('${c}')"
-      class="px-4 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 border ${this.activeCategory===c ? 'bg-white text-black border-white' : 'bg-surface border-border text-gray-400 hover:text-white hover:border-muted'}">
+      class="px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-150 border ${active ? 'bg-gray-900 text-white border-gray-900 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'}">
       ${c.charAt(0).toUpperCase()+c.slice(1)}
-      <span class="ml-1 text-gray-500">(${c==='all'?ops.length:ops.filter(o=>o.category===c).length})</span>
-    </button>`).join('')}
+      <span class="ml-1 ${active?'text-gray-300':'text-gray-400'}">(${cnt})</span>
+    </button>`;
+    }).join('')}
   </div>
 
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -123,7 +127,7 @@ window.OperationsModule = {
     const btns = {
       web_checkin:  `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="OperationsModule.doCheckIn('${op.tripId}')"><i data-lucide="monitor" class="w-3 h-3"></i><span class="hidden sm:inline">Do Check-in</span></button>`,
       ticket:       `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="GKApp.openTrip('${op.tripId}')"><i data-lucide="ticket" class="w-3 h-3"></i><span class="hidden sm:inline">Issue Ticket</span></button>`,
-      hotel_pay:    `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="OperationsModule.showAddSupplierPayment('${op.tripId}')"><i data-lucide="credit-card" class="w-3 h-3"></i><span class="hidden sm:inline">Pay Now</span></button>`,
+      hotel_pay:    `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="FinanceModule.showAddSupplierPayment('${op.tripId}')"><i data-lucide="credit-card" class="w-3 h-3"></i><span class="hidden sm:inline">Add Payment</span></button>`,
       voucher:      `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="OperationsModule.markVoucherSent('${op.tripId}')"><i data-lucide="send" class="w-3 h-3"></i><span class="hidden sm:inline">Mark Sent</span></button>`,
       visa_track:   `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="OperationsModule.showVisaUpdate('${op.tripId}')"><i data-lucide="refresh-cw" class="w-3 h-3"></i><span class="hidden sm:inline">Update Status</span></button>`,
       visa_apply:   `<button class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="GKApp.openTrip('${op.tripId}')"><i data-lucide="file-plus" class="w-3 h-3"></i><span class="hidden sm:inline">Apply Visa</span></button>`,
@@ -159,10 +163,18 @@ window.OperationsModule = {
   sendBalanceWhatsApp(tripId) {
     const trip = window.GKData.trips.find(t => t.id === tripId);
     if (!trip) return;
-    const phone = (trip.phone || '').replace(/\D/g, '');
-    if (!phone) { alert('No phone number on file for this customer. Please update the trip.'); return; }
+    // Try trip phone, then linked customer phone
+    let phone = (trip.phone || '').replace(/\D/g, '');
+    if (!phone && trip.customerId) {
+      const cust = window.GKData.customers.find(c => c.id === trip.customerId);
+      if (cust) phone = (cust.phone || '').replace(/\D/g, '');
+    }
+    if (!phone) { alert('No phone number found for this customer. Please update the trip or customer profile.'); return; }
+    // Add country code if missing
+    if (phone.length === 10) phone = '91' + phone;
+    const balanceFormatted = (trip.balanceDue || 0).toLocaleString('en-IN');
     const msg = encodeURIComponent(
-      `Dear ${trip.customer},\n\nThis is a payment reminder from GK Travels.\n\n₹${(trip.balanceDue||0).toLocaleString('en-IN')} is due for your trip to ${trip.destination} departing on ${trip.departure}.\n\nPlease arrange payment at your earliest convenience.\n\nThank you,\nGK Travels Team`
+      `Dear ${trip.customer},\n\nKindly note that ₹${balanceFormatted} is pending for your upcoming trip to ${trip.destination} (departing on ${trip.departure}).\n\nRequest you to clear the balance at the earliest to confirm your booking.\n\nFor any queries, feel free to contact us.\n\nWarm regards,\nGK Travels`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
   },
@@ -302,10 +314,18 @@ window.OperationsModule = {
       amount,
       dueDate:     (document.getElementById('sp-due')||{}).value || '',
       status:      'pending',
-      paidDate:    ''
+      paidDate:    null
     };
     window.GKData.payments.supplierPayments.push(p);
+    // Recalc trip finance after adding supplier cost
+    const trip = window.GKData.trips.find(t => t.id === tripId);
+    if (trip) {
+      window.GKData.calcTripFinance(trip);
+      if (!trip.timeline) trip.timeline = [];
+      trip.timeline.push({ date: new Date().toISOString().split('T')[0], event: `Supplier payment added: ${supplier} ₹${amount}`, type: 'pending' });
+    }
     window.GKData.save();
+    GKApp.updateNotificationBadge();
     this.closeModal();
     GKApp.navigate('operations');
   },
