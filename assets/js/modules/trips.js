@@ -565,6 +565,8 @@ window.TripsModule = {
       const allPaid = trip.hotels.every(h => h.status === 'paid');
       if (allPaid) trip.hotelStatus = 'booked';
       window.GKData.save();
+      // Cascade: update operations alerts, complete hotel tasks, add timeline
+      if (window.GKWorkflow) window.GKWorkflow.onHotelPaid(tripId);
       this.switchTab('hotels', tripId);
     }
   },
@@ -585,23 +587,50 @@ window.TripsModule = {
     const custPays = window.GKData.payments.customerPayments.filter(p => p.tripId === t.id);
     const suppPays = window.GKData.payments.supplierPayments.filter(p => p.tripId === t.id);
     const totalPaid = custPays.filter(p => p.status==='received').reduce((s,p) => s+p.amount, 0);
+    const gstAmt  = t.gstAmount || 0;
+    const disc    = t.discount  || 0;
+    const payable = t.totalPayable || t.totalAmount || 0;
     return `
 <div class="space-y-5">
   <div class="grid grid-cols-3 gap-3">
-    <div class="stat-card text-center"><div class="text-xs text-gray-500 mb-1">Total Value</div><div class="text-xl font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">${t.totalAmount > 0 ? '₹'+this.fmtAmt(t.totalAmount) : '—'}</div></div>
+    <div class="stat-card text-center"><div class="text-xs text-gray-500 mb-1">Total Payable</div><div class="text-xl font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">${payable > 0 ? '₹'+this.fmtAmt(payable) : '—'}</div></div>
     <div class="stat-card text-center"><div class="text-xs text-gray-500 mb-1">Received</div><div class="text-xl font-bold text-green-400 text-money" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(totalPaid)}</div></div>
     <div class="stat-card text-center"><div class="text-xs text-gray-500 mb-1">Balance</div><div class="text-xl font-bold ${t.balanceDue>0?'text-yellow-400':'text-green-400'} text-money" style="font-family:'Manrope',sans-serif;">${t.balanceDue>0?'₹'+this.fmtAmt(t.balanceDue):'Paid'}</div></div>
   </div>
 
-  <!-- Set trip total -->
-  ${t.totalAmount === 0 ? `
-  <div class="gk-card border-accent/20">
-    <p class="text-xs text-gray-400 mb-3">Set the total trip value first:</p>
-    <div class="flex gap-3">
-      <input id="trip-total-input" type="number" placeholder="Total trip amount (₹)" class="form-input flex-1" />
-      <button onclick="TripsModule.setTripTotal('${t.id}')" class="btn-primary text-xs px-4">Set Total</button>
+  <!-- Set / update trip total + GST -->
+  <div class="gk-card ${t.totalAmount === 0 ? 'border-accent/20' : ''}">
+    <div class="flex items-center justify-between mb-3">
+      <span class="section-title">${t.totalAmount === 0 ? 'Set Trip Value' : 'Update Trip Value & GST'}</span>
+      ${t.totalAmount > 0 && window.ExportModule ? `<button onclick="ExportModule.printInvoice('${t.id}','trip')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="printer" class="w-3 h-3"></i> Print Invoice</button>` : ''}
     </div>
-  </div>` : ''}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Selling Price (₹) *</label>
+        <input id="trip-total-input" type="number" placeholder="150000" value="${t.totalAmount||''}" class="form-input w-full" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">GST Rate (%)</label>
+        <select id="trip-gst-rate" class="form-input w-full">
+          ${[0,5,12,18].map(r => `<option value="${r}" ${(t.gstRate||5)===r?'selected':''}>${r}%</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Discount (₹)</label>
+        <input id="trip-discount" type="number" placeholder="0" value="${t.discount||''}" class="form-input w-full" />
+      </div>
+      <div class="flex items-end">
+        <button onclick="TripsModule.setTripTotal('${t.id}')" class="btn-primary text-xs w-full px-4">Apply</button>
+      </div>
+    </div>
+    ${t.totalAmount > 0 ? `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-border text-xs">
+      <div class="text-gray-500">Base price: <span class="text-gray-300">₹${this.fmtAmt(t.totalAmount)}</span></div>
+      <div class="text-gray-500">GST (${t.gstRate||5}%): <span class="text-yellow-400">₹${this.fmtAmt(gstAmt)}</span></div>
+      <div class="text-gray-500">Discount: <span class="text-green-400">−₹${this.fmtAmt(disc)}</span></div>
+      <div class="text-gray-500 font-medium">Total payable: <span class="text-white">₹${this.fmtAmt(payable)}</span></div>
+    </div>` : ''}
+  </div>
 
   <!-- Customer Payments -->
   <div class="gk-card !p-0 overflow-hidden">
@@ -674,7 +703,15 @@ window.TripsModule = {
     const trip = window.GKData.trips.find(t => t.id === tripId);
     if (trip) {
       trip.totalAmount = val;
-      trip.balanceDue  = Math.max(0, val - trip.paidAmount);
+      trip.gstRate     = parseInt(document.getElementById('trip-gst-rate')?.value) || 5;
+      trip.discount    = parseInt(document.getElementById('trip-discount')?.value) || 0;
+      if (window.GKData.calcTripFinance) {
+        window.GKData.calcTripFinance(trip);
+      } else {
+        trip.gstAmount   = Math.round(trip.totalAmount * trip.gstRate / 100);
+        trip.totalPayable= trip.totalAmount + trip.gstAmount - trip.discount;
+        trip.balanceDue  = Math.max(0, trip.totalPayable - (trip.paidAmount || 0));
+      }
       window.GKData.save();
       this.switchTab('payments', tripId);
     }
@@ -754,8 +791,10 @@ window.TripsModule = {
     };
     window.GKData.payments.customerPayments.push(pay);
     trip.paidAmount  = (trip.paidAmount || 0) + amount;
-    trip.balanceDue  = Math.max(0, (trip.totalAmount || 0) - trip.paidAmount);
+    trip.balanceDue  = Math.max(0, (trip.totalPayable || trip.totalAmount || 0) - trip.paidAmount);
     window.GKData.save();
+    // Cascade: recalc finance, complete payment tasks, add timeline, refresh dashboard
+    if (window.GKWorkflow) window.GKWorkflow.onPaymentRecorded(tripId);
     this.closeModal();
     this.switchTab('payments', tripId);
   },
@@ -840,8 +879,13 @@ window.TripsModule = {
 
   markSupplierPaid(payId) {
     const p = window.GKData.payments.supplierPayments.find(x => x.id === payId);
-    if (p) { p.status = 'paid'; p.paidDate = new Date().toISOString().split('T')[0]; window.GKData.save(); }
-    // Find which trip tab to refresh
+    if (p) {
+      p.status = 'paid';
+      p.paidDate = new Date().toISOString().split('T')[0];
+      window.GKData.save();
+      // Cascade: add trip timeline, recalc finance
+      if (window.GKWorkflow) window.GKWorkflow.onSupplierPaid(payId);
+    }
     const trip = window.GKData.trips.find(t => t.id === p?.tripId);
     if (trip && this.activeTab === 'payments') this.switchTab('payments', p.tripId);
     else GKApp.navigate('finance');
@@ -860,11 +904,17 @@ window.TripsModule = {
   tabItinerary(t) {
     return `
 <div class="space-y-4">
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between flex-wrap gap-2">
     <div class="section-title">Trip Itinerary</div>
-    <button onclick="TripsModule.saveItinerary('${t.id}')" class="btn-primary text-xs flex items-center gap-1.5">
-      <i data-lucide="save" class="w-3 h-3"></i> Save Itinerary
-    </button>
+    <div class="flex items-center gap-2 flex-wrap">
+      ${t.itinerary && window.ExportModule ? `
+      <button onclick="ExportModule.printItinerary('${t.id}')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="printer" class="w-3 h-3"></i> Print Itinerary</button>
+      <button onclick="ExportModule.shareItineraryWhatsApp('${t.id}')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="message-circle" class="w-3 h-3"></i> Share via WhatsApp</button>
+      ` : ''}
+      <button onclick="TripsModule.saveItinerary('${t.id}')" class="btn-primary text-xs flex items-center gap-1.5">
+        <i data-lucide="save" class="w-3 h-3"></i> Save Itinerary
+      </button>
+    </div>
   </div>
   <div class="gk-card">
     <p class="text-xs text-gray-500 mb-3">Type or paste the full itinerary below. Day-wise, hotel names, activities, timings — anything you want.</p>

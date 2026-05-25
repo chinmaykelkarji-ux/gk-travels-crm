@@ -252,7 +252,41 @@ window.LeadsModule = {
 
   updateStatus(id, newStatus) {
     const lead = window.GKData.leads.find(l => l.id === id);
-    if (lead) { lead.status = newStatus; window.GKData.save(); GKApp.navigate('leads'); }
+    if (!lead) return;
+    lead.status = newStatus;
+    window.GKData.save();
+    // Auto-prompt conversion when marked confirmed
+    if (newStatus === 'confirmed' && !lead.convertedTripId) {
+      if (confirm('Lead marked as Confirmed! Convert to Trip File + Customer Profile now?')) {
+        this.convertToTrip(id);
+        return;
+      }
+    }
+    GKApp.navigate('leads');
+  },
+
+  convertToTrip(leadId) {
+    const result = window.GKWorkflow && window.GKWorkflow.promoteLead(leadId);
+    if (!result) return;
+    const { trip, customer } = result;
+    alert('Conversion complete!\n\nTrip: ' + trip.id + '\nCustomer: ' + customer.id + '\n\nInitial tasks have been created automatically. Opening trip file...');
+    GKApp.openTrip(trip.id);
+  },
+
+  sendQuotation(leadId) {
+    const lead = window.GKData.leads.find(l => l.id === leadId);
+    if (!lead) return;
+    const msg = encodeURIComponent(
+      'Dear ' + lead.name + ',\n\n' +
+      'Thank you for your inquiry! Here are your trip details:\n\n' +
+      'Destination: ' + lead.destination + '\n' +
+      'Travel Date: ' + (lead.travelDate || 'TBD') + '\n' +
+      'No. of Pax: ' + lead.pax + '\n' +
+      (lead.budget ? 'Estimated Budget: ₹' + lead.budget.toLocaleString() + '\n' : '') +
+      '\nWe will send you a detailed quotation shortly.\n\n' +
+      'Best regards,\nGK Travels Team\n📞 For queries, reply to this message.'
+    );
+    window.open('https://wa.me/' + (lead.phone || '').replace(/\D/g,'') + '?text=' + msg, '_blank');
   },
 
   showAddLead() {
@@ -333,10 +367,10 @@ window.LeadsModule = {
       <div class="gk-card">
         <div class="section-title mb-4">Quick Actions</div>
         <div class="space-y-2">
-          <button class="w-full btn-primary text-sm flex items-center gap-2 justify-center" onclick="alert('Quotation builder — coming soon')">
-            <i data-lucide="file-text" class="w-4 h-4"></i> Send Quotation
+          <button class="w-full btn-primary text-sm flex items-center gap-2 justify-center" onclick="LeadsModule.sendQuotation('${l.id}')">
+            <i data-lucide="file-text" class="w-4 h-4"></i> Send Quotation via WhatsApp
           </button>
-          <button class="w-full btn-secondary text-sm flex items-center gap-2 justify-center" onclick="alert('Converted to trip file')">
+          <button class="w-full btn-secondary text-sm flex items-center gap-2 justify-center" onclick="LeadsModule.convertToTrip('${l.id}')">
             <i data-lucide="folder-plus" class="w-4 h-4"></i> Convert to Trip File
           </button>
           <button class="w-full btn-ghost text-sm flex items-center gap-2 justify-center" onclick="LeadsModule.whatsapp('${l.phone}')">

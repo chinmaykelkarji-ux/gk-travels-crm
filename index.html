@@ -85,6 +85,16 @@
           <span class="text-sm font-medium">Trip Files</span>
         </a>
 
+        <a href="#bookings" class="nav-link group flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-muted transition-all duration-150 cursor-pointer" data-module="bookings">
+          <i data-lucide="ticket" class="w-4 h-4 flex-shrink-0"></i>
+          <span class="text-sm font-medium">Bookings</span>
+        </a>
+
+        <a href="#customers" class="nav-link group flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-muted transition-all duration-150 cursor-pointer" data-module="customers">
+          <i data-lucide="contact" class="w-4 h-4 flex-shrink-0"></i>
+          <span class="text-sm font-medium">Customers</span>
+        </a>
+
         <a href="#operations" class="nav-link group flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-white hover:bg-muted transition-all duration-150 cursor-pointer" data-module="operations">
           <i data-lucide="activity" class="w-4 h-4 flex-shrink-0"></i>
           <span class="text-sm font-medium">Operations</span>
@@ -147,10 +157,13 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <!-- Search -->
-          <div class="hidden sm:flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2 w-56 lg:w-72">
+          <!-- Global Search -->
+          <div id="gk-search-wrapper" class="hidden sm:flex relative items-center gap-2 bg-surface border border-border rounded-lg px-3 py-2 w-56 lg:w-72">
             <i data-lucide="search" class="w-3.5 h-3.5 text-gray-500 flex-shrink-0"></i>
-            <input type="text" placeholder="Search trips, leads, customers…" class="bg-transparent text-sm text-gray-300 placeholder-gray-600 outline-none w-full" />
+            <input id="gk-search-input" type="text" placeholder="Search trips, PNR, customers…" class="bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none w-full"
+              oninput="GKSearch.show(this.value)"
+              onblur="setTimeout(()=>GKSearch.close(),200)"
+              onkeydown="if(event.key==='Escape'){this.value='';GKSearch.close();}" />
           </div>
 
           <!-- Notifications -->
@@ -159,10 +172,26 @@
           </button>
 
           <!-- Quick Add -->
-          <button onclick="showQuickAdd()" class="flex items-center gap-2 bg-white text-black text-xs font-semibold px-3 py-2 rounded-lg hover:bg-gray-100 transition-all duration-150">
-            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-            <span class="hidden sm:inline">New Trip</span>
-          </button>
+          <div class="relative flex items-center">
+            <button onclick="showQuickAdd()" class="flex items-center gap-2 bg-white text-black text-xs font-semibold px-3 py-2 rounded-l-lg hover:bg-gray-100 transition-all duration-150 border-r border-gray-200">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              <span class="hidden sm:inline">New Trip</span>
+            </button>
+            <button onclick="toggleQuickMenu()" class="bg-white text-black text-xs font-semibold px-2 py-2 rounded-r-lg hover:bg-gray-100 transition-all duration-150">
+              <i data-lucide="chevron-down" class="w-3 h-3"></i>
+            </button>
+            <div id="quick-menu" class="hidden absolute top-full right-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+              <button onclick="showQuickAdd();toggleQuickMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                <i data-lucide="folder-open" class="w-4 h-4 text-gray-500"></i> New Trip File
+              </button>
+              <button onclick="(window.BookingsModule||{showAddBooking:showQuickAdd}).showAddBooking?.('flight');toggleQuickMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                <i data-lucide="ticket" class="w-4 h-4 text-gray-500"></i> New Booking
+              </button>
+              <button onclick="(window.CustomersModule||{showAddCustomer:()=>{}}).showAddCustomer();toggleQuickMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5">
+                <i data-lucide="user-plus" class="w-4 h-4 text-gray-500"></i> New Customer
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -266,9 +295,13 @@
 
   <!-- Scripts (module order matters) -->
   <script src="assets/js/data.js"></script>
+  <script src="assets/js/workflow.js"></script>
+  <script src="assets/js/modules/export.js"></script>
   <script src="assets/js/modules/dashboard.js"></script>
   <script src="assets/js/modules/leads.js"></script>
   <script src="assets/js/modules/trips.js"></script>
+  <script src="assets/js/modules/bookings.js"></script>
+  <script src="assets/js/modules/customers.js"></script>
   <script src="assets/js/modules/operations.js"></script>
   <script src="assets/js/modules/tasks.js"></script>
   <script src="assets/js/modules/finance.js"></script>

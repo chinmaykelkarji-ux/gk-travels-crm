@@ -12,6 +12,14 @@ window.DashboardModule = {
     const totalPC  = pendingC.reduce((s,p) => s + p.amount, 0);
     const totalPS  = pendingS.reduce((s,p) => s + p.amount, 0);
     const totalRev = d.payments.customerPayments.filter(p => p.status === 'received').reduce((s,p) => s + p.amount, 0);
+    const bookings = d.bookings || [];
+    const customers= d.customers || [];
+    const bookingsRev = bookings.reduce((s,b) => s + (b.sellingPrice||0), 0);
+    const bookingsBalance = bookings.reduce((s,b) => s + (b.balanceDue||0), 0);
+    const netProfit = bookings.reduce((s,b) => s + (b.netProfit||0), 0)
+                    + d.trips.reduce((s,t) => s + (t.netProfit||0), 0);
+    const recentBookings = bookings.slice().sort((a,b) => b.id.localeCompare(a.id)).slice(0,5);
+    const bookingIcons = { flight:'plane', train:'train-front', bus:'bus', hotel:'building-2', cab:'car', visa:'stamp', insurance:'shield', activity:'map-pin' };
 
     return `
 <div class="p-6 space-y-6 animate-in">
@@ -40,6 +48,14 @@ window.DashboardModule = {
     ${this.statCard('Supplier Payments Due',     totalPS > 0 ? '₹'+this.fmtAmt(totalPS) : '—', 'credit-card',   'red',    pendingS.length + ' due')}
     ${this.statCard('Vouchers Pending',          d.trips.filter(t=>t.voucherStatus==='pending').length, 'file-check','yellow','To send to customers')}
     ${this.statCard('Open Tasks',                d.tasks.filter(t=>t.status!=='completed').length, 'check-square','blue',  urgent.length + ' urgent')}
+  </div>
+
+  <!-- BOOKINGS + CUSTOMERS + PROFIT ROW -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    ${this.statCard('Total Bookings',            bookings.length,                                'ticket',        'blue',   bookings.filter(b=>b.status==='pending').length + ' pending')}
+    ${this.statCard('Customers',                 customers.length,                               'contact',       'green',  'In database')}
+    ${this.statCard('Net Profit (All)',           netProfit > 0 ? '₹'+this.fmtAmt(netProfit) : '—', 'trending-up','green', 'Trips + bookings')}
+    ${this.statCard('Booking Revenue',           bookingsRev > 0 ? '₹'+this.fmtAmt(bookingsRev) : '—', 'receipt','blue', bookingsBalance > 0 ? '₹'+this.fmtAmt(bookingsBalance)+' due' : 'All cleared')}
   </div>
 
   <!-- MAIN GRID -->
@@ -116,6 +132,39 @@ window.DashboardModule = {
         </div>`}
       </div>
 
+      <!-- Recent Bookings -->
+      <div class="gk-card">
+        <div class="section-header mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-1.5 h-4 bg-purple-500 rounded-full"></div>
+            <span class="section-title">Recent Bookings</span>
+          </div>
+          <button onclick="GKApp.navigate('bookings')" class="text-xs text-accent hover:text-white transition-colors">View all →</button>
+        </div>
+        ${recentBookings.length ? `
+        <div class="overflow-x-auto">
+          <table class="gk-table">
+            <thead><tr><th>ID</th><th>Type</th><th>Customer</th><th>Selling Price</th><th>Balance</th><th>Status</th></tr></thead>
+            <tbody>
+              ${recentBookings.map(b=>`
+              <tr onclick="GKApp.openBooking('${b.id}')">
+                <td><span class="trip-id">${b.id}</span></td>
+                <td><span class="flex items-center gap-1.5"><i data-lucide="${bookingIcons[b.type]||'file'}" class="w-3 h-3 text-gray-400"></i><span class="capitalize text-gray-300">${b.type}</span></span></td>
+                <td class="primary">${b.customerName||'—'}</td>
+                <td class="text-money text-gray-300">${b.sellingPrice>0?'₹'+this.fmtAmt(b.sellingPrice):'—'}</td>
+                <td class="${b.balanceDue>0?'text-yellow-400':'text-green-400'} text-money">${b.balanceDue>0?'₹'+this.fmtAmt(b.balanceDue):'Paid'}</td>
+                <td><span class="badge badge-gray capitalize">${(b.status||'').replace(/_/g,' ')}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : `
+        <div class="empty-state py-8">
+          <i data-lucide="ticket" class="w-8 h-8 mx-auto mb-3 text-gray-700"></i>
+          <p class="text-sm text-gray-600">No bookings yet</p>
+          <button onclick="GKApp.navigate('bookings')" class="mt-3 btn-primary text-xs">Create First Booking</button>
+        </div>`}
+      </div>
+
       <!-- Pending Operations -->
       <div class="gk-card">
         <div class="section-header mb-4">
@@ -147,22 +196,34 @@ window.DashboardModule = {
             <span class="section-title">Revenue Overview</span>
           </div>
         </div>
-        ${totalRev > 0 || totalPC > 0 ? `
-        <div class="space-y-4">
+        ${(totalRev + bookingsRev) > 0 || totalPC > 0 ? `
+        <div class="space-y-3">
           <div>
             <div class="flex justify-between mb-1.5">
-              <span class="text-xs text-gray-500">Total Revenue</span>
-              <span class="text-lg font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(totalRev)}</span>
+              <span class="text-xs text-gray-500">Trip Revenue</span>
+              <span class="text-base font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(totalRev)}</span>
             </div>
             <div class="progress-bar"><div class="progress-fill" style="width:${totalRev>0?'100':'0'}%"></div></div>
           </div>
           <div>
             <div class="flex justify-between mb-1.5">
-              <span class="text-xs text-gray-500">Pending Collection</span>
-              <span class="text-base font-semibold text-yellow-400 text-money">₹${this.fmtAmt(totalPC)}</span>
+              <span class="text-xs text-gray-500">Booking Revenue</span>
+              <span class="text-base font-bold text-accent text-money" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(bookingsRev)}</span>
             </div>
-            <div class="progress-bar"><div class="progress-fill yellow" style="width:${totalPC>0?'60':'0'}%"></div></div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${bookingsRev>0?'70':'0'}%"></div></div>
           </div>
+          <div class="pt-2 border-t border-border">
+            <div class="flex justify-between mb-1.5">
+              <span class="text-xs text-gray-500 font-medium">Combined Total</span>
+              <span class="text-lg font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(totalRev + bookingsRev)}</span>
+            </div>
+          </div>
+          ${totalPC > 0 ? `<div>
+            <div class="flex justify-between mb-1.5">
+              <span class="text-xs text-gray-500">Pending Collection</span>
+              <span class="text-sm font-semibold text-yellow-400 text-money">₹${this.fmtAmt(totalPC)}</span>
+            </div>
+          </div>` : ''}
         </div>` : `
         <div class="empty-state py-6">
           <i data-lucide="indian-rupee" class="w-7 h-7 mx-auto mb-2 text-gray-700"></i>

@@ -9,8 +9,8 @@ window.RemindersModule = {
     const high    = reminders.filter(r => r.priority === 'high');
     const medium  = reminders.filter(r => r.priority === 'medium');
 
-    const typeIcons  = { web_checkin:'monitor', hotel_payment:'building-2', balance_payment:'indian-rupee', final_documents:'file-text', visa_followup:'stamp', departure:'plane' };
-    const typeLabels = { web_checkin:'Web Check-in', hotel_payment:'Hotel Payment', balance_payment:'Balance Payment', final_documents:'Final Documents', visa_followup:'Visa Follow-up', departure:'Departure Alert' };
+    const typeIcons  = { web_checkin:'monitor', hotel_payment:'building-2', balance_payment:'indian-rupee', final_documents:'file-text', visa_followup:'stamp', departure:'plane', ticket_issue:'ticket', booking_balance:'credit-card' };
+    const typeLabels = { web_checkin:'Web Check-in', hotel_payment:'Hotel Payment', balance_payment:'Balance Payment', final_documents:'Final Documents', visa_followup:'Visa Follow-up', departure:'Departure Alert', ticket_issue:'Ticket Issue', booking_balance:'Booking Balance' };
 
     return `
 <div class="p-6 space-y-5 animate-in">
@@ -142,10 +142,20 @@ window.RemindersModule = {
     if (row) { row.classList.add('opacity-50'); }
     btn.textContent = '✓ Sent';
     btn.disabled = true;
-    const trip = window.GKData.trips.find(t=>t.id===r?.tripId);
-    if (channel === 'whatsapp' && trip?.phone) {
+    const trip    = window.GKData.trips.find(t=>t.id===r?.tripId);
+    const booking = !trip ? (window.GKData.bookings||[]).find(b=>b.id===r?.tripId) : null;
+    let phone = trip?.phone || booking?.customerPhone;
+    if (!phone && (trip || booking)) {
+      const custId = trip?.customerId || booking?.customerId;
+      const custName = trip?.customer || booking?.customerName;
+      const cust = custId
+        ? (window.GKData.customers||[]).find(c=>c.id===custId)
+        : (window.GKData.customers||[]).find(c=>c.name===custName);
+      phone = cust?.phone;
+    }
+    if (channel === 'whatsapp' && phone) {
       const msg = encodeURIComponent(r?.message||'Reminder from GK Travels');
-      window.open(`https://wa.me/${trip.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+      window.open(`https://wa.me/${phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
     }
   },
 

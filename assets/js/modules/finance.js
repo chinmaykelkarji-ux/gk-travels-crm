@@ -8,39 +8,45 @@ window.FinanceModule = {
   render() {
     const cp  = window.GKData.payments.customerPayments;
     const sp  = window.GKData.payments.supplierPayments;
-    const received     = cp.filter(p => p.status === 'received').reduce((s,p) => s + p.amount, 0);
-    const pendingCust  = cp.filter(p => p.status === 'pending').reduce((s,p) => s + p.amount, 0);
-    const pendingSupp  = sp.filter(p => p.status === 'pending').reduce((s,p) => s + p.amount, 0);
-    const totalTrips   = window.GKData.trips.reduce((s,t) => s + (t.totalAmount||0), 0);
+    const bk  = window.GKData.bookings;
+    const received    = cp.filter(p => p.status === 'received').reduce((s,p) => s + p.amount, 0);
+    const pendingCust = cp.filter(p => p.status === 'pending').reduce((s,p) => s + p.amount, 0);
+    const pendingSupp = sp.filter(p => p.status === 'pending').reduce((s,p) => s + p.amount, 0);
+    const totalTrips  = window.GKData.trips.reduce((s,t) => s + (t.totalAmount||0), 0);
+    const totalBkRev  = bk.reduce((s,b) => s + (b.sellingPrice||0), 0);
+    const totalRevenue= totalTrips + totalBkRev;
+    const totalProfit = window.GKData.trips.reduce((s,t) => s + (t.netProfit||0), 0)
+                      + bk.reduce((s,b) => s + (b.netProfit||0), 0);
+    const bkBalance   = bk.reduce((s,b) => s + (b.balanceDue||0), 0);
 
     return `
-<div class="p-6 space-y-5 animate-in">
+<div class="p-6 space-y-5">
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
     <div class="stat-card">
       <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Total Revenue</span><i data-lucide="trending-up" class="w-3.5 h-3.5 text-green-400"></i></div>
-      <div class="text-2xl font-bold text-white text-money" style="font-family:'Manrope',sans-serif;">${totalTrips > 0 ? '₹'+this.fmt(totalTrips) : '—'}</div>
-      <div class="text-xs text-gray-600 mt-1">${window.GKData.trips.length} trips booked</div>
+      <div class="text-2xl font-bold text-white" style="font-family:'Manrope',sans-serif;">₹${this.fmt(totalRevenue)}</div>
+      <div class="text-xs text-gray-600 mt-1">${window.GKData.trips.length} trips + ${bk.length} bookings</div>
     </div>
     <div class="stat-card">
-      <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Amount Received</span><i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400"></i></div>
-      <div class="text-2xl font-bold text-green-400 text-money" style="font-family:'Manrope',sans-serif;">${received > 0 ? '₹'+this.fmt(received) : '—'}</div>
-      <div class="text-xs text-gray-600 mt-1">${cp.filter(p=>p.status==='received').length} payments</div>
+      <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Net Profit</span><i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-green-400"></i></div>
+      <div class="text-2xl font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}" style="font-family:'Manrope',sans-serif;">₹${this.fmt(totalProfit)}</div>
+      <div class="text-xs text-gray-600 mt-1">Across all trips & bookings</div>
     </div>
     <div class="stat-card">
-      <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Customer Dues</span><i data-lucide="alert-circle" class="w-3.5 h-3.5 text-yellow-400"></i></div>
-      <div class="text-2xl font-bold text-yellow-400 text-money" style="font-family:'Manrope',sans-serif;">${pendingCust > 0 ? '₹'+this.fmt(pendingCust) : '—'}</div>
-      <div class="text-xs text-gray-600 mt-1">${cp.filter(p=>p.status==='pending').length} pending</div>
+      <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Amount Due</span><i data-lucide="alert-circle" class="w-3.5 h-3.5 text-yellow-400"></i></div>
+      <div class="text-2xl font-bold text-yellow-400" style="font-family:'Manrope',sans-serif;">₹${this.fmt(pendingCust + bkBalance)}</div>
+      <div class="text-xs text-gray-600 mt-1">Customer balances outstanding</div>
     </div>
     <div class="stat-card">
       <div class="flex items-center justify-between mb-3"><span class="text-xs text-gray-500">Supplier Dues</span><i data-lucide="credit-card" class="w-3.5 h-3.5 text-red-400"></i></div>
-      <div class="text-2xl font-bold text-red-400 text-money" style="font-family:'Manrope',sans-serif;">${pendingSupp > 0 ? '₹'+this.fmt(pendingSupp) : '—'}</div>
-      <div class="text-xs text-gray-600 mt-1">${sp.filter(p=>p.status==='pending').length} due</div>
+      <div class="text-2xl font-bold text-red-400" style="font-family:'Manrope',sans-serif;">₹${this.fmt(pendingSupp)}</div>
+      <div class="text-xs text-gray-600 mt-1">${sp.filter(p=>p.status==='pending').length} payments due</div>
     </div>
   </div>
 
   <div class="tab-bar">
-    ${['overview','customer_payments','supplier_payments','trip_profitability'].map(tab =>
-      `<div class="tab-btn ${this.activeTab===tab?'active':''}" onclick="FinanceModule.switchTab('${tab}')">${tab.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</div>`
+    ${['overview','customer_payments','supplier_payments','trip_profitability','bookings_finance'].map(tab =>
+      `<button class="tab-btn ${this.activeTab===tab?'active':''}" onclick="FinanceModule.switchTab('${tab}')">${tab.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</button>`
     ).join('')}
   </div>
 
@@ -54,16 +60,15 @@ window.FinanceModule = {
       case 'customer_payments':  return this.tabCustomer();
       case 'supplier_payments':  return this.tabSupplier();
       case 'trip_profitability': return this.tabProfit();
+      case 'bookings_finance':   return this.tabBookingsFinance();
       default: return '';
     }
   },
 
   switchTab(tab) {
     this.activeTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(b => {
-      b.classList.toggle('active', b.textContent.toLowerCase().replace(/ /g,'_') === tab);
-    });
-    document.getElementById('finance-tab-content').innerHTML = this.renderTab(tab);
+    const el = document.getElementById('finance-tab-content');
+    if (el) { el.innerHTML = this.renderTab(tab); }
     if (window.lucide) setTimeout(() => lucide.createIcons(), 0);
   },
 
@@ -200,28 +205,112 @@ window.FinanceModule = {
   tabProfit() {
     const trips = window.GKData.trips;
     if (!trips.length) return `<div class="empty-state py-16"><i data-lucide="bar-chart-2" class="w-8 h-8 mx-auto mb-3 text-gray-700"></i><p class="text-sm text-gray-500">No trips to analyse yet</p></div>`;
+
+    // Recalculate finance for all trips
+    trips.forEach(t => { if (t.totalAmount > 0) window.GKData.calcTripFinance(t); });
+
+    const totalRevenue = trips.reduce((s,t) => s + (t.totalAmount||0), 0);
+    const totalProfit  = trips.reduce((s,t) => s + (t.netProfit||0), 0);
+    const totalCost    = trips.reduce((s,t) => s + (t.supplierCost||0), 0);
+
     return `
-<div class="gk-card !p-0 overflow-hidden">
-  <div class="px-5 py-4 border-b border-border"><span class="section-title">Trip-wise Financial Summary</span></div>
-  <div class="overflow-x-auto">
-    <table class="gk-table">
-      <thead><tr><th>Trip ID</th><th>Customer</th><th>Destination</th><th>Total Value</th><th>Collected</th><th>Balance Due</th><th>Supplier Cost</th></tr></thead>
-      <tbody>
-        ${trips.map(t => {
-          const suppCost = window.GKData.payments.supplierPayments
-            .filter(p => p.tripId === t.id).reduce((s,p) => s + p.amount, 0);
-          return `
-        <tr onclick="GKApp.openTrip('${t.id}')">
-          <td><span class="trip-id">${t.id}</span></td>
-          <td class="primary">${t.customer}</td>
-          <td>${t.destination}</td>
-          <td class="text-money text-gray-300">${t.totalAmount > 0 ? '₹'+this.fmt(t.totalAmount) : '—'}</td>
-          <td class="text-money text-green-400">${t.paidAmount > 0 ? '₹'+this.fmt(t.paidAmount) : '—'}</td>
-          <td class="text-money ${t.balanceDue>0?'text-yellow-400':'text-green-400'}">${t.balanceDue>0?'₹'+this.fmt(t.balanceDue):(t.totalAmount>0?'Paid':'—')}</td>
-          <td class="text-money text-gray-400">${suppCost > 0 ? '₹'+this.fmt(suppCost) : '—'}</td>
-        </tr>`}).join('')}
-      </tbody>
-    </table>
+<div class="space-y-4">
+  <div class="grid grid-cols-3 gap-4">
+    <div class="gk-card text-center"><div class="text-xl font-bold text-green-400">₹${this.fmt(totalRevenue)}</div><div class="text-xs text-gray-500 mt-1">Total Revenue</div></div>
+    <div class="gk-card text-center"><div class="text-xl font-bold text-orange-400">₹${this.fmt(totalCost)}</div><div class="text-xs text-gray-500 mt-1">Total Supplier Cost</div></div>
+    <div class="gk-card text-center"><div class="text-xl font-bold ${totalProfit>=0?'text-green-400':'text-red-400'}">₹${this.fmt(totalProfit)}</div><div class="text-xs text-gray-500 mt-1">Net Profit</div></div>
+  </div>
+  <div class="gk-card !p-0 overflow-hidden">
+    <div class="px-5 py-4 border-b border-border"><span class="section-title">Trip-wise Financial Summary</span></div>
+    <div class="overflow-x-auto">
+      <table class="gk-table">
+        <thead>
+          <tr>
+            <th>Trip ID</th><th>Customer</th><th>Destination</th>
+            <th>Revenue</th><th>GST</th><th>Supplier Cost</th>
+            <th>Gross Profit</th><th>Net Profit</th><th>Margin %</th>
+            <th>Collected</th><th>Balance</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${trips.map(t => {
+            const np = t.netProfit || 0;
+            return `
+          <tr class="cursor-pointer hover:bg-surface" onclick="GKApp.openTrip('${t.id}')">
+            <td><span class="trip-id">${t.id}</span></td>
+            <td class="font-medium text-sm">${this.esc(t.customer)}</td>
+            <td class="text-sm text-gray-400">${this.esc(t.destination)}</td>
+            <td class="text-sm font-semibold">₹${this.fmt(t.totalAmount||0)}</td>
+            <td class="text-sm text-gray-400">₹${this.fmt(t.gstAmount||0)}<span class="text-xs ml-0.5">(${t.gstRate||5}%)</span></td>
+            <td class="text-sm text-orange-400">₹${this.fmt(t.supplierCost||0)}</td>
+            <td class="text-sm">₹${this.fmt(t.grossProfit||0)}</td>
+            <td class="text-sm font-semibold ${np>=0?'text-green-400':'text-red-400'}">₹${this.fmt(np)}</td>
+            <td class="text-sm ${(t.marginPct||0)>=0?'text-green-400':'text-red-400'}">${t.marginPct||0}%</td>
+            <td class="text-sm text-green-400">₹${this.fmt(t.paidAmount||0)}</td>
+            <td class="text-sm ${(t.balanceDue||0)>0?'text-orange-400 font-semibold':'text-gray-500'}">₹${this.fmt(t.balanceDue||0)}</td>
+            <td onclick="event.stopPropagation()">
+              <button onclick="ExportModule.printInvoice('${t.id}','trip')" class="btn-icon" title="Print Invoice"><i data-lucide="file-text" class="w-3.5 h-3.5"></i></button>
+            </td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>`;
+  },
+
+  tabBookingsFinance() {
+    const bookings = window.GKData.bookings;
+    if (!bookings.length) return `<div class="empty-state py-16"><i data-lucide="ticket" class="w-8 h-8 mx-auto mb-3 text-gray-700"></i><p class="text-sm text-gray-500">No standalone bookings yet. <a onclick="GKApp.navigate('bookings')" class="text-accent cursor-pointer hover:underline">Create a booking</a></p></div>`;
+
+    const totalSelling = bookings.reduce((s,b) => s + (b.sellingPrice||0), 0);
+    const totalCost    = bookings.reduce((s,b) => s + (b.supplierCost||0), 0);
+    const totalProfit  = bookings.reduce((s,b) => s + (b.netProfit||0), 0);
+    const totalGST     = bookings.reduce((s,b) => s + (b.gstAmount||0), 0);
+    const totalBalance = bookings.reduce((s,b) => s + (b.balanceDue||0), 0);
+
+    const typeIcon = { flight:'plane', train:'train-front', bus:'bus', hotel:'building-2', cab:'car', visa:'file-badge', insurance:'shield', activity:'map-pin' };
+
+    return `
+<div class="space-y-4">
+  <div class="grid grid-cols-3 lg:grid-cols-5 gap-3">
+    <div class="gk-card text-center"><div class="text-lg font-bold">₹${this.fmt(totalSelling)}</div><div class="text-xs text-gray-500 mt-1">Selling Price</div></div>
+    <div class="gk-card text-center"><div class="text-lg font-bold text-orange-400">₹${this.fmt(totalGST)}</div><div class="text-xs text-gray-500 mt-1">Total GST</div></div>
+    <div class="gk-card text-center"><div class="text-lg font-bold text-orange-400">₹${this.fmt(totalCost)}</div><div class="text-xs text-gray-500 mt-1">Supplier Cost</div></div>
+    <div class="gk-card text-center"><div class="text-lg font-bold ${totalProfit>=0?'text-green-400':'text-red-400'}">₹${this.fmt(totalProfit)}</div><div class="text-xs text-gray-500 mt-1">Net Profit</div></div>
+    <div class="gk-card text-center"><div class="text-lg font-bold text-yellow-400">₹${this.fmt(totalBalance)}</div><div class="text-xs text-gray-500 mt-1">Balance Due</div></div>
+  </div>
+  <div class="gk-card !p-0 overflow-hidden">
+    <div class="px-5 py-4 border-b border-border"><span class="section-title">Booking-wise Finance</span></div>
+    <div class="overflow-x-auto">
+      <table class="gk-table">
+        <thead>
+          <tr><th>Booking</th><th>Type</th><th>Customer</th><th>Selling</th><th>GST</th><th>Discount</th><th>Payable</th><th>Supplier</th><th>Gross Profit</th><th>Net Profit</th><th>Margin</th><th>Balance</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${bookings.map(b => {
+            const np = b.netProfit || 0;
+            return `
+          <tr class="cursor-pointer hover:bg-surface" onclick="GKApp.openBooking('${b.id}')">
+            <td><span class="trip-id">${b.id}</span></td>
+            <td><span class="type-pill type-${b.type} text-xs"><i data-lucide="${typeIcon[b.type]||'ticket'}" class="w-3 h-3"></i>${b.type}</span></td>
+            <td class="text-sm font-medium">${this.esc(b.customerName||'—')}</td>
+            <td class="text-sm">₹${this.fmt(b.sellingPrice||0)}</td>
+            <td class="text-sm text-gray-400">₹${this.fmt(b.gstAmount||0)}</td>
+            <td class="text-sm text-green-400">${(b.discount||0)>0?'₹'+this.fmt(b.discount):'—'}</td>
+            <td class="text-sm font-semibold">₹${this.fmt(b.totalPayable||0)}</td>
+            <td class="text-sm text-orange-400">₹${this.fmt(b.supplierCost||0)}</td>
+            <td class="text-sm">₹${this.fmt(b.grossProfit||0)}</td>
+            <td class="text-sm font-semibold ${np>=0?'text-green-400':'text-red-400'}">₹${this.fmt(np)}</td>
+            <td class="text-sm ${(b.marginPct||0)>=0?'text-green-400':'text-red-400'}">${b.marginPct||0}%</td>
+            <td class="text-sm ${(b.balanceDue||0)>0?'text-orange-400 font-semibold':'text-gray-500'}">₹${this.fmt(b.balanceDue||0)}</td>
+            <td onclick="event.stopPropagation()">
+              <button onclick="ExportModule.printInvoice('${b.id}','booking')" class="btn-icon" title="Print Invoice"><i data-lucide="file-text" class="w-3.5 h-3.5"></i></button>
+            </td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>`;
   },

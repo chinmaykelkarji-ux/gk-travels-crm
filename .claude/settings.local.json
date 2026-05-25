@@ -3,7 +3,11 @@
     "allow": [
       "PowerShell(node --version)",
       "PowerShell(npm --version)",
-      "PowerShell(Start-Process \"d:\\\\projects\\\\CRM\\\\index.html\")"
+      "PowerShell(Start-Process \"d:\\\\projects\\\\CRM\\\\index.html\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\projects\\\\CRM\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\projects\\\\CRM\" -Recurse -Include \"*.js\", \"*.json\" -File)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

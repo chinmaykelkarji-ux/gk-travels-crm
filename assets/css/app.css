@@ -540,3 +540,72 @@ i[data-lucide] { vertical-align: middle; }
   .stat-card{ padding: 14px 16px; }
   .gk-table td, .gk-table th { padding: 10px; }
 }
+
+/* ── BOOKING TYPE PILLS ──────────────────────────── */
+.type-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+  border: 1px solid var(--border);
+  background: #F9FAFB; color: #374151;
+}
+.type-flight    { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.type-train     { background: #F0FDF4; color: #059669; border-color: #A7F3D0; }
+.type-bus       { background: #FFFBEB; color: #D97706; border-color: #FDE68A; }
+.type-hotel     { background: #FFF7ED; color: #EA580C; border-color: #FED7AA; }
+.type-cab       { background: #F9FAFB; color: #374151; border-color: #E5E7EB; }
+.type-visa      { background: #F5F3FF; color: #7C3AED; border-color: #DDD6FE; }
+.type-insurance { background: #F0F9FF; color: #0369A1; border-color: #BAE6FD; }
+.type-activity  { background: #FDF4FF; color: #A21CAF; border-color: #F0ABFC; }
+
+/* ── FINANCE SUMMARY ROWS ────────────────────────── */
+.finance-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.finance-row:last-child { border-bottom: none; }
+.finance-row .label { color: #6B7280; }
+.finance-row .value { font-weight: 600; color: #111827; font-variant-numeric: tabular-nums; }
+.finance-row.profit .value { color: var(--green); }
+.finance-row.loss   .value { color: var(--red); }
+.finance-row.total  { border-top: 2px solid var(--border); padding-top: 10px; font-weight: 700; }
+
+/* ── DOCUMENT CARD ───────────────────────────────── */
+.doc-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--card);
+  transition: border-color 0.15s;
+}
+.doc-card:hover { border-color: var(--accent); }
+.doc-icon {
+  width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #EFF6FF; color: #2563EB; font-size: 18px;
+}
+
+/* ── STATUS STEP BADGE ───────────────────────────── */
+.status-step {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+  text-transform: capitalize; background: #F3F4F6; color: #6B7280;
+  border: 1px solid #E5E7EB;
+}
+.status-step.active { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
+.status-step.done   { background: #F0FDF4; color: #059669; border-color: #A7F3D0; }
+.status-step.danger { background: #FEF2F2; color: #DC2626; border-color: #FECACA; }
+
+/* ── CUSTOMER AVATAR ─────────────────────────────── */
+.cust-avatar {
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
+  background: #EFF6FF; color: #2563EB;
+}
+
+/* ── PRINT STYLES ────────────────────────────────── */
+@media print {
+  #sidebar, header, #notification-panel, .no-print { display: none !important; }
+  #module-view { overflow: visible !important; margin: 0 !important; padding: 0 !important; }
+  body { background: #fff !important; }
+}
