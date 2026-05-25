@@ -37,25 +37,25 @@ window.DashboardModule = {
 
   <!-- TOP STAT CARDS -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    ${this.statCard("Today's Departures",       d.todayTrips().length,                          'plane',         'green',  'Departing today')}
-    ${this.statCard('Upcoming Trips',            upcoming.length,                                'calendar',      'blue',   'Next 30 days')}
-    ${this.statCard('Web Check-in Pending',      d.trips.filter(t=>t.checkInStatus==='pending').length, 'monitor','yellow','Requires action')}
-    ${this.statCard('Visa Pending',              d.trips.filter(t=>t.visaStatus==='submitted'||t.visaStatus==='pending').length, 'stamp','yellow','Applications in progress')}
+    ${this.statCard("Today's Departures",       d.todayTrips().length,                          'plane',         'green',  'Departing today',            'trips')}
+    ${this.statCard('Upcoming Trips',            upcoming.length,                                'calendar',      'blue',   'Next 30 days',               'trips')}
+    ${this.statCard('Web Check-in Pending',      d.trips.filter(t=>t.checkInStatus==='pending').length, 'monitor','yellow','Requires action',           'operations')}
+    ${this.statCard('Visa Pending',              d.trips.filter(t=>t.visaStatus==='submitted'||t.visaStatus==='pending').length, 'stamp','yellow','Applications in progress','operations')}
   </div>
 
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    ${this.statCard('Customer Payments Due',     totalPC > 0 ? '₹'+this.fmtAmt(totalPC) : '—', 'indian-rupee',  'yellow', pendingC.length + ' pending')}
-    ${this.statCard('Supplier Payments Due',     totalPS > 0 ? '₹'+this.fmtAmt(totalPS) : '—', 'credit-card',   'red',    pendingS.length + ' due')}
-    ${this.statCard('Vouchers Pending',          d.trips.filter(t=>t.voucherStatus==='pending').length, 'file-check','yellow','To send to customers')}
-    ${this.statCard('Open Tasks',                d.tasks.filter(t=>t.status!=='completed').length, 'check-square','blue',  urgent.length + ' urgent')}
+    ${this.statCard('Customer Payments Due',     totalPC > 0 ? '₹'+this.fmtAmt(totalPC) : '—', 'indian-rupee',  'yellow', pendingC.length + ' pending', 'finance')}
+    ${this.statCard('Supplier Payments Due',     totalPS > 0 ? '₹'+this.fmtAmt(totalPS) : '—', 'credit-card',   'red',    pendingS.length + ' due',     'finance')}
+    ${this.statCard('Vouchers Pending',          d.trips.filter(t=>t.voucherStatus==='pending').length, 'file-check','yellow','To send to customers',   'operations')}
+    ${this.statCard('Open Tasks',                d.tasks.filter(t=>t.status!=='completed').length, 'check-square','blue',  urgent.length + ' urgent',    'tasks')}
   </div>
 
   <!-- BOOKINGS + CUSTOMERS + PROFIT ROW -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    ${this.statCard('Total Bookings',            bookings.length,                                'ticket',        'blue',   bookings.filter(b=>b.status==='pending').length + ' pending')}
-    ${this.statCard('Customers',                 customers.length,                               'contact',       'green',  'In database')}
-    ${this.statCard('Net Profit (All)',           netProfit > 0 ? '₹'+this.fmtAmt(netProfit) : '—', 'trending-up','green', 'Trips + bookings')}
-    ${this.statCard('Booking Revenue',           bookingsRev > 0 ? '₹'+this.fmtAmt(bookingsRev) : '—', 'receipt','blue', bookingsBalance > 0 ? '₹'+this.fmtAmt(bookingsBalance)+' due' : 'All cleared')}
+    ${this.statCard('Total Bookings',            bookings.length,                                'ticket',        'blue',   bookings.filter(b=>b.status==='pending').length + ' pending', 'bookings')}
+    ${this.statCard('Customers',                 customers.length,                               'contact',       'green',  'In database',                'customers')}
+    ${this.statCard('Net Profit (All)',           netProfit > 0 ? '₹'+this.fmtAmt(netProfit) : '—', 'trending-up','green', 'Trips + bookings',          'finance')}
+    ${this.statCard('Booking Revenue',           bookingsRev > 0 ? '₹'+this.fmtAmt(bookingsRev) : '—', 'receipt','blue', bookingsBalance > 0 ? '₹'+this.fmtAmt(bookingsBalance)+' due' : 'All cleared', 'bookings')}
   </div>
 
   <!-- MAIN GRID -->
@@ -296,11 +296,12 @@ window.DashboardModule = {
 </div>`;
   },
 
-  statCard(label, value, icon, color, sub) {
+  statCard(label, value, icon, color, sub, nav) {
     const colors = { green:'text-green-400', blue:'text-accent', yellow:'text-yellow-400', red:'text-red-400', gray:'text-gray-400' };
     const displayValue = (value === 0 || value === '0' || value === '—') ? (typeof value === 'number' ? '0' : value) : value;
+    const click = nav ? ` onclick="GKApp.navigate('${nav}')" style="cursor:pointer"` : '';
     return `
-<div class="stat-card">
+<div class="stat-card hover:border-white/20 transition-colors${nav ? ' cursor-pointer' : ''}"${click}>
   <div class="flex items-start justify-between mb-3">
     <span class="text-xs text-gray-500 leading-tight pr-2">${label}</span>
     <div class="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">

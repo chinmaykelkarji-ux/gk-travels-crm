@@ -9,14 +9,19 @@ window.CustomersModule = {
   searchQuery: '',
 
   render() {
-    const root = document.getElementById('module-view');
-    if (!root) return;
     if (this.activeView === 'detail' && this.activeCustomerId) {
       const c = window.GKData.customers.find(x => x.id === this.activeCustomerId);
-      if (c) { root.innerHTML = this.renderDetail(c); this.initIcons(); return; }
+      if (c) return this.renderDetail(c);
     }
-    root.innerHTML = this.renderList();
-    this.initIcons();
+    return this.renderList();
+  },
+
+  _refresh() {
+    const view = document.getElementById('module-view');
+    if (view) {
+      view.innerHTML = this.render();
+      if (window.lucide) setTimeout(() => lucide.createIcons(), 0);
+    }
   },
 
   // ── LIST VIEW ────────────────────────────────────
@@ -113,7 +118,7 @@ window.CustomersModule = {
     this.activeView = 'detail';
     this.activeCustomerId = id;
     this.activeTab = 'profile';
-    this.render();
+    this._refresh();
   },
 
   renderDetail(c) {
@@ -410,7 +415,7 @@ window.CustomersModule = {
     window.GKData.customers.push(c);
     window.GKData.save();
     this.closeModal();
-    this.render();
+    this._refresh();
   },
 
   saveEdit(id) {
@@ -431,7 +436,7 @@ window.CustomersModule = {
     c.passportCountry=(document.getElementById('c-passcountry')||{}).value?.trim() || '';
     window.GKData.save();
     this.closeModal();
-    this.render();
+    this._refresh();
   },
 
   deleteCustomer(id) {
@@ -497,15 +502,12 @@ window.CustomersModule = {
     this.activeView = 'detail';
     this.activeView = 'list';
     this.activeCustomerId = null;
-    this.render();
+    this._refresh();
   },
 
   search(q) {
     this.searchQuery = q;
-    const tbody = document.querySelector('#module-view .grid');
-    if (tbody) {
-      this.render();
-    }
+    this._refresh();
   },
 
   getCustomerBookings(custId) {

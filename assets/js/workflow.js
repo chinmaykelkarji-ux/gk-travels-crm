@@ -105,7 +105,6 @@ window.GKWorkflow = {
       });
     };
 
-    add('Collect passport copies from ' + trip.customer, 'documents', 'high', 0);
     add('Book flights — ' + trip.destination, 'flights', 'urgent', 0);
     add('Book hotel — ' + trip.destination, 'hotel', 'urgent', 0);
     if (dep) {

@@ -285,7 +285,7 @@ window.FinanceModule = {
     <div class="overflow-x-auto">
       <table class="gk-table">
         <thead>
-          <tr><th>Booking</th><th>Type</th><th>Customer</th><th>Selling</th><th>GST</th><th>Discount</th><th>Payable</th><th>Supplier</th><th>Gross Profit</th><th>Net Profit</th><th>Margin</th><th>Balance</th><th></th></tr>
+          <tr><th>Booking</th><th>Type</th><th>Customer</th><th>Final Selling Price</th><th>GST</th><th>Total Payable</th><th>Supplier Cost</th><th>Gross Profit</th><th>Net Profit</th><th>Margin</th><th>Balance</th><th></th></tr>
         </thead>
         <tbody>
           ${bookings.map(b => {
@@ -297,7 +297,6 @@ window.FinanceModule = {
             <td class="text-sm font-medium">${this.esc(b.customerName||'—')}</td>
             <td class="text-sm">₹${this.fmt(b.sellingPrice||0)}</td>
             <td class="text-sm text-gray-400">₹${this.fmt(b.gstAmount||0)}</td>
-            <td class="text-sm text-green-400">${(b.discount||0)>0?'₹'+this.fmt(b.discount):'—'}</td>
             <td class="text-sm font-semibold">₹${this.fmt(b.totalPayable||0)}</td>
             <td class="text-sm text-orange-400">₹${this.fmt(b.supplierCost||0)}</td>
             <td class="text-sm">₹${this.fmt(b.grossProfit||0)}</td>

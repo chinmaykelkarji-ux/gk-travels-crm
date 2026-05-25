@@ -112,6 +112,7 @@ window.TasksModule = {
         <option value="in_progress">In Progress</option>
         <option value="completed">Completed</option>
       </select>
+      <button class="btn-icon p-1.5" title="Edit" onclick="TasksModule.showEditTask('${t.id}')"><i data-lucide="pencil" class="w-3 h-3"></i></button>
       <button class="btn-icon p-1.5" title="Complete" onclick="TasksModule.markComplete('${t.id}')"><i data-lucide="check" class="w-3 h-3"></i></button>
       <button class="btn-icon p-1.5 hover:!bg-red-500/10 hover:!text-red-400" title="Delete" onclick="TasksModule.deleteTask('${t.id}')"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
     </div>
@@ -245,6 +246,88 @@ window.TasksModule = {
       notes:    document.getElementById('nt-notes')?.value.trim() || ''
     };
     window.GKData.tasks.unshift(newTask);
+    window.GKData.save();
+    this.closeModal();
+    GKApp.navigate('tasks');
+  },
+
+  showEditTask(id) {
+    const t = window.GKData.tasks.find(x => x.id === id);
+    if (!t) return;
+    const root = document.getElementById('gk-modal-root');
+    if (!root) return;
+    root.innerHTML = `
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="TasksModule.closeModal()"></div>
+  <div class="relative bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-border">
+      <h2 class="text-base font-semibold" style="font-family:'Manrope',sans-serif;">Edit Task</h2>
+      <button onclick="TasksModule.closeModal()" class="text-gray-500 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Task Title *</label>
+        <input type="text" id="et-title" value="${t.title.replace(/"/g,'&quot;')}" class="form-input w-full" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Trip (optional)</label>
+          <select id="et-trip" class="form-input w-full">
+            <option value="">— General Task —</option>
+            ${window.GKData.trips.map(tr => `<option value="${tr.id}" ${tr.id === t.tripId ? 'selected' : ''}>${tr.id} — ${tr.customer}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Category</label>
+          <select id="et-cat" class="form-input w-full">
+            ${['flights','hotel','visa','transfer','payment','documents','sales','other'].map(c => `<option value="${c}" ${c===t.category?'selected':''}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Due Date</label>
+          <input type="date" id="et-due" value="${t.dueDate||''}" class="form-input w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Priority</label>
+          <select id="et-priority" class="form-input w-full">
+            ${['urgent','high','medium','low'].map(p => `<option value="${p}" ${p===t.priority?'selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Status</label>
+        <select id="et-status" class="form-input w-full">
+          ${['pending','in_progress','completed'].map(s => `<option value="${s}" ${s===t.status?'selected':''}>${s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Notes</label>
+        <textarea id="et-notes" rows="2" class="form-input w-full resize-none">${t.notes||''}</textarea>
+      </div>
+    </div>
+    <div class="flex items-center justify-between px-6 py-4 border-t border-border">
+      <button onclick="TasksModule.closeModal()" class="text-sm text-gray-500 hover:text-white">Cancel</button>
+      <button onclick="TasksModule.saveEditTask('${id}')" class="btn-primary text-sm">Save Changes</button>
+    </div>
+  </div>
+</div>`;
+    if (window.lucide) setTimeout(() => lucide.createIcons(), 0);
+  },
+
+  saveEditTask(id) {
+    const t = window.GKData.tasks.find(x => x.id === id);
+    if (!t) return;
+    const title = document.getElementById('et-title')?.value.trim();
+    if (!title) { alert('Please enter task title'); return; }
+    t.title    = title;
+    t.tripId   = document.getElementById('et-trip')?.value || null;
+    t.dueDate  = document.getElementById('et-due')?.value || '';
+    t.priority = document.getElementById('et-priority')?.value || 'medium';
+    t.status   = document.getElementById('et-status')?.value || 'pending';
+    t.category = document.getElementById('et-cat')?.value || 'other';
+    t.notes    = document.getElementById('et-notes')?.value.trim() || '';
     window.GKData.save();
     this.closeModal();
     GKApp.navigate('tasks');

@@ -253,7 +253,8 @@ window.BookingsModule = {
   <div class="space-y-4">
     <div class="gk-card space-y-2">
       <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Quick Finance</h3>
-      ${this.financeRow('Selling Price', '₹' + this.fmt(b.sellingPrice||0))}
+      ${this.financeRow('Final Selling Price', '₹' + this.fmt(b.sellingPrice||0))}
+      ${this.financeRow('GST @ ' + (b.gstRate||0) + '%', '+ ₹' + this.fmt(b.gstAmount||0), 'text-yellow-400')}
       ${this.financeRow('Total Payable', '₹' + this.fmt(b.totalPayable||0), 'font-semibold')}
       ${this.financeRow('Advance Paid', '₹' + this.fmt(b.advance||0), 'text-green-400')}
       ${this.financeRow('Balance Due', '₹' + this.fmt(b.balanceDue||0), b.balanceDue>0?'text-orange-400 font-semibold':'')}
@@ -292,7 +293,7 @@ window.BookingsModule = {
     <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer Side</h3>
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label class="form-label">Selling Price (₹)</label>
+        <label class="form-label">Final Selling Price (₹)</label>
         <input id="fin-selling" type="number" min="0" class="form-input w-full" value="${b.sellingPrice||0}"
           oninput="BookingsModule.previewCalc('${b.id}')" />
       </div>
@@ -301,11 +302,6 @@ window.BookingsModule = {
         <select id="fin-gst" class="form-input w-full" onchange="BookingsModule.previewCalc('${b.id}')">
           ${gstRates.map(r => `<option value="${r}" ${(b.gstRate||gstDefaults[b.type]||5)==r?'selected':''}>${r}%</option>`).join('')}
         </select>
-      </div>
-      <div>
-        <label class="form-label">Discount (₹)</label>
-        <input id="fin-discount" type="number" min="0" class="form-input w-full" value="${b.discount||0}"
-          oninput="BookingsModule.previewCalc('${b.id}')" />
       </div>
       <div>
         <label class="form-label">Advance Received (₹)</label>
@@ -350,12 +346,11 @@ window.BookingsModule = {
     const profit = b.netProfit || 0;
     const margin = b.marginPct || 0;
     return `
-<div class="finance-row"><span class="label">Selling Price</span><span class="value">₹ ${this.fmt(b.sellingPrice||0)}</span></div>
-${(b.discount||0)>0?`<div class="finance-row"><span class="label">Discount</span><span class="value text-green-400">− ₹ ${this.fmt(b.discount||0)}</span></div>`:''}
-<div class="finance-row"><span class="label">GST @ ${b.gstRate||0}%</span><span class="value">+ ₹ ${this.fmt(b.gstAmount||0)}</span></div>
+<div class="finance-row"><span class="label">Final Selling Price</span><span class="value">₹ ${this.fmt(b.sellingPrice||0)}</span></div>
+<div class="finance-row"><span class="label">GST @ ${b.gstRate||0}%</span><span class="value text-yellow-400">+ ₹ ${this.fmt(b.gstAmount||0)}</span></div>
 <div class="finance-row total"><span class="label">Total Payable</span><span class="value">₹ ${this.fmt(b.totalPayable||0)}</span></div>
 <div class="finance-row"><span class="label">Advance Received</span><span class="value text-green-400">₹ ${this.fmt(b.advance||0)}</span></div>
-<div class="finance-row"><span class="label">Balance Due</span><span class="value ${(b.balanceDue||0)>0?'text-orange-400':''}">₹ ${this.fmt(b.balanceDue||0)}</span></div>
+<div class="finance-row"><span class="label">Balance Due</span><span class="value ${(b.balanceDue||0)>0?'text-orange-400 font-semibold':''}">₹ ${this.fmt(b.balanceDue||0)}</span></div>
 <hr class="border-border my-2" />
 <div class="finance-row"><span class="label">Supplier Cost</span><span class="value">₹ ${this.fmt(b.supplierCost||0)}</span></div>
 <div class="finance-row"><span class="label">Supplier Paid</span><span class="value text-green-400">₹ ${this.fmt(b.supplierPaid||0)}</span></div>
@@ -371,14 +366,10 @@ ${(b.discount||0)>0?`<div class="finance-row"><span class="label">Discount</span
     if (!preview) return;
     const sp  = parseFloat(document.getElementById('fin-selling')?.value) || 0;
     const gst = parseFloat(document.getElementById('fin-gst')?.value)     || 0;
-    const dis = parseFloat(document.getElementById('fin-discount')?.value) || 0;
     const adv = parseFloat(document.getElementById('fin-advance')?.value)  || 0;
     const sc  = parseFloat(document.getElementById('fin-cost')?.value)     || 0;
     const sp2 = parseFloat(document.getElementById('fin-paid')?.value)     || 0;
-    const tmp = {
-      sellingPrice: sp, gstRate: gst, discount: dis, advance: adv,
-      supplierCost: sc, supplierPaid: sp2
-    };
+    const tmp = { sellingPrice: sp, gstRate: gst, advance: adv, supplierCost: sc, supplierPaid: sp2 };
     window.GKData.calcBookingFinance(tmp);
     preview.innerHTML = this.buildFinanceSummaryHTML(tmp);
   },
@@ -388,7 +379,6 @@ ${(b.discount||0)>0?`<div class="finance-row"><span class="label">Discount</span
     if (!b) return;
     b.sellingPrice   = parseFloat(document.getElementById('fin-selling')?.value)  || 0;
     b.gstRate        = parseFloat(document.getElementById('fin-gst')?.value)       || 0;
-    b.discount       = parseFloat(document.getElementById('fin-discount')?.value)  || 0;
     b.advance        = parseFloat(document.getElementById('fin-advance')?.value)   || 0;
     b.balanceDueDate = document.getElementById('fin-duedate')?.value               || '';
     b.supplierCost   = parseFloat(document.getElementById('fin-cost')?.value)      || 0;

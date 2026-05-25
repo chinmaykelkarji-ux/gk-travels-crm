@@ -392,7 +392,9 @@ window.TripsModule = {
     const trip = window.GKData.trips.find(t => t.id === tripId);
     if (!trip) return;
     trip.flights = trip.flights || [];
-    trip.flights.push({
+    const flStatus = document.getElementById('fl-status').value;
+    const bkStatus = flStatus === 'ticketed' ? 'ticketed' : flStatus === 'cancelled' ? 'cancelled' : 'pending';
+    const flightObj = {
       type:    document.getElementById('fl-type').value,
       airline, number: document.getElementById('fl-number').value.trim(),
       pnr:     document.getElementById('fl-pnr').value.trim(),
@@ -400,11 +402,44 @@ window.TripsModule = {
       to:      document.getElementById('fl-to').value.trim().toUpperCase(),
       date:    document.getElementById('fl-date').value,
       time:    document.getElementById('fl-time').value,
-      status:  document.getElementById('fl-status').value,
+      status:  flStatus,
       notes:   document.getElementById('fl-notes').value.trim()
-    });
-    if (trip.flightStatus === 'pending') trip.flightStatus = document.getElementById('fl-status').value;
-    window.GKData.save();
+    };
+
+    // Create a booking record so it appears in Bookings, Finance, Dashboard
+    const booking = {
+      id:           window.GKData.nextBookingId(),
+      type:         'flight',
+      status:       bkStatus,
+      customerId:   trip.customerId || null,
+      customerName: trip.customer,
+      customerPhone: trip.phone || '',
+      refId:        tripId,
+      assignedTo:   trip.assignedTo || '',
+      notes:        flightObj.notes,
+      detail: {
+        airline, flightNumber: flightObj.number, pnr: flightObj.pnr,
+        from: flightObj.from, to: flightObj.to,
+        departDate: flightObj.date, departTime: flightObj.time,
+        class: '', pax: trip.pax || 1, baggage: ''
+      },
+      sellingPrice: 0, gstRate: 5, gstAmount: 0,
+      totalPayable: 0, advance: 0, balanceDue: 0, balanceDueDate: '',
+      supplierCost: 0, supplierPaid: 0, supplierPending: 0,
+      grossProfit: 0, netProfit: 0, marginPct: 0,
+      documents: [],
+      timeline: [{ date: new Date().toISOString().split('T')[0], event: 'Flight added from Trip ' + tripId, type: 'done' }],
+      createdDate: new Date().toISOString().split('T')[0]
+    };
+    window.GKData.bookings.unshift(booking);
+    flightObj.bookingId = booking.id;   // cross-link for delete sync
+    trip.flights.push(flightObj);
+    if (trip.flightStatus === 'pending') trip.flightStatus = flStatus;
+
+    // Link customer
+    if (window.GKWorkflow) window.GKWorkflow.onBookingAdded(booking);
+    else window.GKData.save();
+
     this.closeModal();
     this.openTrip(tripId);
     setTimeout(() => this.switchTab('flights', tripId), 80);
@@ -413,7 +448,14 @@ window.TripsModule = {
   deleteFlight(tripId, index) {
     if (!confirm('Remove this flight?')) return;
     const trip = window.GKData.trips.find(t => t.id === tripId);
-    if (trip) { trip.flights.splice(index, 1); window.GKData.save(); this.switchTab('flights', tripId); }
+    if (!trip) return;
+    const flight = trip.flights[index];
+    if (flight && flight.bookingId) {
+      window.GKData.bookings = window.GKData.bookings.filter(b => b.id !== flight.bookingId);
+    }
+    trip.flights.splice(index, 1);
+    window.GKData.save();
+    this.switchTab('flights', tripId);
   },
 
   updateFlightStatus(tripId, index, status) {
@@ -448,11 +490,17 @@ window.TripsModule = {
         <button onclick="TripsModule.deleteHotel('${t.id}',${i})" class="btn-icon p-1.5 hover:!bg-red-500/10 hover:!text-red-400"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
       </div>
     </div>
+    <div class="grid grid-cols-3 gap-4 mb-3">
+      ${this.info('Check-in', h.checkIn ? this.fmtDate(h.checkIn) : '—')}
+      ${this.info('Check-out', h.checkOut ? this.fmtDate(h.checkOut) : '—')}
+      ${this.info('Nights', h.checkIn && h.checkOut ? Math.max(0, Math.round((new Date(h.checkOut)-new Date(h.checkIn))/(864e5))) + ' nights' : '—')}
+    </div>
     <div class="grid grid-cols-3 gap-4 mb-4">
-      ${this.info('Check-in', h.checkIn||'—')}
-      ${this.info('Check-out', h.checkOut||'—')}
+      ${this.info('Room Type', h.rooms||'—')}
+      ${this.info('Meal Plan', h.mealPlan||'—')}
       ${h.amount ? this.info('Amount', '₹'+this.fmtAmt(h.amount)) : this.info('Amount', '—')}
     </div>
+    ${h.confirmation ? `<p class="text-xs text-gray-500 mb-3">Confirmation: <span class="text-gray-300">${h.confirmation}</span></p>` : ''}
     <div class="flex items-center gap-2 flex-wrap">
       ${h.status !== 'paid' ? `<button onclick="TripsModule.markHotelPaid('${t.id}',${i})" class="btn-primary text-xs flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3"></i> Mark Paid</button>` : ''}
       <button onclick="TripsModule.markHotelVoucher('${t.id}',${i})" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="file-text" class="w-3 h-3"></i> ${h.voucher?'Voucher Ready':'Mark Voucher Received'}</button>
@@ -488,18 +536,35 @@ window.TripsModule = {
           <input id="ht-city" type="text" placeholder="Dubai" class="form-input w-full" />
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-400 mb-1.5">Room Type</label>
-        <input id="ht-rooms" type="text" placeholder="e.g. 2 Deluxe Rooms, Pool Villa" class="form-input w-full" />
-      </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Room Type</label>
+          <input id="ht-rooms" type="text" placeholder="e.g. 2 Deluxe Rooms" class="form-input w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Meal Plan</label>
+          <select id="ht-meal" class="form-input w-full">
+            <option value="">— Select —</option>
+            <option value="Room Only">Room Only</option>
+            <option value="Bed & Breakfast">Bed &amp; Breakfast</option>
+            <option value="Half Board">Half Board</option>
+            <option value="Full Board">Full Board</option>
+            <option value="All Inclusive">All Inclusive</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div>
           <label class="block text-xs font-medium text-gray-400 mb-1.5">Check-in Date</label>
-          <input id="ht-checkin" type="date" class="form-input w-full" />
+          <input id="ht-checkin" type="date" class="form-input w-full" onchange="TripsModule._calcNights()" />
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-400 mb-1.5">Check-out Date</label>
-          <input id="ht-checkout" type="date" class="form-input w-full" />
+          <input id="ht-checkout" type="date" class="form-input w-full" onchange="TripsModule._calcNights()" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Nights</label>
+          <input id="ht-nights" type="text" placeholder="Auto" class="form-input w-full bg-surface/50" readonly />
         </div>
       </div>
       <div class="grid grid-cols-2 gap-4">
@@ -508,11 +573,13 @@ window.TripsModule = {
           <input id="ht-amount" type="number" placeholder="75000" class="form-input w-full" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1.5">Payment Status</label>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Booking Status</label>
           <select id="ht-status" class="form-input w-full">
             <option value="pending">Pending</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="partial">Partial Payment</option>
+            <option value="paid">Fully Paid</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         </div>
       </div>
@@ -529,24 +596,74 @@ window.TripsModule = {
 </div>`);
   },
 
+  _calcNights() {
+    const ci = document.getElementById('ht-checkin').value;
+    const co = document.getElementById('ht-checkout').value;
+    const el = document.getElementById('ht-nights');
+    if (!el) return;
+    if (ci && co) {
+      const n = Math.max(0, Math.round((new Date(co) - new Date(ci)) / 864e5));
+      el.value = n + (n === 1 ? ' night' : ' nights');
+    } else {
+      el.value = '';
+    }
+  },
+
   saveHotel(tripId) {
     const name = document.getElementById('ht-name').value.trim();
     if (!name) { alert('Please enter hotel name'); return; }
     const trip = window.GKData.trips.find(t => t.id === tripId);
     if (!trip) return;
     trip.hotels = trip.hotels || [];
-    const status = document.getElementById('ht-status').value;
-    trip.hotels.push({
-      name, city:     document.getElementById('ht-city').value.trim(),
-      rooms:          document.getElementById('ht-rooms').value.trim(),
-      checkIn:        document.getElementById('ht-checkin').value,
-      checkOut:       document.getElementById('ht-checkout').value,
-      amount:         parseInt(document.getElementById('ht-amount').value) || 0,
-      confirmation:   document.getElementById('ht-conf').value.trim(),
-      status,         voucher: false
-    });
+    const status   = document.getElementById('ht-status').value;
+    const checkIn  = document.getElementById('ht-checkin').value;
+    const checkOut = document.getElementById('ht-checkout').value;
+    const nights   = (checkIn && checkOut) ? Math.max(0, Math.round((new Date(checkOut) - new Date(checkIn)) / 864e5)) : 0;
+    const amount   = parseInt(document.getElementById('ht-amount').value) || 0;
+    const hotelObj = {
+      name, city:         document.getElementById('ht-city').value.trim(),
+      rooms:              document.getElementById('ht-rooms').value.trim(),
+      mealPlan:           document.getElementById('ht-meal').value,
+      checkIn, checkOut, nights,
+      amount,
+      confirmation:       document.getElementById('ht-conf').value.trim(),
+      status,             voucher: false
+    };
+    // Create booking record for cross-module visibility
+    const bkStatus = status === 'confirmed' || status === 'paid' ? 'confirmed' : status === 'cancelled' ? 'cancelled' : 'pending';
+    const booking = {
+      id:           window.GKData.nextBookingId(),
+      type:         'hotel',
+      status:       bkStatus,
+      customerId:   trip.customerId || null,
+      customerName: trip.customer,
+      customerPhone: trip.phone || '',
+      refId:        tripId,
+      assignedTo:   trip.assignedTo || '',
+      notes:        '',
+      detail: {
+        hotelName: name, city: hotelObj.city,
+        checkIn, checkOut, nights,
+        roomType: hotelObj.rooms, mealPlan: hotelObj.mealPlan,
+        confirmation: hotelObj.confirmation,
+        pax: trip.pax || 1
+      },
+      sellingPrice: amount, gstRate: 5,
+      gstAmount: 0, totalPayable: 0,
+      advance: 0, balanceDue: 0, balanceDueDate: '',
+      supplierCost: 0, supplierPaid: 0, supplierPending: 0,
+      grossProfit: 0, netProfit: 0, marginPct: 0,
+      documents: [],
+      timeline: [{ date: new Date().toISOString().split('T')[0], event: 'Hotel added from Trip ' + tripId, type: 'done' }],
+      createdDate: new Date().toISOString().split('T')[0]
+    };
+    window.GKData.calcBookingFinance(booking);
+    window.GKData.bookings.unshift(booking);
+    hotelObj.bookingId = booking.id;
+    trip.hotels.push(hotelObj);
     trip.hotelStatus = status;
-    window.GKData.save();
+    if (window.GKWorkflow) window.GKWorkflow.onBookingAdded(booking);
+    else window.GKData.save();
     this.closeModal();
     this.openTrip(tripId);
     setTimeout(() => this.switchTab('hotels', tripId), 80);
@@ -555,7 +672,14 @@ window.TripsModule = {
   deleteHotel(tripId, index) {
     if (!confirm('Remove this hotel?')) return;
     const trip = window.GKData.trips.find(t => t.id === tripId);
-    if (trip) { trip.hotels.splice(index, 1); window.GKData.save(); this.switchTab('hotels', tripId); }
+    if (!trip) return;
+    const hotel = trip.hotels[index];
+    if (hotel && hotel.bookingId) {
+      window.GKData.bookings = window.GKData.bookings.filter(b => b.id !== hotel.bookingId);
+    }
+    trip.hotels.splice(index, 1);
+    window.GKData.save();
+    this.switchTab('hotels', tripId);
   },
 
   markHotelPaid(tripId, index) {
@@ -604,9 +728,9 @@ window.TripsModule = {
       <span class="section-title">${t.totalAmount === 0 ? 'Set Trip Value' : 'Update Trip Value & GST'}</span>
       ${t.totalAmount > 0 && window.ExportModule ? `<button onclick="ExportModule.printInvoice('${t.id}','trip')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="printer" class="w-3 h-3"></i> Print Invoice</button>` : ''}
     </div>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
       <div>
-        <label class="block text-xs font-medium text-gray-400 mb-1.5">Selling Price (₹) *</label>
+        <label class="block text-xs font-medium text-gray-400 mb-1.5">Final Selling Price (₹) *</label>
         <input id="trip-total-input" type="number" placeholder="150000" value="${t.totalAmount||''}" class="form-input w-full" />
       </div>
       <div>
@@ -615,19 +739,14 @@ window.TripsModule = {
           ${[0,5,12,18].map(r => `<option value="${r}" ${(t.gstRate||5)===r?'selected':''}>${r}%</option>`).join('')}
         </select>
       </div>
-      <div>
-        <label class="block text-xs font-medium text-gray-400 mb-1.5">Discount (₹)</label>
-        <input id="trip-discount" type="number" placeholder="0" value="${t.discount||''}" class="form-input w-full" />
-      </div>
       <div class="flex items-end">
         <button onclick="TripsModule.setTripTotal('${t.id}')" class="btn-primary text-xs w-full px-4">Apply</button>
       </div>
     </div>
     ${t.totalAmount > 0 ? `
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-border text-xs">
-      <div class="text-gray-500">Base price: <span class="text-gray-300">₹${this.fmtAmt(t.totalAmount)}</span></div>
-      <div class="text-gray-500">GST (${t.gstRate||5}%): <span class="text-yellow-400">₹${this.fmtAmt(gstAmt)}</span></div>
-      <div class="text-gray-500">Discount: <span class="text-green-400">−₹${this.fmtAmt(disc)}</span></div>
+    <div class="grid grid-cols-3 gap-2 pt-3 border-t border-border text-xs">
+      <div class="text-gray-500">Selling price: <span class="text-gray-300">₹${this.fmtAmt(t.totalAmount)}</span></div>
+      <div class="text-gray-500">GST (${t.gstRate||5}%): <span class="text-yellow-400">+ ₹${this.fmtAmt(gstAmt)}</span></div>
       <div class="text-gray-500 font-medium">Total payable: <span class="text-white">₹${this.fmtAmt(payable)}</span></div>
     </div>` : ''}
   </div>
@@ -704,14 +823,8 @@ window.TripsModule = {
     if (trip) {
       trip.totalAmount = val;
       trip.gstRate     = parseInt(document.getElementById('trip-gst-rate')?.value) || 5;
-      trip.discount    = parseInt(document.getElementById('trip-discount')?.value) || 0;
-      if (window.GKData.calcTripFinance) {
-        window.GKData.calcTripFinance(trip);
-      } else {
-        trip.gstAmount   = Math.round(trip.totalAmount * trip.gstRate / 100);
-        trip.totalPayable= trip.totalAmount + trip.gstAmount - trip.discount;
-        trip.balanceDue  = Math.max(0, trip.totalPayable - (trip.paidAmount || 0));
-      }
+      window.GKData.calcTripFinance(trip);
+      trip.balanceDue  = Math.max(0, trip.totalPayable - (trip.paidAmount || 0));
       window.GKData.save();
       this.switchTab('payments', tripId);
     }

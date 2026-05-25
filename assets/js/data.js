@@ -116,27 +116,27 @@
 
     // ── Finance Calculations ─────────────────────────
     calcBookingFinance(b) {
-      b.gstAmount      = Math.round((b.sellingPrice || 0) * (b.gstRate || 0) / 100);
-      b.totalPayable   = (b.sellingPrice || 0) + b.gstAmount - (b.discount || 0);
-      b.balanceDue     = Math.max(0, b.totalPayable - (b.advance || 0));
+      const base        = Math.max(0, b.sellingPrice || 0);
+      b.gstAmount       = Math.round(base * (b.gstRate || 0) / 100);
+      b.totalPayable    = base + b.gstAmount;
+      b.balanceDue      = Math.max(0, b.totalPayable - (b.advance || 0));
       b.supplierPending = Math.max(0, (b.supplierCost || 0) - (b.supplierPaid || 0));
-      b.grossProfit    = (b.sellingPrice || 0) - (b.discount || 0) - (b.supplierCost || 0);
-      b.netProfit      = b.grossProfit - b.gstAmount;
-      b.marginPct      = (b.sellingPrice || 0) > 0
-        ? Math.round((b.netProfit / b.sellingPrice) * 100 * 10) / 10 : 0;
+      b.grossProfit     = base - (b.supplierCost || 0);
+      b.netProfit       = b.grossProfit - b.gstAmount;
+      b.marginPct       = base > 0 ? Math.round((b.netProfit / base) * 100 * 10) / 10 : 0;
     },
 
     calcTripFinance(trip) {
-      const rate = trip.gstRate || 5;
-      trip.gstAmount    = Math.round((trip.totalAmount || 0) * rate / 100);
-      trip.totalPayable = (trip.totalAmount || 0) + trip.gstAmount - (trip.discount || 0);
+      const rate  = trip.gstRate || 5;
+      const base  = Math.max(0, trip.totalAmount || 0);
+      trip.gstAmount    = Math.round(base * rate / 100);
+      trip.totalPayable = base + trip.gstAmount;
       trip.supplierCost = this.payments.supplierPayments
         .filter(p => p.tripId === trip.id)
         .reduce((s, p) => s + (p.amount || 0), 0);
-      trip.grossProfit  = (trip.totalAmount || 0) - (trip.discount || 0) - trip.supplierCost;
+      trip.grossProfit  = base - trip.supplierCost;
       trip.netProfit    = trip.grossProfit - trip.gstAmount;
-      trip.marginPct    = (trip.totalAmount || 0) > 0
-        ? Math.round((trip.netProfit / trip.totalAmount) * 100 * 10) / 10 : 0;
+      trip.marginPct    = base > 0 ? Math.round((trip.netProfit / base) * 100 * 10) / 10 : 0;
     },
 
     // ── Auto-Reminder Engine ─────────────────────────
