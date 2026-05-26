@@ -7,16 +7,20 @@ window.GKApp = {
   currentModule: null,
 
   moduleMap: {
-    dashboard:  { module: window.DashboardModule,   title: 'Dashboard',          subtitle: 'Operations Overview' },
-    leads:      { module: window.LeadsModule,        title: 'Leads & Sales',      subtitle: 'Pipeline Management' },
-    trips:      { module: window.TripsModule,        title: 'Trip Files',         subtitle: 'Master Trip Management' },
-    bookings:   { module: window.BookingsModule,     title: 'Bookings',           subtitle: 'Flight · Train · Bus · Hotel · Cab · Visa · Insurance · Activity' },
-    customers:  { module: window.CustomersModule,    title: 'Customer Profiles',  subtitle: 'Database · History · Preferences · Documents' },
-    operations: { module: window.OperationsModule,   title: 'Operations Panel',   subtitle: 'Flights · Hotels · Visa · Transfers' },
-    tasks:      { module: window.TasksModule,        title: 'Task Management',    subtitle: 'Team Tasks & Assignments' },
-    reminders:  { module: window.RemindersModule,    title: 'Smart Reminders',    subtitle: 'Auto-generated Alerts' },
-    finance:    { module: window.FinanceModule,      title: 'Payments & Finance', subtitle: 'Revenue · Costs · Profit' },
-    documents:  { module: window.DocumentsModule,    title: 'Document Center',    subtitle: 'Passports · Visas · Tickets · Vouchers' }
+    dashboard:  { module: window.DashboardModule,   title: 'Dashboard',     subtitle: 'Operations Overview' },
+    leads:      { module: window.LeadsModule,        title: 'Leads',         subtitle: 'Sales Pipeline' },
+    trips:      { module: window.TripsModule,        title: 'Trips',         subtitle: 'Trip Files & Bookings' },
+    customers:  { module: window.CustomersModule,    title: 'Customers',     subtitle: 'Profiles · History · Preferences' },
+    finance:    { module: window.FinanceModule,      title: 'Finance',       subtitle: 'Revenue · Costs · Profit' },
+    operations: { module: window.OperationsModule,   title: 'Operations',    subtitle: 'Actions · Tasks · Reminders' },
+  },
+
+  // Redirect old module keys to their new home
+  _redirectMap: {
+    bookings:  'trips',
+    tasks:     'operations',
+    reminders: 'operations',
+    documents: 'trips',
   },
 
   init() {
@@ -25,13 +29,21 @@ window.GKApp = {
     this.navigate(hash);
     window.addEventListener('hashchange', () => {
       const m = window.location.hash.replace('#', '');
-      if (m && this.moduleMap[m]) this.navigate(m, false);
+      if (m && (this.moduleMap[m] || this._redirectMap[m])) this.navigate(m, false);
     });
     if (window.lucide) lucide.createIcons();
     this.updateNotificationBadge();
   },
 
   navigate(moduleKey, updateHash = true) {
+    if (this._redirectMap && this._redirectMap[moduleKey]) {
+      // Set the section tab before redirecting (e.g. tasks/reminders → operations)
+      if ((moduleKey === 'tasks' || moduleKey === 'reminders') && window.OperationsModule) {
+        window.OperationsModule.activeSection = moduleKey === 'tasks' ? 'tasks' : 'reminders';
+      }
+      this.navigate(this._redirectMap[moduleKey], updateHash);
+      return;
+    }
     const config = this.moduleMap[moduleKey];
     if (!config) { this.navigate('dashboard'); return; }
 
@@ -68,10 +80,12 @@ window.GKApp = {
   },
 
   openBooking(bookingId) {
-    this.navigate('bookings');
-    setTimeout(() => {
-      if (window.BookingsModule) window.BookingsModule.openBooking(bookingId);
-    }, 50);
+    const booking = (window.GKData.bookings || []).find(b => b.id === bookingId);
+    if (booking && booking.tripId) {
+      this.openTrip(booking.tripId);
+    } else {
+      this.navigate('trips');
+    }
   },
 
   openCustomer(customerId) {

@@ -4,8 +4,46 @@
 
 window.OperationsModule = {
   activeCategory: 'all',
+  activeSection: 'actions',
 
   render() {
+    const tasks   = window.GKData.tasks;
+    const openCnt = tasks.filter(t => t.status !== 'completed').length;
+    const remCnt  = (window.GKData.reminders || []).filter(r => !r.sent).length;
+
+    const tabs = [
+      { key: 'actions',   label: 'Action Items', icon: 'zap' },
+      { key: 'tasks',     label: `Tasks${openCnt ? ' ('+openCnt+')' : ''}`, icon: 'check-square' },
+      { key: 'reminders', label: `Reminders${remCnt ? ' ('+remCnt+')' : ''}`, icon: 'bell' },
+    ];
+
+    const tabBar = `
+<div class="flex items-center gap-1 px-6 pt-5 pb-0 border-b border-border sticky top-0 z-10" style="background:var(--bg)">
+  ${tabs.map(t => `
+  <button onclick="OperationsModule.setSection('${t.key}')"
+    class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all duration-150 ${this.activeSection === t.key ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700'}">
+    <i data-lucide="${t.icon}" class="w-3.5 h-3.5"></i>${t.label}
+  </button>`).join('')}
+</div>`;
+
+    let content = '';
+    if (this.activeSection === 'tasks') {
+      content = window.TasksModule ? window.TasksModule.render() : '<div class="p-6 text-gray-500">Tasks loading…</div>';
+    } else if (this.activeSection === 'reminders') {
+      content = window.RemindersModule ? window.RemindersModule.render() : '<div class="p-6 text-gray-500">Reminders loading…</div>';
+    } else {
+      content = this.renderActions();
+    }
+
+    return `<div class="animate-in space-y-0">${tabBar}<div id="ops-section-content">${content}</div></div>`;
+  },
+
+  setSection(sec) {
+    this.activeSection = sec;
+    GKApp.navigate('operations');
+  },
+
+  renderActions() {
     const trips = window.GKData.trips;
     const ops   = [];
 
