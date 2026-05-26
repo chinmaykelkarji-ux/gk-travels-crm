@@ -9,7 +9,8 @@ window.GKApp = {
   moduleMap: {
     dashboard:  { module: window.DashboardModule,   title: 'Dashboard',     subtitle: 'Operations Overview' },
     leads:      { module: window.LeadsModule,        title: 'Leads',         subtitle: 'Sales Pipeline' },
-    trips:      { module: window.TripsModule,        title: 'Trips',         subtitle: 'Trip Files & Bookings' },
+    trips:      { module: window.TripsModule,        title: 'Trips',         subtitle: 'Trip Files & Management' },
+    bookings:   { module: window.BookingsModule,     title: 'Bookings',      subtitle: 'Flight · Train · Bus · Hotel · Cab · Visa · Insurance · Activity' },
     customers:  { module: window.CustomersModule,    title: 'Customers',     subtitle: 'Profiles · History · Preferences' },
     finance:    { module: window.FinanceModule,      title: 'Finance',       subtitle: 'Revenue · Costs · Profit' },
     operations: { module: window.OperationsModule,   title: 'Operations',    subtitle: 'Actions · Tasks · Reminders' },
@@ -17,7 +18,6 @@ window.GKApp = {
 
   // Redirect old module keys to their new home
   _redirectMap: {
-    bookings:  'trips',
     tasks:     'operations',
     reminders: 'operations',
     documents: 'trips',
@@ -80,12 +80,10 @@ window.GKApp = {
   },
 
   openBooking(bookingId) {
-    const booking = (window.GKData.bookings || []).find(b => b.id === bookingId);
-    if (booking && booking.tripId) {
-      this.openTrip(booking.tripId);
-    } else {
-      this.navigate('trips');
-    }
+    this.navigate('bookings');
+    setTimeout(() => {
+      if (window.BookingsModule) window.BookingsModule.openBooking(bookingId);
+    }, 50);
   },
 
   openCustomer(customerId) {

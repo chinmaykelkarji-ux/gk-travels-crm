@@ -298,6 +298,12 @@ window.TripsModule = {
       </div>
     </div>
     ${f.notes ? `<p class="text-xs text-gray-600 mt-3">${f.notes}</p>` : ''}
+    ${(f.sellingPrice || f.supplierCost) ? `
+    <div class="flex items-center gap-4 mt-3 pt-3 border-t border-border">
+      ${f.sellingPrice ? `<div><p class="text-xs text-gray-500">Selling Price</p><p class="text-sm font-semibold text-green-600">₹${f.sellingPrice.toLocaleString('en-IN')}</p></div>` : ''}
+      ${f.supplierCost ? `<div><p class="text-xs text-gray-500">Supplier Cost</p><p class="text-sm font-semibold text-orange-500">₹${f.supplierCost.toLocaleString('en-IN')}</p></div>` : ''}
+      ${(f.sellingPrice && f.supplierCost) ? `<div class="ml-auto"><p class="text-xs text-gray-500">Profit</p><p class="text-sm font-semibold ${f.sellingPrice - f.supplierCost >= 0 ? 'text-green-600' : 'text-red-500'}">₹${(f.sellingPrice - f.supplierCost).toLocaleString('en-IN')}</p></div>` : ''}
+    </div>` : ''}
     <div class="flex items-center gap-2 mt-4 flex-wrap">
       <button onclick="TripsModule.updateFlightStatus('${t.id}',${i},'ticketed')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="check" class="w-3 h-3"></i> Mark Ticketed</button>
       <button onclick="TripsModule.updateFlightStatus('${t.id}',${i},'checked_in')" class="btn-secondary text-xs flex items-center gap-1.5"><i data-lucide="monitor" class="w-3 h-3"></i> Web Check-in Done</button>
@@ -365,6 +371,16 @@ window.TripsModule = {
           <input id="fl-time" type="time" class="form-input w-full" />
         </div>
       </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Selling Price (₹)</label>
+          <input id="fl-price" type="number" min="0" placeholder="0" class="form-input w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">Supplier Cost (₹)</label>
+          <input id="fl-cost" type="number" min="0" placeholder="0" class="form-input w-full" />
+        </div>
+      </div>
       <div>
         <label class="block text-xs font-medium text-gray-400 mb-1.5">Status</label>
         <select id="fl-status" class="form-input w-full">
@@ -395,15 +411,17 @@ window.TripsModule = {
     const flStatus = document.getElementById('fl-status').value;
     const bkStatus = flStatus === 'ticketed' ? 'ticketed' : flStatus === 'cancelled' ? 'cancelled' : 'pending';
     const flightObj = {
-      type:    document.getElementById('fl-type').value,
+      type:         document.getElementById('fl-type').value,
       airline, number: document.getElementById('fl-number').value.trim(),
-      pnr:     document.getElementById('fl-pnr').value.trim(),
-      from:    document.getElementById('fl-from').value.trim().toUpperCase(),
-      to:      document.getElementById('fl-to').value.trim().toUpperCase(),
-      date:    document.getElementById('fl-date').value,
-      time:    document.getElementById('fl-time').value,
-      status:  flStatus,
-      notes:   document.getElementById('fl-notes').value.trim()
+      pnr:          document.getElementById('fl-pnr').value.trim(),
+      from:         document.getElementById('fl-from').value.trim().toUpperCase(),
+      to:           document.getElementById('fl-to').value.trim().toUpperCase(),
+      date:         document.getElementById('fl-date').value,
+      time:         document.getElementById('fl-time').value,
+      status:       flStatus,
+      sellingPrice: parseFloat(document.getElementById('fl-price').value) || 0,
+      supplierCost: parseFloat(document.getElementById('fl-cost').value) || 0,
+      notes:        document.getElementById('fl-notes').value.trim()
     };
 
     // Create a booking record so it appears in Bookings, Finance, Dashboard
@@ -423,22 +441,26 @@ window.TripsModule = {
         departDate: flightObj.date, departTime: flightObj.time,
         class: '', pax: trip.pax || 1, baggage: ''
       },
-      sellingPrice: 0, gstRate: 5, gstAmount: 0,
+      sellingPrice: parseFloat(document.getElementById('fl-price').value) || 0,
+      gstRate: 5, gstAmount: 0,
       totalPayable: 0, advance: 0, balanceDue: 0, balanceDueDate: '',
-      supplierCost: 0, supplierPaid: 0, supplierPending: 0,
+      supplierCost: parseFloat(document.getElementById('fl-cost').value) || 0,
+      supplierPaid: 0, supplierPending: 0,
       grossProfit: 0, netProfit: 0, marginPct: 0,
       documents: [],
       timeline: [{ date: new Date().toISOString().split('T')[0], event: 'Flight added from Trip ' + tripId, type: 'done' }],
       createdDate: new Date().toISOString().split('T')[0]
     };
     window.GKData.bookings.unshift(booking);
+    window.GKData.calcBookingFinance(booking);  // compute gst/profit/balance from sellingPrice+supplierCost
     flightObj.bookingId = booking.id;   // cross-link for delete sync
     trip.flights.push(flightObj);
     if (trip.flightStatus === 'pending') trip.flightStatus = flStatus;
 
-    // Link customer
+    // Link customer + recalc trip finance to include this booking's cost
     if (window.GKWorkflow) window.GKWorkflow.onBookingAdded(booking);
     else window.GKData.save();
+    window.GKData.calcTripFinance(trip);
 
     this.closeModal();
     this.openTrip(tripId);
