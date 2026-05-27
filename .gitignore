@@ -1,0 +1,19 @@
+# Editor & IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Tool config (not for repo)
+.claude/
+.set/
+
+# Logs & temp
+*.log
+*.tmp
+*.bak

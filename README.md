@@ -2,9 +2,9 @@
 
 > A professional, enterprise-grade Travel Operations CRM built for modern travel agencies. Manage trips, bookings, customers, finance, and operations — all in one place.
 
-![GK Travels CRM](https://img.shields.io/badge/GK%20Travels-Operations%20CRM-2563EB?style=for-the-badge&logo=globe&logoColor=white)
+![GK Travels CRM](https://img.shields.io/badge/GK%20Travels-Operations%20CRM-2563EB?style=for-the-badge&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-Live-059669?style=for-the-badge)
-![Stack](https://img.shields.io/badge/Stack-HTML%20%7C%20CSS%20%7C%20Vanilla%20JS-F59E0B?style=for-the-badge)
+![Stack](https://img.shields.io/badge/Stack-HTML%20%7C%20CSS%20%7C%20JS-F59E0B?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-6B7280?style=for-the-badge)
 
 ---
@@ -37,16 +37,15 @@ GK Travels CRM is a full-featured, single-file travel ERP system designed for cu
 - Finance tracking per trip — selling price, GST, supplier cost, profit margin
 
 ### 🎫 Bookings (8 Types)
-Full booking management for all travel service types:
 
 | Type | Fields |
 |------|--------|
-| ✈ Flight | Airline, PNR, Route, Class, Departure, Arrival |
+| ✈ Flight | Airline, PNR, Route, Class, Departure, Arrival, Selling Price, Supplier Cost |
 | 🚆 Train | Train No., PNR, Class, Route, Schedule |
 | 🚌 Bus | Operator, Type, Route, Seat Numbers |
 | 🏨 Hotel | Hotel Name, Check-in/out, Room Type, Meal Plan |
 | 🚗 Cab | Pickup/Drop, Driver, Vehicle Type |
-| 📋 Visa | Country, Type, Application, Appointment, Submission |
+| 📋 Visa | Country, Type, Application, Appointment, Submission Dates |
 | 🛡 Insurance | Provider, Policy, Coverage Dates, Sum Insured |
 | 🗺 Activity | Name, Location, Date, Duration, Operator |
 
@@ -54,8 +53,8 @@ Each booking includes: Finance tab (Selling Price, GST, Advance, Supplier Cost, 
 
 ### 👥 Leads & Sales Pipeline
 - Capture leads with source, destination, budget, travel dates
-- Kanban-style pipeline: New → Contacted → Quoted → Negotiating → Won/Lost
-- One-click promote lead to Trip File + Customer
+- Pipeline stages: New → Contacted → Quoted → Negotiating → Won / Lost
+- One-click promote lead → Trip File + Customer profile
 - WhatsApp follow-up integration
 
 ### 👤 Customers
@@ -66,7 +65,7 @@ Each booking includes: Finance tab (Selling Price, GST, Advance, Supplier Cost, 
 ### 💰 Finance
 - **Overview** — Total revenue, collected, pending, supplier dues
 - **Customer Ledger** — All customer payments with status
-- **Supplier Ledger** — All supplier payments, pending dues
+- **Supplier Ledger** — All supplier payments and pending dues
 - **Trip P&L** — Per-trip profit and loss breakdown
 - **Booking Finance** — All 8 booking types with financial details
 - **Monthly Report** — 6-month revenue, cost, profit comparison
@@ -80,12 +79,10 @@ Each booking includes: Finance tab (Selling Price, GST, Advance, Supplier Cost, 
 - Auto-generates reminders on trip/booking creation
 - Web check-in alerts (24hrs before departure)
 - Balance due alerts (5 days before departure)
-- Hotel voucher reminders
-- Visa status follow-ups
-- Departure day notifications
+- Visa follow-up and departure day notifications
 
 ### 🔍 Global Search
-- Search across trips, customers, bookings, leads by name, ID, PNR, destination
+- Search across trips, customers, bookings, leads by name, ID, PNR, or destination
 
 ---
 
@@ -101,26 +98,26 @@ Each booking includes: Finance tab (Selling Price, GST, Advance, Supplier Cost, 
 | Storage | localStorage (browser-based) |
 | Deployment | Vercel / GitHub Pages |
 
-**No build step. No backend. No dependencies to install.** Just open `index.html` in a browser.
+> **No build step. No backend. No dependencies to install.** Just open `index.html` in a browser.
 
 ---
 
 ## 🗂 Project Structure
 
 ```
-GK-Travels-CRM/
+gk-travels-crm/
 ├── index.html                  # App shell — sidebar, header, modals
 ├── assets/
 │   ├── css/
-│   │   └── app.css             # Professional design system (navy sidebar, blue accent)
+│   │   └── app.css             # Design system (navy sidebar, blue accent)
 │   └── js/
-│       ├── data.js             # GKData store — all data, finance logic, localStorage
-│       ├── workflow.js         # GKWorkflow cascade engine + GKSearch
+│       ├── data.js             # Data store — all entities, finance logic, localStorage
+│       ├── workflow.js         # Cascade engine + global search
 │       ├── app.js              # Router, navigation, global UI functions
 │       └── modules/
 │           ├── dashboard.js    # KPIs, departures, activity feed
 │           ├── leads.js        # Sales pipeline, kanban, lead forms
-│           ├── trips.js        # Trip files, detail view, tabs
+│           ├── trips.js        # Trip files, detail view, tabbed layout
 │           ├── bookings.js     # All 8 booking types with full finance
 │           ├── customers.js    # Customer profiles and history
 │           ├── finance.js      # 6-tab finance center
@@ -129,6 +126,7 @@ GK-Travels-CRM/
 │           ├── reminders.js    # Smart reminder engine
 │           ├── documents.js    # Document center
 │           └── export.js       # Print vouchers, invoices, WhatsApp share
+└── README.md
 ```
 
 ---
@@ -153,10 +151,10 @@ open index.html
 
 ---
 
-## 🏗 Architecture & Design Decisions
+## 🏗 Architecture
 
 ### Cascade Engine
-Every action triggers a workflow cascade:
+Every action triggers an automatic workflow:
 - **Create Trip** → generates reminders + tasks + customer profile
 - **Promote Lead** → creates trip + customer + tasks + reminders
 - **Add Booking** → links to trip timeline + creates supplier payment + recalculates finance
@@ -164,14 +162,13 @@ Every action triggers a workflow cascade:
 
 ### Finance Logic
 ```
-totalPayable   = sellingPrice + gstAmount
-balanceDue     = totalPayable - paidAmount
-grossProfit    = sellingPrice - supplierCost
-netProfit      = grossProfit (after GST adjustment)
-marginPct      = (netProfit / sellingPrice) × 100
+totalPayable  = sellingPrice + gstAmount
+balanceDue    = totalPayable - paidAmount
+grossProfit   = sellingPrice - supplierCost
+marginPct     = (netProfit / sellingPrice) × 100
 ```
 
-### Data IDs
+### Entity ID Formats
 | Entity | Format |
 |--------|--------|
 | Trips | `GK-2026-0001` |
@@ -179,19 +176,24 @@ marginPct      = (netProfit / sellingPrice) × 100
 | Bookings | `BK-2026-0001` |
 | Customers | `CUS-2026-0001` |
 | Tasks | `T-001` |
-| Customer Payments | `PAY-001` |
+| Payments | `PAY-001` |
 | Supplier Payments | `SP-001` |
 
 ---
 
 ## 🎨 Design System
 
-- **Sidebar**: Deep navy `#0F172A` with blue active indicator
-- **Accent**: Blue `#2563EB` — buttons, links, active states
-- **Background**: Slate `#F1F5F9` — clean, not stark white
-- **Cards**: Pure white `#FFFFFF` with subtle elevation shadow
-- **Typography**: Inter (body) + Manrope (headings, IDs, brand)
-- **Status Colors**: Green (success) · Amber (warning) · Red (urgent) · Blue (info)
+| Token | Value | Usage |
+|-------|-------|-------|
+| Sidebar | `#0F172A` | Deep navy background |
+| Accent | `#2563EB` | Buttons, links, active states |
+| Page BG | `#F1F5F9` | Slate blue-gray |
+| Card | `#FFFFFF` | Pure white with subtle shadow |
+| Success | `#059669` | Paid, confirmed, approved |
+| Warning | `#D97706` | Pending, due, in-progress |
+| Danger | `#DC2626` | Overdue, urgent, rejected |
+
+**Fonts:** Inter (body) · Manrope (headings, IDs, brand)
 
 ---
 
@@ -215,6 +217,8 @@ marginPct      = (netProfit / sellingPrice) × 100
 **Chinmay Kelkar**
 
 Built as a production-grade travel operations management platform for scalable tourism businesses.
+
+🔗 [GitHub](https://github.com/chinmaykelkarji-ux) · [Live Demo](https://gk-travels-crm.vercel.app)
 
 ---
 
