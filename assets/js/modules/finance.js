@@ -323,7 +323,7 @@ ${recentC.length ? `
           <td class="primary">${this.esc(p.supplier)}</td>
           <td class="text-xs text-gray-500">${this.esc(p.description||'—')}</td>
           <td class="text-money font-semibold ${p.status==='pending'?'text-red-500':'text-gray-500'}">₹${this.fmt(p.amount)}</td>
-          <td class="text-xs ${isOverdue?'text-red-500 font-semibold':'text-gray-500'}">${p.dueDate||'—'}${isOverdue?' ⚠':'':''}</td>
+          <td class="text-xs ${isOverdue?'text-red-500 font-semibold':'text-gray-500'}">${p.dueDate||'—'}${isOverdue?' ⚠':''}</td>
           <td class="text-xs text-gray-400">${p.paidDate||'—'}</td>
           <td>
             ${p.status==='pending'
@@ -639,7 +639,7 @@ ${recentC.length ? `
   savePayment() {
     const tripId   = document.getElementById('fp-trip')?.value || null;
     const customer = document.getElementById('fp-customer')?.value.trim();
-    const amount   = parseInt(document.getElementById('fp-amount')?.value) || 0;
+    const amount   = parseFloat(document.getElementById('fp-amount')?.value) || 0;
     if (!amount || amount <= 0) { this._toast('Enter a valid amount', 'error'); return; }
     if (!customer) { this._toast('Enter customer name', 'error'); return; }
 
@@ -732,7 +732,7 @@ ${recentC.length ? `
 
   saveSupplierPayment() {
     const supplier = document.getElementById('sp-supplier')?.value.trim();
-    const amount   = parseInt(document.getElementById('sp-amount')?.value) || 0;
+    const amount   = parseFloat(document.getElementById('sp-amount')?.value) || 0;
     if (!supplier) { this._toast('Enter supplier name', 'error'); return; }
     if (!amount || amount <= 0) { this._toast('Enter a valid amount', 'error'); return; }
 
