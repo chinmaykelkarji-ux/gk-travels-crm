@@ -1,0 +1,436 @@
+// ============================================================
+// GK TRAVELS CRM — ENTERPRISE TYPE DEFINITIONS
+// Single source of truth for all entity shapes.
+// ============================================================
+
+// ─── Enumerations ───────────────────────────────────────────
+
+export type TripStatus =
+  | 'draft'
+  | 'quotation'
+  | 'confirmed'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'follow_up'
+  | 'quotation_sent'
+  | 'confirmed'
+  | 'converted'
+  | 'cancelled';
+
+export type BookingType =
+  | 'flight'
+  | 'hotel'
+  | 'train'
+  | 'bus'
+  | 'cab'
+  | 'visa'
+  | 'insurance'
+  | 'activity'
+  | 'other';
+
+export type BookingStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'issued'
+  | 'submitted'
+  | 'approved'
+  | 'rejected'
+  | 'checked_in'
+  | 'departed'
+  | 'completed'
+  | 'cancelled';
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export type DocumentCategory =
+  | 'passport'
+  | 'visa'
+  | 'insurance'
+  | 'flight_ticket'
+  | 'hotel_voucher'
+  | 'pan_card'
+  | 'aadhaar'
+  | 'other';
+
+export type UserRole = 'super_admin' | 'admin' | 'finance' | 'operations' | 'sales';
+
+// ─── Financial Status (P0 Fix) ──────────────────────────────
+// Never compute this inline. Always use getFinancialStatus() from utils/finance.ts
+export type FinancialStatus = 'unpriced' | 'unpaid' | 'partial' | 'paid';
+
+// ─── Timeline & Audit ───────────────────────────────────────
+
+export interface TimelineEvent {
+  id: string;
+  date: string;
+  event: string;
+  type: 'info' | 'payment' | 'booking' | 'warning' | 'success' | 'system' | 'done';
+  userId?: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  type: string;
+  message: string;
+  entityType: 'trip' | 'lead' | 'booking' | 'customer' | 'payment' | 'task' | 'system';
+  entityId: string;
+  userId?: string;
+  timestamp: string;
+  date: string;
+  before?: unknown;
+  after?: unknown;
+}
+
+// ─── Document ───────────────────────────────────────────────
+
+export interface TravelDocument {
+  id: string;
+  name: string;
+  category: DocumentCategory;
+  tripId?: string;
+  bookingId?: string;
+  customerId?: string;
+  url?: string;        // Future: Cloudinary/S3
+  base64?: string;     // Current: localStorage compat
+  mimeType: string;
+  size: number;
+  uploadedDate: string;
+}
+
+// ─── Itinerary ──────────────────────────────────────────────
+
+export interface ItineraryDay {
+  day: number;
+  date?: string;
+  title: string;
+  description: string;
+  activities: string[];
+  meals: ('breakfast' | 'lunch' | 'dinner')[];
+  accommodation?: string;
+}
+
+// ─── Flight Sub-types ────────────────────────────────────────
+
+export interface FlightLeg {
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departDate: string;
+  departTime: string;
+  arrivalDate: string;
+  arrivalTime: string;
+  terminal?: string;
+  baggageAllowance?: string;
+}
+
+export interface FlightDetail {
+  pnr: string;
+  returnPnr?: string;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departDate: string;
+  departTime: string;
+  arrivalDate: string;
+  arrivalTime: string;
+  terminal?: string;
+  baggageAllowance?: string;
+  legs: FlightLeg[];
+}
+
+export interface HotelDetail {
+  hotelName: string;
+  city: string;
+  checkIn: string;
+  checkOut: string;
+  roomType: string;
+  nights: number;
+  confirmationNumber?: string;
+}
+
+export interface VisaDetail {
+  country: string;
+  visaType: string;
+  applicationDate?: string;
+  expectedDate?: string;
+  approvalDate?: string;
+  rejectionReason?: string;
+}
+
+export type BookingDetail = FlightDetail | HotelDetail | VisaDetail | Record<string, unknown>;
+
+// ─── Core Entities ──────────────────────────────────────────
+
+export interface Trip {
+  id: string;
+  customer: string;
+  phone: string;
+  email?: string;
+  customerId?: string;
+  destination: string;
+  type: string;
+  pax: number;
+  departure: string | null;
+  returnDate: string | null;
+  status: TripStatus;
+
+  // Financial (null = price not set — NEVER default to 0 to avoid false "paid")
+  totalAmount: number | null;
+  gstRate: number;
+  discount?: number;
+
+  // Computed financial fields (set by calcTripFinance in store)
+  gstAmount: number;
+  totalPayable: number | null;
+  paidAmount: number;
+  balanceDue: number;
+  supplierCost: number;
+  grossMargin: number;   // NOTE: was netProfit in v1 — renamed for financial accuracy
+  marginPct: number;
+
+  // Operational flags
+  visaStatus: 'not_required' | 'pending' | 'submitted' | 'approved' | 'rejected';
+  hotelStatus: 'pending' | 'booked' | 'confirmed';
+  flightStatus: 'pending' | 'booked' | 'issued';
+  checkInStatus: 'pending' | 'done' | 'not_due';
+  transferStatus?: string;
+  voucherStatus?: string;
+
+  // Optional linked data (inline for v1 compat)
+  hotelName?: string;
+  hotelCheckIn?: string;
+  hotelCheckOut?: string;
+  hotelRef?: string;
+  flightPNR?: string;
+  airline?: string;
+  flightNumber?: string;
+  flightTime?: string;
+  returnFlightPNR?: string;
+  returnFlightNumber?: string;
+  returnFlightTime?: string;
+  visaCountry?: string;
+  visaExpiry?: string;
+  transportMode?: string;
+  cabNumber?: string;
+  cabDriver?: string;
+  cabContact?: string;
+
+  assignedTo?: string;
+  notes: string;
+  createdDate: string;
+  createdBy?: string;
+
+  // Conversion audit
+  sourceLeadId?: string;
+  convertedFromLeadId?: string;
+  convertedAt?: string;
+  convertedBy?: string;
+
+  // Nested collections
+  timeline: TimelineEvent[];
+  itinerary: ItineraryDay[];
+  documents: TravelDocument[];
+  flights?: FlightDetail[];
+  hotels?: HotelDetail[];
+  activities?: unknown[];
+}
+
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  source: string;
+  destination: string;
+  travelDate?: string;
+  travelDates?: string;
+  returnDate?: string;
+  pax: number;
+  budget: number | null;
+  tripType: string;
+  status: LeadStatus;
+  priority: 'low' | 'medium' | 'high';
+  notes: string;
+  followUpDate?: string;
+  assignedTo?: string;
+  createdDate: string;
+
+  // Conversion audit
+  convertedTripId?: string;
+  convertedCustomerId?: string;
+  convertedAt?: string;
+  convertedBy?: string;
+
+  timeline: TimelineEvent[];
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  altPhone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+
+  // Identity documents
+  passportNo?: string;
+  passportExpiry?: string;
+  passportCountry?: string;
+  panNumber?: string;
+  aadhaarNumber?: string;
+
+  // Preferences
+  preferences: {
+    seatPreference?: string;
+    mealPreference?: string;
+    hotelPreference?: string;
+    notes?: string;
+  } | string;
+  notes?: string;
+
+  // Linked IDs
+  tripIds: string[];
+  bookingIds?: string[];
+
+  createdDate: string;
+  sourceLeadId?: string;
+  documents: TravelDocument[];
+  timeline?: TimelineEvent[];
+}
+
+export interface Booking {
+  id: string;
+  type: BookingType;
+  status: BookingStatus;
+  customerName: string;
+  customerId?: string;
+  refId?: string;  // linked trip ID
+
+  // Financial (null = not priced)
+  sellingPrice: number | null;
+  supplierCost: number;
+  advance: number;
+  supplierPaid: number;
+  gstRate: number;
+
+  // Computed financial (set by calcBookingFinance)
+  gstAmount: number;
+  totalPayable: number | null;
+  balanceDue: number;
+  supplierPending: number;
+  grossMargin: number;
+  marginPct: number;
+
+  detail: BookingDetail;
+  createdDate: string;
+  notes: string;
+}
+
+export interface Payment {
+  id: string;
+  type: 'customer' | 'supplier';
+  tripId?: string;
+  bookingId?: string;
+  customer?: string;
+  customerId?: string;
+  amount: number;
+  method: string;
+  date: string;
+  status: 'pending' | 'received' | 'paid';
+  reference?: string;
+  notes?: string;
+}
+
+export interface Task {
+  id: string;
+  tripId?: string;
+  bookingId?: string;
+  customerId?: string;
+  title: string;
+  description?: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  dueDate?: string;
+  assignedTo?: string;
+  completedDate?: string;
+  createdDate: string;
+}
+
+export interface Reminder {
+  id: string;
+  tripId?: string;
+  bookingId?: string;
+  type: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  message: string;
+  dueDate: string;
+  sent: boolean;
+  sentAt?: string;
+}
+
+export interface Staff {
+  id: number;
+  name: string;
+  role: string;
+  email?: string;
+  trips: number;
+  tasks: number;
+  avatar: string;
+}
+
+// ─── Store Root Shape ────────────────────────────────────────
+
+export interface GKStoreState {
+  trips: Trip[];
+  leads: Lead[];
+  customers: Customer[];
+  bookings: Booking[];
+  tasks: Task[];
+  reminders: Reminder[];
+  activityLog: ActivityLog[];
+  payments: {
+    customerPayments: Payment[];
+    supplierPayments: Payment[];
+  };
+  staff: Staff[];
+}
+
+// ─── Form Shapes (subset of entities, used by React Hook Form) ─
+
+export interface TripFormValues {
+  customer: string;
+  phone: string;
+  destination: string;
+  pax: number;
+  departure: string;
+  returnDate?: string;
+  type: string;
+  totalAmount?: number;
+  gstRate?: number;
+  notes?: string;
+}
+
+export interface LeadFormValues {
+  name: string;
+  phone: string;
+  email?: string;
+  source: string;
+  destination?: string;
+  travelDate?: string;
+  pax?: number;
+  budget?: number;
+  tripType?: string;
+  priority?: 'low' | 'medium' | 'high';
+  notes?: string;
+  assignedTo?: string;
+  followUpDate?: string;
+}

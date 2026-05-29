@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS custom properties for shadcn/ui semantic tokens */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+  }
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', 'Manrope', system-ui, sans-serif;
+    background: #F8F9FA;
+    color: #111827;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94A3B8;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+  }
+
+  /* Animation for page transitions */
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out both;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Touch-friendly tap target */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Navigation active state */
+.nav-link[data-active="true"],
+.nav-link.active {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60A5FA;
+}
+
+/* Table base styles */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Form accessibility */
+[aria-invalid="true"] {
+  border-color: #EF4444 !important;
+}
+
+/* Focus visible for keyboard nav */
+:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"d:\\\\projects\\\\CRM\" -Recurse -File)",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(Sort-Object FullName)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Updated CRM workflow *)",
+      "Bash(git push *)"
+    ]
+  }
+}
