@@ -271,10 +271,19 @@ export function calcPortfolioFinance(items: PortfolioItem[]): PortfolioFinance {
   };
 }
 
-// ─── Trip → PortfolioItem helper ─────────────────────────────
-// Use this in components instead of mapping manually.
+// ─── Normalization Adapters ───────────────────────────────────
+// These are the ONLY legitimate path for converting domain entities into
+// the PortfolioItem shape accepted by calcPortfolioFinance().
+//
+// Never pass raw Trip or Booking entities into calcPortfolioFinance() directly.
+// Trip.status  → TripStatus  (workflow).  FinancialStatus is DERIVED, never stored.
+// Booking.status → BookingStatus (workflow). financialStatus is computed separately.
 
-export function tripToPortfolioItem(trip: {
+/**
+ * Normalize a Trip's financial fields into a PortfolioItem.
+ * Derives FinancialStatus from (totalPayable, paidAmount) — does NOT use Trip.status.
+ */
+export function normalizeTripFinance(trip: {
   totalPayable: number | null;
   paidAmount:   number;
   balanceDue:   number;
@@ -290,3 +299,28 @@ export function tripToPortfolioItem(trip: {
     financialStatus: getFinancialStatus(trip.totalPayable, trip.paidAmount),
   };
 }
+
+/**
+ * Normalize a Booking's financial fields into a PortfolioItem.
+ * Uses advance (customer-paid amount) as paidAmount proxy for bookings.
+ * Does NOT use Booking.status (BookingStatus) for FinancialStatus.
+ */
+export function normalizeBookingFinance(booking: {
+  totalPayable: number | null;
+  advance:      number;
+  balanceDue:   number;
+  supplierCost: number;
+  grossMargin:  number;
+}): PortfolioItem {
+  return {
+    totalPayable:    booking.totalPayable,
+    paidAmount:      booking.advance,
+    balanceDue:      booking.balanceDue,
+    supplierCost:    booking.supplierCost,
+    grossMargin:     booking.grossMargin,
+    financialStatus: getFinancialStatus(booking.totalPayable, booking.advance),
+  };
+}
+
+/** @deprecated Use normalizeTripFinance() */
+export const tripToPortfolioItem = normalizeTripFinance;

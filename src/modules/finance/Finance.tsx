@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import {
   calcPortfolioFinance,
-  tripToPortfolioItem,
+  normalizeTripFinance,
   FINANCIAL_STATUS_CLASS,
   FINANCIAL_STATUS_LABEL,
   getFinancialStatus,
@@ -86,7 +86,7 @@ export default function Finance() {
 
     // Map trips to PortfolioItem before aggregating — Trip.status is TripStatus,
     // not FinancialStatus; calcPortfolioFinance must not receive raw Trip entities.
-    const portfolio = calcPortfolioFinance(trips.map(tripToPortfolioItem));
+    const portfolio = calcPortfolioFinance(trips.map(normalizeTripFinance));
 
     // Trips with balance due (overdue or at-risk)
     const urgentBalance = trips.filter(t => {

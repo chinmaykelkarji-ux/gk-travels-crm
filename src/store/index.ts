@@ -222,7 +222,7 @@ export const useStore = create<GKStore>()(
           id,
           now,
         );
-        set(s => ({
+        set((s: GKStore) => ({
           trips:       [trip, ...s.trips],
           activityLog: [tripEntry, ...s.activityLog].slice(0, 500),
         }));
@@ -233,7 +233,7 @@ export const useStore = create<GKStore>()(
       },
 
       updateTrip(id, data) {
-        set(s => ({
+        set((s: GKStore) => ({
           trips: s.trips.map(t => {
             if (t.id !== id) return t;
             const updated = { ...t, ...data };
@@ -255,7 +255,7 @@ export const useStore = create<GKStore>()(
       },
 
       deleteTrip(id) {
-        set(s => ({ trips: s.trips.filter(t => t.id !== id) }));
+        set((s: GKStore) => ({ trips: s.trips.filter(t => t.id !== id) }));
       },
 
       setTripStatus(id, status) {
@@ -284,7 +284,7 @@ export const useStore = create<GKStore>()(
       },
 
       recalcTripFinance(tripId) {
-        set(s => ({
+        set((s: GKStore) => ({
           trips: s.trips.map(t => {
             if (t.id !== tripId) return t;
             const totals = supplierTotalsForTrip(s, tripId);
@@ -304,7 +304,7 @@ export const useStore = create<GKStore>()(
       },
 
       recalcAllTrips() {
-        set(s => ({
+        set((s: GKStore) => ({
           trips: s.trips.map(t => {
             const totals = supplierTotalsForTrip(s, t.id);
             const fin    = calcTripFinance({ ...t, ...totals });
@@ -356,7 +356,7 @@ export const useStore = create<GKStore>()(
           id,
           now,
         );
-        set(s => ({
+        set((s: GKStore) => ({
           leads:       [lead, ...s.leads],
           activityLog: [leadEntry, ...s.activityLog].slice(0, 500),
         }));
@@ -364,13 +364,13 @@ export const useStore = create<GKStore>()(
       },
 
       updateLead(id, data) {
-        set(s => ({
+        set((s: GKStore) => ({
           leads: s.leads.map(l => l.id === id ? { ...l, ...data } : l),
         }));
       },
 
       deleteLead(id) {
-        set(s => ({ leads: s.leads.filter(l => l.id !== id) }));
+        set((s: GKStore) => ({ leads: s.leads.filter(l => l.id !== id) }));
       },
 
       setLeadStatus(id, status) {
@@ -473,12 +473,12 @@ export const useStore = create<GKStore>()(
           documents:   data.documents   ?? [],
           ...data,
         };
-        set(s => ({ customers: [cust, ...s.customers] }));
+        set((s: GKStore) => ({ customers: [cust, ...s.customers] }));
         return cust;
       },
 
       updateCustomer(id, data) {
-        set(s => ({
+        set((s: GKStore) => ({
           customers: s.customers.map(c => c.id === id ? { ...c, ...data } : c),
         }));
       },
@@ -512,14 +512,14 @@ export const useStore = create<GKStore>()(
           createdDate:   today(),
           notes:         data.notes         ?? '',
         };
-        set(s => ({ bookings: [booking, ...s.bookings] }));
+        set((s: GKStore) => ({ bookings: [booking, ...s.bookings] }));
         // Recalc linked trip
         if (booking.refId) get().recalcTripFinance(booking.refId);
         return booking;
       },
 
       updateBooking(id, data) {
-        set(s => ({
+        set((s: GKStore) => ({
           bookings: s.bookings.map(b => {
             if (b.id !== id) return b;
             const updated = { ...b, ...data };
@@ -533,7 +533,7 @@ export const useStore = create<GKStore>()(
 
       deleteBooking(id) {
         const booking = get().bookings.find(b => b.id === id);
-        set(s => ({ bookings: s.bookings.filter(b => b.id !== id) }));
+        set((s: GKStore) => ({ bookings: s.bookings.filter(b => b.id !== id) }));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
@@ -564,7 +564,7 @@ export const useStore = create<GKStore>()(
           notes:     paymentData.notes,
         };
 
-        set(s => {
+        set((s: GKStore) => {
           const payments = { ...s.payments };
           if (isCustomer) {
             payments.customerPayments = [...s.payments.customerPayments, payment];
@@ -590,7 +590,7 @@ export const useStore = create<GKStore>()(
         const state = get();
         const list  = type === 'customer' ? state.payments.customerPayments : state.payments.supplierPayments;
         const pay   = list.find(p => p.id === id);
-        set(s => {
+        set((s: GKStore) => {
           const payments = { ...s.payments };
           if (type === 'customer') {
             payments.customerPayments = s.payments.customerPayments.filter(p => p.id !== id);
@@ -620,12 +620,12 @@ export const useStore = create<GKStore>()(
           assignedTo:  data.assignedTo,
           createdDate: today(),
         };
-        set(s => ({ tasks: [task, ...s.tasks] }));
+        set((s: GKStore) => ({ tasks: [task, ...s.tasks] }));
         return task;
       },
 
       updateTask(id, data) {
-        set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }));
+        set((s: GKStore) => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }));
       },
 
       completeTask(id) {
@@ -694,7 +694,7 @@ export const useStore = create<GKStore>()(
       },
 
       markReminderSent(id) {
-        set(s => ({
+        set((s: GKStore) => ({
           reminders: s.reminders.map(r =>
             r.id === id ? { ...r, sent: true, sentAt: new Date().toISOString() } : r
           ),
@@ -712,7 +712,7 @@ export const useStore = create<GKStore>()(
           before:     meta?.before,
           after:      meta?.after,
         };
-        set(s => ({
+        set((s: GKStore) => ({
           activityLog: [entry, ...s.activityLog].slice(0, 500),
         }));
       },

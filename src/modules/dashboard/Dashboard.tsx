@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
 import {
   calcPortfolioFinance,
-  tripToPortfolioItem,
+  normalizeTripFinance,
   FINANCIAL_STATUS_CLASS,
   FINANCIAL_STATUS_LABEL,
 } from '@/shared/utils/finance';
@@ -87,7 +87,7 @@ export default function Dashboard() {
   const stats = useMemo(() => {
     // Financial portfolio — trips must be mapped to PortfolioItem first because
     // Trip.status is TripStatus (lifecycle), not FinancialStatus (payment state).
-    const portfolio = calcPortfolioFinance(trips.map(tripToPortfolioItem));
+    const portfolio = calcPortfolioFinance(trips.map(normalizeTripFinance));
 
     // This month vs last month revenue
     const thisMonthReceived = payments.customerPayments
