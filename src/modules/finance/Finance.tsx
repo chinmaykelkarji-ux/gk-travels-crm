@@ -8,12 +8,13 @@ import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import {
   calcPortfolioFinance,
+  tripToPortfolioItem,
   FINANCIAL_STATUS_CLASS,
   FINANCIAL_STATUS_LABEL,
   getFinancialStatus,
 } from '@/shared/utils/finance';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
-import { fmtDate, isThisMonth, isLastMonth, monthKey, startOfMonthStr } from '@/shared/utils/date';
+import { fmtDate, isThisMonth, isLastMonth, monthKey } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
 import { Badge } from '@/shared/components/ui/badge';
@@ -83,7 +84,9 @@ export default function Finance() {
       ? Math.round(((thisMonthRec - lastMonthRec) / lastMonthRec) * 100)
       : 0;
 
-    const portfolio = calcPortfolioFinance(trips);
+    // Map trips to PortfolioItem before aggregating — Trip.status is TripStatus,
+    // not FinancialStatus; calcPortfolioFinance must not receive raw Trip entities.
+    const portfolio = calcPortfolioFinance(trips.map(tripToPortfolioItem));
 
     // Trips with balance due (overdue or at-risk)
     const urgentBalance = trips.filter(t => {

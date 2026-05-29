@@ -6,9 +6,14 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
-import { calcPortfolioFinance, FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL } from '@/shared/utils/finance';
-import { formatCurrency, formatCurrencyShort, formatPct } from '@/shared/utils/format';
-import { fmtDate, daysUntil, daysUntilLabel, isThisMonth, isLastMonth } from '@/shared/utils/date';
+import {
+  calcPortfolioFinance,
+  tripToPortfolioItem,
+  FINANCIAL_STATUS_CLASS,
+  FINANCIAL_STATUS_LABEL,
+} from '@/shared/utils/finance';
+import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
+import { fmtDate, daysUntil, isThisMonth, isLastMonth } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
@@ -80,8 +85,9 @@ export default function Dashboard() {
   const reminders   = useStore(selectors.pendingReminders);
 
   const stats = useMemo(() => {
-    // Financial portfolio
-    const portfolio = calcPortfolioFinance(trips);
+    // Financial portfolio — trips must be mapped to PortfolioItem first because
+    // Trip.status is TripStatus (lifecycle), not FinancialStatus (payment state).
+    const portfolio = calcPortfolioFinance(trips.map(tripToPortfolioItem));
 
     // This month vs last month revenue
     const thisMonthReceived = payments.customerPayments

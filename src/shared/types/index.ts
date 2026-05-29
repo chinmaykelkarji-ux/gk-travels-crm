@@ -62,7 +62,22 @@ export type UserRole = 'super_admin' | 'admin' | 'finance' | 'operations' | 'sal
 
 // ─── Financial Status (P0 Fix) ──────────────────────────────
 // Never compute this inline. Always use getFinancialStatus() from utils/finance.ts
+// NOTE: FinancialStatus is SEPARATE from TripStatus/BookingStatus.
+//       TripStatus describes workflow state; FinancialStatus describes payment state.
+//       They must NEVER share a field name on the same entity.
 export type FinancialStatus = 'unpriced' | 'unpaid' | 'partial' | 'paid';
+
+// ─── Activity Entity Type ────────────────────────────────────
+// Named type for ActivityLog.entityType — prevents generic string inference
+// inside Zustand set() closures where contextual typing may not flow through.
+export type ActivityEntityType =
+  | 'trip'
+  | 'lead'
+  | 'booking'
+  | 'customer'
+  | 'payment'
+  | 'task'
+  | 'system';
 
 // ─── Timeline & Audit ───────────────────────────────────────
 
@@ -78,7 +93,7 @@ export interface ActivityLog {
   id: string;
   type: string;
   message: string;
-  entityType: 'trip' | 'lead' | 'booking' | 'customer' | 'payment' | 'task' | 'system';
+  entityType: ActivityEntityType;
   entityId: string;
   userId?: string;
   timestamp: string;
@@ -322,13 +337,15 @@ export interface Booking {
   supplierPaid: number;
   gstRate: number;
 
-  // Computed financial (set by calcBookingFinance)
+  // Computed financial (set by calcBookingFinance — stored as a cache on the entity)
   gstAmount: number;
   totalPayable: number | null;
   balanceDue: number;
   supplierPending: number;
   grossMargin: number;
   marginPct: number;
+  // financialStatus is SEPARATE from status (BookingStatus) — never overwrite status with it
+  financialStatus?: FinancialStatus;
 
   detail: BookingDetail;
   createdDate: string;
@@ -345,6 +362,9 @@ export interface Payment {
   amount: number;
   method: string;
   date: string;
+  // paidDate: optional separate field for when supplier payment was settled,
+  // distinct from date (when the payment was recorded). Used in monthly reports.
+  paidDate?: string;
   status: 'pending' | 'received' | 'paid';
   reference?: string;
   notes?: string;

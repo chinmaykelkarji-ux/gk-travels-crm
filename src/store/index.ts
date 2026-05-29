@@ -17,6 +17,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   Trip, Lead, Customer, Booking, Payment, Task, Reminder,
   ActivityLog, Staff, GKStoreState, TripStatus, LeadStatus,
+  ActivityEntityType,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance } from '@/shared/utils/finance';
 import {
@@ -25,6 +26,30 @@ import {
 } from '@/shared/utils/id';
 import { today } from '@/shared/utils/date';
 import { canConfirmTrip } from '@/shared/schemas/trip';
+
+// ─── Activity Entry Factory ───────────────────────────────────
+// Using a typed factory function guarantees that `entityType` is checked
+// against ActivityEntityType at the call site, avoiding generic string
+// inference inside Zustand set() closures where contextual typing may not
+// propagate through the complex generic signature.
+
+function makeActivityEntry(
+  type:       string,
+  message:    string,
+  entityType: ActivityEntityType,
+  entityId:   string,
+  now:        string,
+): ActivityLog {
+  return {
+    id:         activityUid(),
+    type,
+    message,
+    entityType,
+    entityId,
+    timestamp:  new Date().toISOString(),
+    date:       now,
+  };
+}
 
 // ─── Defaults ────────────────────────────────────────────────
 
@@ -190,20 +215,16 @@ export const useStore = create<GKStore>()(
           marginPct:   fin.marginPct,
         });
 
+        const tripEntry = makeActivityEntry(
+          'trip_created',
+          `Trip ${id} created for ${trip.customer} → ${trip.destination}`,
+          'trip',
+          id,
+          now,
+        );
         set(s => ({
           trips:       [trip, ...s.trips],
-          activityLog: [
-            {
-              id:         activityUid(),
-              type:       'trip_created',
-              message:    `Trip ${id} created for ${trip.customer} → ${trip.destination}`,
-              entityType: 'trip',
-              entityId:   id,
-              timestamp:  new Date().toISOString(),
-              date:       now,
-            },
-            ...s.activityLog,
-          ].slice(0, 500),
+          activityLog: [tripEntry, ...s.activityLog].slice(0, 500),
         }));
 
         // Auto-generate reminders
@@ -328,20 +349,16 @@ export const useStore = create<GKStore>()(
           timeline:    [{ id: uid(), date: now, event: 'Lead created', type: 'system' }],
         };
 
+        const leadEntry = makeActivityEntry(
+          'lead_created',
+          `Lead ${id} created — ${lead.name} (${lead.source})`,
+          'lead',
+          id,
+          now,
+        );
         set(s => ({
           leads:       [lead, ...s.leads],
-          activityLog: [
-            {
-              id:         activityUid(),
-              type:       'lead_created',
-              message:    `Lead ${id} created — ${lead.name} (${lead.source})`,
-              entityType: 'lead',
-              entityId:   id,
-              timestamp:  new Date().toISOString(),
-              date:       now,
-            },
-            ...s.activityLog,
-          ].slice(0, 500),
+          activityLog: [leadEntry, ...s.activityLog].slice(0, 500),
         }));
         return lead;
       },

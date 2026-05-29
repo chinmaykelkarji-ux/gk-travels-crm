@@ -6,12 +6,17 @@
 // or balance inline anywhere in the UI.
 //
 // Key invariants enforced here:
-//   1. totalPayable === null  → status is ALWAYS "unpriced"
-//      (price not set; must NEVER show "Paid" or "Unpaid")
-//   2. paidAmount > 0 with null totalPayable → still "unpriced"
+//   1. totalPayable === null  → financialStatus is ALWAYS 'unpriced'
+//   2. paidAmount > 0 with null totalPayable → still 'unpriced'
 //   3. Balance = totalPayable - paidAmount (not totalAmount)
 //   4. GST is collected & remitted — not kept as profit
 //   5. Gross Margin = Revenue - Supplier Cost (not minus GST)
+//
+// NAMING CONTRACT:
+//   - TripStatus / BookingStatus → workflow/lifecycle state (e.g. 'confirmed', 'pending')
+//   - FinancialStatus             → payment state (e.g. 'paid', 'unpriced')
+//   - These MUST NOT share a field name on any entity.
+//   - Finance results use `financialStatus`, never `status`.
 // ============================================================
 
 import type { FinancialStatus } from '@/shared/types';
@@ -19,22 +24,21 @@ import type { FinancialStatus } from '@/shared/types';
 // ─── Status Resolution ───────────────────────────────────────
 
 /**
- * Determine payment status from totalPayable and paidAmount.
- * This is the ONLY place where FinancialStatus is computed.
+ * Single source of truth for deriving FinancialStatus from raw numbers.
  *
  * Rule table:
- *   totalPayable === null   → "unpriced"  (price not set)
- *   totalPayable <= 0       → "unpriced"  (zero price is treated as unpriced)
- *   paidAmount <= 0         → "unpaid"
- *   paidAmount < totalPayable → "partial"
- *   paidAmount >= totalPayable → "paid"
+ *   totalPayable === null   → 'unpriced'   (price not set; NEVER show 'Paid')
+ *   totalPayable <= 0       → 'unpriced'   (zero price treated as unset)
+ *   paidAmount <= 0         → 'unpaid'
+ *   paidAmount < totalPayable → 'partial'
+ *   paidAmount >= totalPayable → 'paid'
  */
 export function getFinancialStatus(
   totalPayable: number | null | undefined,
-  paidAmount: number | null | undefined,
+  paidAmount:   number | null | undefined,
 ): FinancialStatus {
   const payable = totalPayable ?? null;
-  const paid    = paidAmount  ?? 0;
+  const paid    = paidAmount   ?? 0;
 
   if (payable === null || payable <= 0) return 'unpriced';
   if (paid <= 0)                         return 'unpaid';
@@ -61,62 +65,60 @@ export const FINANCIAL_STATUS_CLASS: Record<FinancialStatus, string> = {
 // ─── Trip Finance Calculation ────────────────────────────────
 
 export interface TripFinanceResult {
-  totalAmount:  number;
-  gstRate:      number;
-  gstAmount:    number;
-  totalPayable: number | null;
-  paidAmount:   number;
-  balanceDue:   number;
-  supplierCost: number;
-  grossMargin:  number;   // Revenue - Supplier Cost (GST excluded: collected & remitted)
-  marginPct:    number;
-  status:       FinancialStatus;
+  totalAmount:      number;
+  gstRate:          number;
+  gstAmount:        number;
+  totalPayable:     number | null;
+  paidAmount:       number;
+  balanceDue:       number;
+  supplierCost:     number;
+  grossMargin:      number;
+  marginPct:        number;
+  // Renamed from `status` to avoid colliding with Trip.status: TripStatus
+  financialStatus:  FinancialStatus;
 }
 
 export function calcTripFinance(opts: {
-  totalAmount:           number | null | undefined;
-  gstRate?:              number;
-  paidAmount?:           number;
-  customerPaymentsTotal: number;  // sum of received customer payments for this trip
-  supplierPaymentsTotal: number;  // sum of paid supplier payments for this trip
-  bookingSupplierTotal:  number;  // sum of supplier costs on linked bookings
+  totalAmount:            number | null | undefined;
+  gstRate?:               number;
+  paidAmount?:            number;
+  customerPaymentsTotal:  number;
+  supplierPaymentsTotal:  number;
+  bookingSupplierTotal:   number;
 }): TripFinanceResult {
   const base    = opts.totalAmount ?? null;
-  const gstRate = opts.gstRate ?? 5;
+  const gstRate = opts.gstRate    ?? 5;
 
-  // Supplier cost: take the larger of payment records vs booking records
-  // (avoids double-counting when bookings are later paid via supplier payments)
+  // Supplier cost = max(supplier payment records, booking supplier costs)
+  // Avoids double-counting when bookings are later paid via supplier payments.
   const supplierCost = Math.max(opts.supplierPaymentsTotal, opts.bookingSupplierTotal);
 
   if (base === null || base === 0) {
     const paidAmount = opts.customerPaymentsTotal;
     return {
-      totalAmount:  0,
+      totalAmount:     0,
       gstRate,
-      gstAmount:    0,
-      totalPayable: null,
+      gstAmount:       0,
+      totalPayable:    null,
       paidAmount,
-      balanceDue:   0,
+      balanceDue:      0,
       supplierCost,
-      grossMargin:  0,
-      marginPct:    0,
-      status:       'unpriced',
+      grossMargin:     0,
+      marginPct:       0,
+      financialStatus: 'unpriced',
     };
   }
 
   const gstAmount    = Math.round(base * gstRate / 100);
   const totalPayable = base + gstAmount;
+  const paidAmount   = Math.max(opts.paidAmount ?? 0, opts.customerPaymentsTotal);
+  const balanceDue   = Math.max(0, totalPayable - paidAmount);
 
-  // Use the higher of stored paidAmount vs sum of verified payments
-  const paidAmount = Math.max(opts.paidAmount ?? 0, opts.customerPaymentsTotal);
-  const balanceDue = Math.max(0, totalPayable - paidAmount);
-
-  // Gross margin = revenue - supplier cost
-  // GST is NOT deducted here: it is collected from the customer and remitted to govt.
-  // Deducting GST from margin would understate profitability.
-  const grossMargin = base - supplierCost;
-  const marginPct   = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
-  const status      = getFinancialStatus(totalPayable, paidAmount);
+  // GST is NOT deducted from gross margin — it is collected from the customer
+  // and remitted to government. Deducting it would understate profitability.
+  const grossMargin     = base - supplierCost;
+  const marginPct       = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
+  const financialStatus = getFinancialStatus(totalPayable, paidAmount);
 
   return {
     totalAmount: base,
@@ -128,20 +130,21 @@ export function calcTripFinance(opts: {
     supplierCost,
     grossMargin,
     marginPct,
-    status,
+    financialStatus,
   };
 }
 
 // ─── Booking Finance Calculation ─────────────────────────────
 
 export interface BookingFinanceResult {
-  gstAmount:       number;
-  totalPayable:    number | null;
-  balanceDue:      number;
-  supplierPending: number;
-  grossMargin:     number;
-  marginPct:       number;
-  status:          FinancialStatus;
+  gstAmount:        number;
+  totalPayable:     number | null;
+  balanceDue:       number;
+  supplierPending:  number;
+  grossMargin:      number;
+  marginPct:        number;
+  // Renamed from `status` to avoid colliding with Booking.status: BookingStatus
+  financialStatus:  FinancialStatus;
 }
 
 export function calcBookingFinance(opts: {
@@ -156,27 +159,26 @@ export function calcBookingFinance(opts: {
   const advance      = opts.advance      ?? 0;
   const supplierCost = opts.supplierCost ?? 0;
   const supplierPaid = opts.supplierPaid ?? 0;
-
   const supplierPending = Math.max(0, supplierCost - supplierPaid);
 
   if (base === null || base === 0) {
     return {
-      gstAmount:    0,
-      totalPayable: null,
-      balanceDue:   0,
+      gstAmount:       0,
+      totalPayable:    null,
+      balanceDue:      0,
       supplierPending,
-      grossMargin:  0,
-      marginPct:    0,
-      status:       'unpriced',
+      grossMargin:     0,
+      marginPct:       0,
+      financialStatus: 'unpriced',
     };
   }
 
-  const gstAmount    = Math.round(base * gstRate / 100);
-  const totalPayable = base + gstAmount;
-  const balanceDue   = Math.max(0, totalPayable - advance);
-  const grossMargin  = base - supplierCost;
-  const marginPct    = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
-  const status       = getFinancialStatus(totalPayable, advance);
+  const gstAmount       = Math.round(base * gstRate / 100);
+  const totalPayable    = base + gstAmount;
+  const balanceDue      = Math.max(0, totalPayable - advance);
+  const grossMargin     = base - supplierCost;
+  const marginPct       = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
+  const financialStatus = getFinancialStatus(totalPayable, advance);
 
   return {
     gstAmount,
@@ -185,54 +187,75 @@ export function calcBookingFinance(opts: {
     supplierPending,
     grossMargin,
     marginPct,
-    status,
+    financialStatus,
   };
+}
+
+// ─── Portfolio Finance Input ──────────────────────────────────
+// A normalized view of any financial entity (Trip or Booking) suitable
+// for aggregation. Callers must compute financialStatus before calling
+// calcPortfolioFinance — raw Trip/Booking entities are NOT accepted
+// because Trip.status is TripStatus, not FinancialStatus.
+
+export interface PortfolioItem {
+  totalPayable:    number | null;
+  paidAmount:      number;
+  balanceDue:      number;
+  supplierCost:    number;
+  grossMargin:     number;
+  financialStatus: FinancialStatus;
 }
 
 // ─── Aggregate Portfolio Finance ─────────────────────────────
 
 export interface PortfolioFinance {
-  totalRevenue:    number;
-  totalCollected:  number;
-  totalPending:    number;
-  totalBalance:    number;
-  totalSupplier:   number;
+  totalRevenue:     number;
+  totalCollected:   number;
+  totalPending:     number;
+  totalBalance:     number;
+  totalSupplier:    number;
   totalGrossMargin: number;
-  avgMarginPct:    number;
-  unpricedCount:   number;
+  avgMarginPct:     number;
+  unpricedCount:    number;
 }
 
-export function calcPortfolioFinance(
-  trips: Array<{
-    totalPayable: number | null;
-    paidAmount:   number;
-    balanceDue:   number;
-    supplierCost: number;
-    grossMargin:  number;
-    status:       FinancialStatus;
-  }>,
-): PortfolioFinance {
-  let totalRevenue     = 0;
-  let totalCollected   = 0;
-  let totalBalance     = 0;
-  let totalSupplier    = 0;
-  let totalGrossMargin = 0;
-  let unpricedCount    = 0;
+/**
+ * Aggregate financial metrics across a set of normalized portfolio items.
+ *
+ * IMPORTANT: Do NOT pass raw Trip[] here. Map trips to PortfolioItem[] first:
+ *
+ *   const items = trips.map(t => ({
+ *     totalPayable:    t.totalPayable,
+ *     paidAmount:      t.paidAmount,
+ *     balanceDue:      t.balanceDue,
+ *     supplierCost:    t.supplierCost,
+ *     grossMargin:     t.grossMargin,
+ *     financialStatus: getFinancialStatus(t.totalPayable, t.paidAmount),
+ *   }));
+ *   const portfolio = calcPortfolioFinance(items);
+ */
+export function calcPortfolioFinance(items: PortfolioItem[]): PortfolioFinance {
+  let totalRevenue      = 0;
+  let totalCollected    = 0;
+  let totalBalance      = 0;
+  let totalSupplier     = 0;
+  let totalGrossMargin  = 0;
+  let unpricedCount     = 0;
 
-  for (const t of trips) {
-    if (t.totalPayable !== null) totalRevenue += t.totalPayable;
-    totalCollected   += t.paidAmount;
-    totalBalance     += t.balanceDue;
-    totalSupplier    += t.supplierCost;
-    totalGrossMargin += t.grossMargin;
-    if (t.status === 'unpriced') unpricedCount++;
+  for (const item of items) {
+    if (item.totalPayable !== null) totalRevenue += item.totalPayable;
+    totalCollected   += item.paidAmount;
+    totalBalance     += item.balanceDue;
+    totalSupplier    += item.supplierCost;
+    totalGrossMargin += item.grossMargin;
+    if (item.financialStatus === 'unpriced') unpricedCount++;
   }
 
-  const pricedTrips  = trips.filter(t => t.totalPayable !== null && t.totalPayable > 0);
-  const avgMarginPct = pricedTrips.length > 0
+  const pricedItems  = items.filter(i => i.totalPayable !== null && i.totalPayable > 0);
+  const avgMarginPct = pricedItems.length > 0
     ? Math.round(
-        (pricedTrips.reduce((s, t) => s + t.grossMargin, 0) /
-         pricedTrips.reduce((s, t) => s + (t.totalPayable ?? 0), 0)) * 1000
+        (pricedItems.reduce((s, i) => s + i.grossMargin, 0) /
+         pricedItems.reduce((s, i) => s + (i.totalPayable ?? 0), 0)) * 1000,
       ) / 10
     : 0;
 
@@ -245,5 +268,25 @@ export function calcPortfolioFinance(
     totalGrossMargin,
     avgMarginPct,
     unpricedCount,
+  };
+}
+
+// ─── Trip → PortfolioItem helper ─────────────────────────────
+// Use this in components instead of mapping manually.
+
+export function tripToPortfolioItem(trip: {
+  totalPayable: number | null;
+  paidAmount:   number;
+  balanceDue:   number;
+  supplierCost: number;
+  grossMargin:  number;
+}): PortfolioItem {
+  return {
+    totalPayable:    trip.totalPayable,
+    paidAmount:      trip.paidAmount,
+    balanceDue:      trip.balanceDue,
+    supplierCost:    trip.supplierCost,
+    grossMargin:     trip.grossMargin,
+    financialStatus: getFinancialStatus(trip.totalPayable, trip.paidAmount),
   };
 }
