@@ -55,24 +55,24 @@ export function LeadForm({ open, onClose, onSubmit, defaultValues, loading, titl
   const priority = watch('priority');
 
   useEffect(() => {
-    if (defaultValues) {
-      reset({
-        name:         defaultValues.name         ?? '',
-        phone:        defaultValues.phone        ?? '',
-        email:        defaultValues.email        ?? '',
-        source:       defaultValues.source       ?? 'Walk-in',
-        destination:  defaultValues.destination  ?? '',
-        travelDate:   defaultValues.travelDate   ?? '',
-        pax:          defaultValues.pax          ?? 1,
-        budget:       defaultValues.budget       ?? undefined,
-        tripType:     defaultValues.tripType     ?? '',
-        priority:     defaultValues.priority     ?? 'medium',
-        notes:        defaultValues.notes        ?? '',
-        assignedTo:   defaultValues.assignedTo   ?? '',
-        followUpDate: defaultValues.followUpDate ?? '',
-      });
-    }
-  }, [defaultValues, reset]);
+    if (!open) return;
+    reset({
+      name:         defaultValues?.name         ?? '',
+      phone:        defaultValues?.phone        ?? '',
+      email:        defaultValues?.email        ?? '',
+      source:       defaultValues?.source       ?? 'Walk-in',
+      destination:  defaultValues?.destination  ?? '',
+      travelDate:   defaultValues?.travelDate   ?? '',
+      pax:          defaultValues?.pax          ?? 1,
+      budget:       defaultValues?.budget       ?? undefined,
+      tripType:     defaultValues?.tripType     ?? '',
+      priority:     defaultValues?.priority     ?? 'medium',
+      notes:        defaultValues?.notes        ?? '',
+      assignedTo:   defaultValues?.assignedTo   ?? '',
+      followUpDate: defaultValues?.followUpDate ?? '',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function handleClose() { reset(); onClose(); }
 

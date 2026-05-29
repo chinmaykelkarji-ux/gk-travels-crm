@@ -51,21 +51,21 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
   const tripType = watch('type');
 
   useEffect(() => {
-    if (defaultValues) {
-      reset({
-        customer:    defaultValues.customer    ?? '',
-        phone:       defaultValues.phone       ?? '',
-        destination: defaultValues.destination ?? '',
-        pax:         defaultValues.pax         ?? 1,
-        departure:   defaultValues.departure   ?? '',
-        returnDate:  defaultValues.returnDate  ?? '',
-        type:        defaultValues.type        ?? 'Leisure',
-        totalAmount: defaultValues.totalAmount ?? undefined,
-        gstRate:     defaultValues.gstRate     ?? 5,
-        notes:       defaultValues.notes       ?? '',
-      });
-    }
-  }, [defaultValues, reset]);
+    if (!open) return;
+    reset({
+      customer:    defaultValues?.customer    ?? '',
+      phone:       defaultValues?.phone       ?? '',
+      destination: defaultValues?.destination ?? '',
+      pax:         defaultValues?.pax         ?? 1,
+      departure:   defaultValues?.departure   ?? '',
+      returnDate:  defaultValues?.returnDate  ?? '',
+      type:        defaultValues?.type        ?? 'Leisure',
+      totalAmount: defaultValues?.totalAmount ?? undefined,
+      gstRate:     defaultValues?.gstRate     ?? 5,
+      notes:       defaultValues?.notes       ?? '',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function handleClose() {
     reset();

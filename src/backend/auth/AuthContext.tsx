@@ -15,9 +15,8 @@
 // ============================================================
 
 import {
-  createContext, useContext, useEffect, useState, useCallback, type ReactNode,
+  createContext, useContext, useState, useCallback, type ReactNode,
 } from 'react';
-import { authService } from './authService';
 import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser } from './types';
 import type { Permission } from './permissions';
@@ -38,67 +37,25 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ─── Provider ────────────────────────────────────────────────
 
+// ─── DEV MODE — skip all Supabase auth ───────────────────────
+const DEV_USER: AuthUser = {
+  id:       'dev-admin',
+  orgId:    'dev-org',
+  email:    'gktravels8249@gmail.com',
+  name:     'Admin',
+  role:     'ADMIN',
+  avatar:   null,
+  phone:    null,
+  isActive: true,
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user,      setUser]      = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user,      setUser]      = useState<AuthUser | null>(DEV_USER);
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    console.log('[GK CRM] AuthProvider mounted — restoring session');
-
-    // Safety net: if neither getCurrentUser nor onAuthStateChange resolves within
-    // 8 seconds (e.g. Supabase unreachable), un-block the app so users see the
-    // login page instead of a permanent spinner.
-    const authTimeout = setTimeout(() => {
-      console.warn('[GK CRM] Auth init timed out after 8s — forcing isLoading=false');
-      setIsLoading(false);
-    }, 8000);
-
-    // Restore session on mount, then subscribe to future auth events.
-    authService.getCurrentUser()
-      .then((u) => {
-        console.log('[GK CRM] getCurrentUser resolved —', u ? `user: ${u.email}` : 'no session');
-        setUser(u);
-      })
-      .catch((err) => {
-        console.warn('[GK CRM] getCurrentUser error:', err);
-        setUser(null);
-      })
-      .finally(() => {
-        clearTimeout(authTimeout);
-        setIsLoading(false);
-      });
-
-    const unsubscribe = authService.onAuthChange((authUser) => {
-      console.log('[GK CRM] onAuthStateChange fired —', authUser ? `user: ${authUser.email}` : 'signed out');
-      clearTimeout(authTimeout);
-      setUser(authUser);
-      setIsLoading(false);
-    });
-
-    return () => {
-      clearTimeout(authTimeout);
-      unsubscribe();
-    };
-  }, []);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const authUser = await authService.signIn({ email, password });
-      setUser(authUser);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const signUp = useCallback(async (email: string, password: string, name: string) => {
-    await authService.signUp(email, password, name);
-  }, []);
-
-  const signOut = useCallback(async () => {
-    await authService.signOut();
-    setUser(null);
-  }, []);
+  const signIn  = useCallback(async (_email: string, _password: string) => { setUser(DEV_USER); }, []);
+  const signUp  = useCallback(async (_email: string, _password: string, _name: string) => {}, []);
+  const signOut = useCallback(async () => { setUser(null); }, []);
 
   return (
     <AuthContext.Provider value={{

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Users, ArrowRight, Phone, Calendar,
-  MapPin, TrendingUp, RefreshCw,
+  MapPin, TrendingUp, RefreshCw, Edit2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
@@ -270,7 +270,7 @@ export default function Leads() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.02 }}
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => {}}
+                    onClick={() => setEditLead(lead)}
                   >
                     <td className="px-4 py-3 font-mono text-[11px] text-gray-400 whitespace-nowrap">{lead.id}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -354,7 +354,7 @@ export default function Leads() {
                           onClick={() => setEditLead(lead)}
                           title="Edit"
                         >
-                          <Search className="w-3.5 h-3.5 text-gray-400" />
+                          <Edit2 className="w-3.5 h-3.5 text-gray-400" />
                         </Button>
                       </div>
                     </td>
