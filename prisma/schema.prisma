@@ -1,0 +1,545 @@
+// ============================================================
+// GK TRAVELS CRM — Prisma Schema
+// PostgreSQL on Supabase
+//
+// Usage:
+//   npx prisma migrate dev   → generate + apply migration
+//   npx prisma generate      → regenerate Prisma client
+//   npx prisma db push       → push schema without migration history
+//   npx prisma studio        → open Prisma Studio
+// ============================================================
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+// ─── Organisation ────────────────────────────────────────────
+// Multi-tenant root. All data is scoped to an organisation.
+
+model Organisation {
+  id        String   @id @default(cuid())
+  name      String
+  gstin     String?  @unique
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+  phone     String?
+  email     String?
+  website   String?
+  logoUrl   String?
+  currency  String   @default("INR")
+  timezone  String   @default("Asia/Kolkata")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profiles         Profile[]
+  customers        Customer[]
+  leads            Lead[]
+  trips            Trip[]
+  bookings         Booking[]
+  customerPayments CustomerPayment[]
+  supplierPayments SupplierPayment[]
+  tasks            Task[]
+  activityLogs     ActivityLog[]
+  documents        Document[]
+
+  @@map("organisations")
+}
+
+// ─── Profile ─────────────────────────────────────────────────
+// Extends Supabase auth.users with CRM-specific fields.
+// Created automatically via trigger on auth.users insert.
+
+model Profile {
+  id       String   @id // matches auth.users.id (UUID from Supabase)
+  orgId    String
+  name     String
+  email    String
+  role     UserRole @default(STAFF)
+  avatar   String?
+  phone    String?
+  isActive Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org              Organisation      @relation(fields: [orgId], references: [id])
+  tripsCreated     Trip[]            @relation("TripCreatedBy")
+  tripsAssigned    Trip[]            @relation("TripAssignedTo")
+  leadsCreated     Lead[]            @relation("LeadCreatedBy")
+  leadsAssigned    Lead[]            @relation("LeadAssignedTo")
+  activityLogs     ActivityLog[]
+  paymentsRecorded CustomerPayment[] @relation("PaymentRecordedBy")
+
+  @@index([orgId])
+  @@index([email])
+  @@map("profiles")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  STAFF
+
+  @@map("user_role")
+}
+
+// ─── Customer ────────────────────────────────────────────────
+
+model Customer {
+  id              String    @id @default(cuid())
+  orgId           String
+  name            String
+  phone           String
+  altPhone        String?
+  email           String?
+  address         String?
+  city            String?
+  passportNo      String?
+  passportExpiry  DateTime?
+  passportCountry String?
+  panNumber       String?
+  aadhaarNumber   String?
+  preferences     Json      @default("{}")
+  notes           String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  org      Organisation @relation(fields: [orgId], references: [id])
+  trips    Trip[]
+  leads    Lead[]
+  documents Document[]
+
+  @@index([orgId])
+  @@index([phone])
+  @@index([orgId, phone])
+  @@map("customers")
+}
+
+// ─── Lead ────────────────────────────────────────────────────
+
+model Lead {
+  id           String       @id @default(cuid())
+  orgId        String
+  customerId   String?
+  displayId    String       // L-2025-0001 — human-readable
+  name         String
+  phone        String
+  email        String?
+  source       String
+  destination  String?
+  travelDate   DateTime?
+  returnDate   DateTime?
+  pax          Int          @default(1)
+  budget       Decimal?     @db.Decimal(14, 2)
+  tripType     String?
+  status       LeadStatus   @default(NEW)
+  priority     LeadPriority @default(MEDIUM)
+  notes        String?
+  followUpDate DateTime?
+  assignedToId String?
+  createdById  String?
+
+  // Conversion audit trail
+  convertedTripId String?
+  convertedAt     DateTime?
+  convertedById   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org           Organisation @relation(fields: [orgId], references: [id])
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  assignedTo    Profile?     @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  createdBy     Profile?     @relation("LeadCreatedBy", fields: [createdById], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([assignedToId])
+  @@index([displayId])
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  QUOTATION_SENT
+  CONFIRMED
+  CONVERTED
+  CANCELLED
+
+  @@map("lead_status")
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("lead_priority")
+}
+
+// ─── Trip ────────────────────────────────────────────────────
+
+model Trip {
+  id          String     @id @default(cuid())
+  orgId       String
+  customerId  String?
+  displayId   String     // GK-2025-0001
+  customer    String     // denormalized display name
+  phone       String
+  email       String?
+  destination String
+  type        String
+  pax         Int
+  departure   DateTime?
+  returnDate  DateTime?
+  status      TripStatus @default(DRAFT)
+
+  // ── Financial (stored as Decimal for precision) ──────────
+  // null = price not set → financialStatus must be 'unpriced'
+  totalAmount  Decimal?   @db.Decimal(14, 2)
+  gstRate      Decimal    @db.Decimal(5, 2)   @default(5)
+  discount     Decimal?   @db.Decimal(14, 2)
+
+  // Computed financial cache (recalculated on every payment/booking change)
+  gstAmount    Decimal    @db.Decimal(14, 2)   @default(0)
+  totalPayable Decimal?   @db.Decimal(14, 2)
+  paidAmount   Decimal    @db.Decimal(14, 2)   @default(0)
+  balanceDue   Decimal    @db.Decimal(14, 2)   @default(0)
+  supplierCost Decimal    @db.Decimal(14, 2)   @default(0)
+  grossMargin  Decimal    @db.Decimal(14, 2)   @default(0)
+  marginPct    Decimal    @db.Decimal(7, 3)    @default(0)
+
+  // ── Operational status flags ─────────────────────────────
+  visaStatus    String @default("pending")
+  hotelStatus   String @default("pending")
+  flightStatus  String @default("pending")
+  checkInStatus String @default("not_due")
+
+  notes        String?
+  assignedToId String?
+  createdById  String?
+
+  // Lead conversion audit
+  sourceLeadId  String?
+  convertedAt   DateTime?
+  convertedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org              Organisation      @relation(fields: [orgId], references: [id])
+  customerRef      Customer?         @relation(fields: [customerId], references: [id])
+  assignedTo       Profile?          @relation("TripAssignedTo", fields: [assignedToId], references: [id])
+  createdBy        Profile?          @relation("TripCreatedBy", fields: [createdById], references: [id])
+  bookings         Booking[]
+  customerPayments CustomerPayment[]
+  supplierPayments SupplierPayment[]
+  tasks            Task[]
+  timeline         TripTimeline[]
+  documents        Document[]
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([customerId])
+  @@index([departure])
+  @@index([displayId])
+  @@index([orgId, departure])
+  @@map("trips")
+}
+
+enum TripStatus {
+  DRAFT
+  QUOTATION
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("trip_status")
+}
+
+// ─── Booking ─────────────────────────────────────────────────
+
+model Booking {
+  id           String        @id @default(cuid())
+  orgId        String
+  tripId       String?
+  customerId   String?
+  displayId    String        // BK-2025-0001
+  type         BookingType
+  bookingStatus BookingStatus @default(PENDING)
+  customerName String
+
+  // Financial
+  sellingPrice  Decimal?  @db.Decimal(14, 2)
+  supplierCost  Decimal   @db.Decimal(14, 2) @default(0)
+  advance       Decimal   @db.Decimal(14, 2) @default(0)
+  supplierPaid  Decimal   @db.Decimal(14, 2) @default(0)
+  gstRate       Decimal   @db.Decimal(5, 2)  @default(0)
+
+  // Computed financial cache
+  gstAmount       Decimal  @db.Decimal(14, 2) @default(0)
+  totalPayable    Decimal? @db.Decimal(14, 2)
+  balanceDue      Decimal  @db.Decimal(14, 2) @default(0)
+  supplierPending Decimal  @db.Decimal(14, 2) @default(0)
+  grossMargin     Decimal  @db.Decimal(14, 2) @default(0)
+  marginPct       Decimal  @db.Decimal(7, 3)  @default(0)
+
+  detail Json    @default("{}")
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org      Organisation @relation(fields: [orgId], references: [id])
+  trip     Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  customer Customer?    @relation(fields: [customerId], references: [id])
+
+  @@index([orgId])
+  @@index([tripId])
+  @@index([orgId, type])
+  @@index([displayId])
+  @@map("bookings")
+}
+
+enum BookingType {
+  FLIGHT
+  HOTEL
+  TRAIN
+  BUS
+  CAB
+  VISA
+  INSURANCE
+  ACTIVITY
+  OTHER
+
+  @@map("booking_type")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ISSUED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CHECKED_IN
+  DEPARTED
+  COMPLETED
+  CANCELLED
+
+  @@map("booking_status")
+}
+
+// ─── Payments ────────────────────────────────────────────────
+
+model CustomerPayment {
+  id          String        @id @default(cuid())
+  orgId       String
+  tripId      String?
+  bookingId   String?
+  customerId  String?
+  displayId   String        // PAY-001
+  customer    String?       // denormalized
+  amount      Decimal       @db.Decimal(14, 2)
+  method      String
+  date        DateTime      @default(now())
+  paidDate    DateTime?     // when payment was actually settled (may differ from date)
+  status      PaymentStatus @default(RECEIVED)
+  reference   String?
+  notes       String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org       Organisation @relation(fields: [orgId], references: [id])
+  trip      Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  createdBy Profile?     @relation("PaymentRecordedBy", fields: [createdById], references: [id])
+
+  @@index([orgId])
+  @@index([tripId])
+  @@index([orgId, date])
+  @@map("customer_payments")
+}
+
+model SupplierPayment {
+  id         String        @id @default(cuid())
+  orgId      String
+  tripId     String?
+  bookingId  String?
+  displayId  String        // SP-001
+  supplier   String?
+  amount     Decimal       @db.Decimal(14, 2)
+  method     String
+  date       DateTime      @default(now())
+  paidDate   DateTime?
+  status     PaymentStatus @default(PENDING)
+  reference  String?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org  Organisation @relation(fields: [orgId], references: [id])
+  trip Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([tripId])
+  @@map("supplier_payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  RECEIVED
+  PAID
+  FAILED
+  REFUNDED
+
+  @@map("payment_status")
+}
+
+// ─── Task ────────────────────────────────────────────────────
+
+model Task {
+  id           String       @id @default(cuid())
+  orgId        String
+  tripId       String?
+  bookingId    String?
+  customerId   String?
+  title        String
+  description  String?
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(PENDING)
+  dueDate      DateTime?
+  assignedToId String?
+  completedAt  DateTime?
+  createdById  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org  Organisation @relation(fields: [orgId], references: [id])
+  trip Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([tripId])
+  @@map("tasks")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("task_priority")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("task_status")
+}
+
+// ─── Activity Log ────────────────────────────────────────────
+
+model ActivityLog {
+  id         String @id @default(cuid())
+  orgId      String
+  type       String
+  message    String
+  entityType String
+  entityId   String
+  userId     String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  org  Organisation @relation(fields: [orgId], references: [id])
+  user Profile?     @relation(fields: [userId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ─── Trip Timeline ────────────────────────────────────────────
+
+model TripTimeline {
+  id     String @id @default(cuid())
+  tripId String
+  event  String
+  type   String @default("info")
+  userId String?
+
+  createdAt DateTime @default(now())
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("trip_timeline")
+}
+
+// ─── Document ────────────────────────────────────────────────
+
+model Document {
+  id           String           @id @default(cuid())
+  orgId        String
+  tripId       String?
+  bookingId    String?
+  customerId   String?
+  name         String
+  category     DocumentCategory
+  storageUrl   String           // Supabase Storage public URL
+  storagePath  String           // internal storage path for signed URLs
+  mimeType     String
+  size         Int
+  uploadedById String?
+
+  createdAt DateTime @default(now())
+
+  org      Organisation @relation(fields: [orgId], references: [id])
+  trip     Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  customer Customer?    @relation(fields: [customerId], references: [id])
+
+  @@index([tripId])
+  @@index([customerId])
+  @@map("documents")
+}
+
+enum DocumentCategory {
+  PASSPORT
+  VISA
+  INSURANCE
+  FLIGHT_TICKET
+  HOTEL_VOUCHER
+  PAN_CARD
+  AADHAAR
+  OTHER
+
+  @@map("document_category")
+}

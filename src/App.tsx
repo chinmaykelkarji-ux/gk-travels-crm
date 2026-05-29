@@ -1,17 +1,42 @@
-import { useState, Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Sidebar } from '@/shared/components/Sidebar';
-import { Header } from '@/shared/components/Header';
-import { Toaster } from '@/shared/components/Toaster';
-import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
-import { DashboardSkeleton } from '@/shared/components/LoadingSkeleton';
-import { useStore } from '@/store';
-import type { TripFormSchema } from '@/shared/schemas/trip';
-import { toast } from '@/shared/hooks/useToast';
-import { TripForm } from '@/modules/trips/TripForm';
+// ============================================================
+// GK TRAVELS CRM — Application Root
+//
+// Route hierarchy:
+//   /login, /signup, /forgot-password   → PublicRoute (no shell, redirects if authed)
+//   /auth/reset-password                → standalone (no shell, handles recovery token)
+//   / and all CRM paths                 → ProtectedRoute → AppShell → Outlet
+//
+// Provider order:
+//   QueryClientProvider → AuthProvider → BrowserRouter → Routes
+// ============================================================
 
-// Lazy-load all modules to keep initial bundle small
+import { useState, Suspense, lazy } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
+import { AuthProvider }                   from '@/backend/auth/AuthContext';
+import { ProtectedRoute, PublicRoute }    from '@/backend/auth/ProtectedRoute';
+import { shouldRetry, STALE_TIME }        from '@/backend/api/apiError';
+
+import { Sidebar }           from '@/shared/components/Sidebar';
+import { Header }            from '@/shared/components/Header';
+import { Toaster }           from '@/shared/components/Toaster';
+import { ConfirmDialog }     from '@/shared/components/ConfirmDialog';
+import { DashboardSkeleton } from '@/shared/components/LoadingSkeleton';
+
+import { useStore }          from '@/store';
+import type { TripFormSchema } from '@/shared/schemas/trip';
+import { toast }             from '@/shared/hooks/useToast';
+import { TripForm }          from '@/modules/trips/TripForm';
+
+// ─── Lazy module imports ─────────────────────────────────────
+
+const LoginPage          = lazy(() => import('@/modules/auth/LoginPage'));
+const SignupPage         = lazy(() => import('@/modules/auth/SignupPage'));
+const ForgotPasswordPage = lazy(() => import('@/modules/auth/ForgotPasswordPage'));
+const ResetPasswordPage  = lazy(() => import('@/modules/auth/ResetPasswordPage'));
+
 const Dashboard  = lazy(() => import('@/modules/dashboard/Dashboard'));
 const Trips      = lazy(() => import('@/modules/trips/Trips'));
 const TripDetail = lazy(() => import('@/modules/trips/TripDetail'));
@@ -22,19 +47,28 @@ const Finance    = lazy(() => import('@/modules/finance/Finance'));
 const Operations = lazy(() => import('@/modules/operations/Operations'));
 const Settings   = lazy(() => import('@/modules/settings/Settings'));
 
+// ─── QueryClient — global config ─────────────────────────────
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,
+      staleTime: STALE_TIME.short,
+      retry:     shouldRetry,
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
       retry: false,
     },
   },
 });
 
+// ─── App Shell (rendered when authenticated) ─────────────────
+// Uses <Outlet /> — child routes are defined in App below.
+
 function AppShell() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [tripFormOpen, setTripFormOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [creating,     setCreating]     = useState(false);
   const createTrip = useStore(s => s.createTrip);
 
   async function handleCreateTrip(data: TripFormSchema) {
@@ -45,17 +79,17 @@ function AppShell() {
         phone:       data.phone,
         destination: data.destination,
         pax:         data.pax,
-        departure:   data.departure || null,
+        departure:   data.departure  || null,
         returnDate:  data.returnDate || null,
         type:        data.type,
         totalAmount: data.totalAmount ?? null,
-        gstRate:     data.gstRate ?? 5,
-        notes:       data.notes ?? '',
+        gstRate:     data.gstRate    ?? 5,
+        notes:       data.notes      ?? '',
         status:      'draft',
       });
       toast.success('Trip created', `${trip.id} — ${data.destination}`);
       setTripFormOpen(false);
-    } catch (err) {
+    } catch {
       toast.error('Failed to create trip');
     } finally {
       setCreating(false);
@@ -74,23 +108,12 @@ function AppShell() {
 
         <main className="flex-1 overflow-y-auto">
           <Suspense fallback={<DashboardSkeleton />}>
-            <Routes>
-              <Route path="/"           element={<Dashboard />} />
-              <Route path="/leads"      element={<Leads />} />
-              <Route path="/trips"      element={<Trips />} />
-              <Route path="/trips/:id"  element={<TripDetail />} />
-              <Route path="/bookings"   element={<Bookings />} />
-              <Route path="/customers"  element={<Customers />} />
-              <Route path="/finance"    element={<Finance />} />
-              <Route path="/operations" element={<Operations />} />
-              <Route path="/settings"   element={<Settings />} />
-              <Route path="*"           element={<Dashboard />} />
-            </Routes>
+            <Outlet />
           </Suspense>
         </main>
       </div>
 
-      {/* Global trip creation form */}
+      {/* Global new-trip modal */}
       <TripForm
         open={tripFormOpen}
         onClose={() => setTripFormOpen(false)}
@@ -98,21 +121,62 @@ function AppShell() {
         loading={creating}
       />
 
-      {/* Global toast system */}
       <Toaster />
-
-      {/* Global confirm dialog */}
       <ConfirmDialog />
     </div>
   );
 }
 
+// ─── Root export ─────────────────────────────────────────────
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AppShell />
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+
+            {/* ── Auth pages — no shell, redirect to / if already signed in ── */}
+            <Route element={<PublicRoute />}>
+              <Route path="/login"           element={<Suspense fallback={null}><LoginPage /></Suspense>} />
+              <Route path="/signup"          element={<Suspense fallback={null}><SignupPage /></Suspense>} />
+              <Route path="/forgot-password" element={<Suspense fallback={null}><ForgotPasswordPage /></Suspense>} />
+            </Route>
+
+            {/* ── Password reset — Supabase lands here with a recovery token ── */}
+            <Route
+              path="/auth/reset-password"
+              element={<Suspense fallback={null}><ResetPasswordPage /></Suspense>}
+            />
+
+            {/* ── Protected CRM shell — requires active Supabase session ────── */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppShell />}>
+                <Route index              element={<Dashboard />} />
+                <Route path="/leads"      element={<Leads />} />
+                <Route path="/trips"      element={<Trips />} />
+                <Route path="/trips/:id"  element={<TripDetail />} />
+                <Route path="/bookings"   element={<Bookings />} />
+                <Route path="/customers"  element={<Customers />} />
+                <Route path="/operations" element={<Operations />} />
+                <Route path="/settings"   element={<Settings />} />
+
+                {/* Finance — MANAGER+ permission required */}
+                <Route element={<ProtectedRoute permission="finance:view" />}>
+                  <Route path="/finance"  element={<Finance />} />
+                </Route>
+
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Route>
+
+          </Routes>
+        </BrowserRouter>
+
+        {import.meta.env.DEV && (
+          <ReactQueryDevtools initialIsOpen={false} position="bottom" />
+        )}
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
