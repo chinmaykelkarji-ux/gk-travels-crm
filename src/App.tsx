@@ -47,6 +47,8 @@ const Finance    = lazy(() => import('@/modules/finance/Finance'));
 const Operations = lazy(() => import('@/modules/operations/Operations'));
 const Settings   = lazy(() => import('@/modules/settings/Settings'));
 
+console.log('[GK CRM] App.tsx module loaded');
+
 // ─── QueryClient — global config ─────────────────────────────
 
 const queryClient = new QueryClient({
@@ -61,6 +63,18 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// ─── Shared page-level loading spinner ───────────────────────
+// Used as Suspense fallback for lazy pages so there is always
+// visible feedback instead of a white screen.
+
+function PageSpinner() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 // ─── App Shell (rendered when authenticated) ─────────────────
 // Uses <Outlet /> — child routes are defined in App below.
@@ -138,15 +152,15 @@ export default function App() {
 
             {/* ── Auth pages — no shell, redirect to / if already signed in ── */}
             <Route element={<PublicRoute />}>
-              <Route path="/login"           element={<Suspense fallback={null}><LoginPage /></Suspense>} />
-              <Route path="/signup"          element={<Suspense fallback={null}><SignupPage /></Suspense>} />
-              <Route path="/forgot-password" element={<Suspense fallback={null}><ForgotPasswordPage /></Suspense>} />
+              <Route path="/login"           element={<Suspense fallback={<PageSpinner />}><LoginPage /></Suspense>} />
+              <Route path="/signup"          element={<Suspense fallback={<PageSpinner />}><SignupPage /></Suspense>} />
+              <Route path="/forgot-password" element={<Suspense fallback={<PageSpinner />}><ForgotPasswordPage /></Suspense>} />
             </Route>
 
             {/* ── Password reset — Supabase lands here with a recovery token ── */}
             <Route
               path="/auth/reset-password"
-              element={<Suspense fallback={null}><ResetPasswordPage /></Suspense>}
+              element={<Suspense fallback={<PageSpinner />}><ResetPasswordPage /></Suspense>}
             />
 
             {/* ── Protected CRM shell — requires active Supabase session ────── */}

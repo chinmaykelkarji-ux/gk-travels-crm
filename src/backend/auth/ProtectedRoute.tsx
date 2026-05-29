@@ -86,8 +86,14 @@ export function PublicRoute({ redirectTo = '/' }: PublicRouteProps) {
   const { isLoading, isAuthenticated } = useAuth();
   const location = useLocation();
 
-  // Wait for session restore before deciding — prevents flash of auth pages
-  if (isLoading) return null;
+  // Wait for session restore — show spinner instead of null to avoid white screen
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     const from = (location.state as { from?: Location })?.from?.pathname ?? redirectTo;

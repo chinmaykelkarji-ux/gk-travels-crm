@@ -13,6 +13,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Reload the page when a lazy chunk 404s after a new deployment.
+         This fires before React loads, so the ErrorBoundary cannot catch it. -->
+    <script>
+      window.addEventListener('vite:preloadError', function () {
+        console.warn('[GK CRM] Chunk preload failed — reloading for fresh assets');
+        window.location.reload();
+      });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

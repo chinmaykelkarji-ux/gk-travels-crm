@@ -43,18 +43,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[GK CRM] AuthProvider mounted — restoring session');
+
+    // Safety net: if neither getCurrentUser nor onAuthStateChange resolves within
+    // 8 seconds (e.g. Supabase unreachable), un-block the app so users see the
+    // login page instead of a permanent spinner.
+    const authTimeout = setTimeout(() => {
+      console.warn('[GK CRM] Auth init timed out after 8s — forcing isLoading=false');
+      setIsLoading(false);
+    }, 8000);
+
     // Restore session on mount, then subscribe to future auth events.
     authService.getCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+      .then((u) => {
+        console.log('[GK CRM] getCurrentUser resolved —', u ? `user: ${u.email}` : 'no session');
+        setUser(u);
+      })
+      .catch((err) => {
+        console.warn('[GK CRM] getCurrentUser error:', err);
+        setUser(null);
+      })
+      .finally(() => {
+        clearTimeout(authTimeout);
+        setIsLoading(false);
+      });
 
     const unsubscribe = authService.onAuthChange((authUser) => {
+      console.log('[GK CRM] onAuthStateChange fired —', authUser ? `user: ${authUser.email}` : 'signed out');
+      clearTimeout(authTimeout);
       setUser(authUser);
       setIsLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      clearTimeout(authTimeout);
+      unsubscribe();
+    };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
