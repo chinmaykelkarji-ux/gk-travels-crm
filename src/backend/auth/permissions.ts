@@ -6,6 +6,10 @@
 //   2. Database: RLS policies enforce at PostgreSQL level
 //
 // Never rely on frontend checks alone for security.
+//
+// NOTE: Supabase may return role values in lowercase ('admin').
+// All checker functions normalise the role to UPPER_CASE before
+// lookup so the mapping never misses due to case mismatch.
 // ============================================================
 
 import type { UserRole } from '@/backend/supabase/database.types';
@@ -67,8 +71,7 @@ const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
-
-  ADMIN: ALL_PERMISSIONS,
+  ADMIN:       ALL_PERMISSIONS,
 
   MANAGER: [
     PERMISSIONS.TRIPS_VIEW,
@@ -114,11 +117,23 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 };
 
+// ─── Internal normaliser ──────────────────────────────────────
+// Supabase may store roles in lowercase ('admin', 'super_admin').
+// Normalise once here so every downstream check is consistent.
+
+function normalise(role: string): UserRole {
+  return role.toUpperCase() as UserRole;
+}
+
 // ─── Permission Checkers ─────────────────────────────────────
 
 export function hasPermission(role: UserRole | null | undefined, permission: Permission): boolean {
   if (!role) return false;
-  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+  const r = normalise(role);
+  // ADMIN and SUPER_ADMIN have every permission — explicit fast-path
+  // also handles any case variation coming directly from the DB ('admin').
+  if (r === 'ADMIN' || r === 'SUPER_ADMIN') return true;
+  return ROLE_PERMISSIONS[r]?.includes(permission) ?? false;
 }
 
 export function hasAnyPermission(role: UserRole | null | undefined, permissions: Permission[]): boolean {
@@ -131,7 +146,7 @@ export function hasAllPermissions(role: UserRole | null | undefined, permissions
 
 export function isAtLeast(role: UserRole | null | undefined, minRole: UserRole): boolean {
   const hierarchy: UserRole[] = ['STAFF', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'];
-  const userIdx = role ? hierarchy.indexOf(role) : -1;
+  const userIdx = role ? hierarchy.indexOf(normalise(role)) : -1;
   const minIdx  = hierarchy.indexOf(minRole);
   return userIdx >= minIdx;
 }

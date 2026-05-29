@@ -142,7 +142,7 @@ function profileToAuthUser(profile: DbProfile): AuthUser {
     orgId:       profile.org_id,
     email:       profile.email,
     name:        profile.name,
-    role:        profile.role,
+    role:        (profile.role as string).toUpperCase() as DbProfile['role'],
     avatar:      profile.avatar,
     phone:       profile.phone,
     isActive:    profile.is_active,
