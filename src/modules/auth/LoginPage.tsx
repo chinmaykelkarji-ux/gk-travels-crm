@@ -38,10 +38,10 @@ export default function LoginPage() {
       navigate('/', { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
-      if (message.includes('Invalid login credentials')) {
+      if (message.includes('Invalid credentials') || message.includes('401')) {
         setServerError('Incorrect email or password. Please try again.');
-      } else if (message.includes('Email not confirmed')) {
-        setServerError('Please verify your email before signing in.');
+      } else if (message.includes('Network Error') || message.includes('ECONNREFUSED')) {
+        setServerError('Cannot reach the server. Make sure the API is running (npm run dev).');
       } else {
         setServerError(message);
       }

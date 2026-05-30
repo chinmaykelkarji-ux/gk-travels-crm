@@ -1,11 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderOpen, Ticket, Contact,
-  IndianRupee, Activity, Settings, Bell, X,
+  IndianRupee, Activity, Settings, X, Plane, Building2, FileText, Map, FileCheck, BarChart2,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
-import { Badge } from './ui/badge';
 
 const NAV_ITEMS = [
   { path: '/',           label: 'Dashboard',  icon: LayoutDashboard },
@@ -14,13 +13,18 @@ const NAV_ITEMS = [
   { path: '/bookings',   label: 'Bookings',   icon: Ticket          },
   { path: '/customers',  label: 'Customers',  icon: Contact         },
   { path: '/finance',    label: 'Finance',    icon: IndianRupee     },
+  { path: '/analytics',  label: 'Analytics',  icon: BarChart2       },
   { path: '/operations', label: 'Operations', icon: Activity        },
-  { path: '/settings',   label: 'Settings',   icon: Settings        },
+  { path: '/vendors',     label: 'Vendors',     icon: Building2 },
+  { path: '/quotations',   label: 'Quotations',   icon: FileText  },
+  { path: '/itineraries',  label: 'Itineraries',  icon: Map       },
+  { path: '/vouchers',     label: 'Vouchers',     icon: FileCheck },
+  { path: '/settings',     label: 'Settings',     icon: Settings  },
 ];
 
 interface SidebarProps {
-  open:     boolean;
-  onClose:  () => void;
+  open:    boolean;
+  onClose: () => void;
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
@@ -31,7 +35,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/60 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-20 lg:hidden"
           onClick={onClose}
         />
       )}
@@ -40,35 +44,41 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={cn(
           'fixed lg:static inset-y-0 left-0 z-30 w-64 flex flex-col',
-          'transform transition-transform duration-300 ease-in-out',
-          'lg:translate-x-0',
+          'transform transition-transform duration-300 ease-in-out lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
-        style={{ background: '#0F172A', borderRight: '1px solid rgba(255,255,255,0.07)' }}
+        style={{
+          background: 'linear-gradient(160deg, #0F172A 0%, #1E1B4B 100%)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        }}
       >
-        {/* Logo */}
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-[18px] flex-shrink-0"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-600">
-              <span className="text-white font-bold text-[13px] font-display tracking-wide">GK</span>
+        {/* Logo / Brand */}
+        <div className="flex items-center justify-between gap-3 px-5 py-5 flex-shrink-0 relative overflow-hidden">
+          {/* Background glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-transparent pointer-events-none" />
+
+          <div className="flex items-center gap-3 relative">
+            {/* Icon */}
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 relative"
+              style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', boxShadow: '0 0 20px rgba(99,102,241,0.4)' }}>
+              <Plane className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
             </div>
             <div>
-              <div className="text-[#F1F5F9] font-bold text-sm font-display tracking-tight">GK Travels</div>
-              <div className="text-[#475569] text-[11px] mt-0.5">Operations CRM</div>
+              <div className="text-white font-bold text-sm font-display tracking-tight">GK Travels</div>
+              <div className="text-indigo-300/70 text-[11px] mt-0.5 font-medium">Operations CRM</div>
             </div>
           </div>
 
-          {/* Mobile close */}
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors relative"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Divider */}
+        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
@@ -80,38 +90,47 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               onClick={onClose}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 relative group',
                   isActive
-                    ? 'bg-blue-600/20 text-blue-400'
+                    ? 'bg-indigo-500/20 text-indigo-300'
                     : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 )
               }
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span>{label}</span>
-              {label === 'Operations' && pendingReminders > 0 && (
-                <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
-                  {pendingReminders > 99 ? '99+' : pendingReminders}
-                </span>
+              {({ isActive }) => (
+                <>
+                  {/* Active left bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-indigo-400" />
+                  )}
+                  <Icon className={cn('w-4 h-4 flex-shrink-0 transition-colors', isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300')} />
+                  <span>{label}</span>
+                  {label === 'Operations' && pendingReminders > 0 && (
+                    <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                      {pendingReminders > 99 ? '99+' : pendingReminders}
+                    </span>
+                  )}
+                </>
               )}
             </NavLink>
           ))}
         </nav>
 
+        {/* Divider */}
+        <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
         {/* User footer */}
-        <div
-          className="px-4 py-4 flex-shrink-0"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-600/25 flex items-center justify-center text-xs font-bold text-blue-400 flex-shrink-0">
+        <div className="px-4 py-4 flex-shrink-0">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-colors cursor-default">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)' }}>
               GK
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-slate-200 truncate">Admin</div>
               <div className="text-[11px] text-slate-500 truncate">gktravels.ops</div>
             </div>
-            <Bell className="w-4 h-4 text-slate-500" />
+            <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" title="Online" />
           </div>
         </div>
       </aside>

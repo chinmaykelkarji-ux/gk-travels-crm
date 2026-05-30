@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Bell, Plus, ChevronDown, Search, FolderPlus, UserPlus, Ticket } from 'lucide-react';
+import { Menu, Bell, Plus, ChevronDown, Search, FolderPlus, UserPlus } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import { Button } from './ui/button';
 import { cn } from '@/shared/utils/cn';
-import { fmtDate, daysUntilLabel, daysUntil } from '@/shared/utils/date';
+import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 
 const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
@@ -14,8 +14,13 @@ const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
   '/bookings':   { title: 'Bookings',    subtitle: 'Flights · Hotels · Visas · Services' },
   '/customers':  { title: 'Customers',   subtitle: 'Profiles · History · Preferences' },
   '/finance':    { title: 'Finance',     subtitle: 'Revenue · Costs · Gross Margin' },
+  '/analytics':  { title: 'Analytics',   subtitle: 'Profit Intelligence · Business Analytics' },
   '/operations': { title: 'Operations',  subtitle: 'Tasks · Reminders · Alerts' },
-  '/settings':   { title: 'Settings',    subtitle: 'Company · Integrations · Users' },
+  '/vendors':     { title: 'Vendors',     subtitle: 'Suppliers · Costs · Payments'            },
+  '/quotations':   { title: 'Quotations',   subtitle: 'Proposals · Pricing · Conversion'     },
+  '/itineraries':  { title: 'Itineraries',  subtitle: 'Day-wise Plans · Hotels · Activities'      },
+  '/vouchers':     { title: 'Vouchers',     subtitle: 'Hotel · Transfer · Activity · Flight'     },
+  '/settings':     { title: 'Settings',     subtitle: 'Company · Integrations · Users'            },
 };
 
 interface HeaderProps {
@@ -24,17 +29,16 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
-  const location          = useLocation();
-  const navigate          = useNavigate();
-  const pendingReminders  = useStore(selectors.pendingReminders);
-  const [notifOpen, setNotifOpen]   = useState(false);
-  const [quickOpen, setQuickOpen]   = useState(false);
+  const location         = useLocation();
+  const navigate         = useNavigate();
+  const pendingReminders = useStore(selectors.pendingReminders);
+  const trips            = useStore(s => s.trips);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const trips             = useStore(s => s.trips);
 
   const meta = ROUTE_META[location.pathname] ?? { title: 'GK Travels', subtitle: '' };
 
-  // Upcoming trips alert
   const urgentTrips = trips.filter(t => {
     const days = daysUntil(t.departure);
     return days !== null && days >= 0 && days <= 7 && (t.balanceDue ?? 0) > 0;
@@ -43,13 +47,18 @@ export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
   return (
     <header
       className="flex items-center justify-between px-5 py-3 flex-shrink-0 z-10"
-      style={{ background: '#FFFFFF', borderBottom: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(15,23,42,0.05)' }}
+      style={{
+        background:   'rgba(255,255,255,0.85)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(226,232,240,0.8)',
+        boxShadow:    '0 1px 12px rgba(15,23,42,0.06)',
+      }}
     >
-      {/* Left: Menu + Title */}
+      {/* Left: Menu + breadcrumb title */}
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuToggle}
-          className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+          className="lg:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -59,17 +68,18 @@ export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
         </div>
       </div>
 
-      {/* Right: Search + Notifications + Quick Add */}
+      {/* Right: Search · Bell · Quick Add */}
       <div className="flex items-center gap-2">
-        {/* Search (hidden on mobile) */}
-        <div className="hidden sm:flex items-center gap-2 rounded-lg px-3 py-2 w-56 lg:w-72 bg-gray-50 border border-gray-200">
-          <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+
+        {/* Search */}
+        <div className="hidden sm:flex items-center gap-2 rounded-xl px-3 py-2 w-52 lg:w-64 bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors">
+          <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
           <input
             type="text"
-            placeholder="Search trips, customers, PNR…"
+            placeholder="Search trips, customers…"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="bg-transparent text-xs text-gray-600 outline-none w-full placeholder:text-gray-400"
+            className="bg-transparent text-xs text-gray-600 outline-none w-full placeholder:text-slate-400"
           />
         </div>
 
@@ -77,60 +87,78 @@ export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
         <div className="relative">
           <button
             onClick={() => setNotifOpen(o => !o)}
-            className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
           >
-            <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+            <Bell className="w-[18px] h-[18px]" />
             {pendingReminders.length > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow-sm">
                 {pendingReminders.length > 99 ? '99+' : pendingReminders.length}
               </span>
             )}
           </button>
 
-          {/* Notification panel */}
           {notifOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setNotifOpen(false)} />
               <div
-                className="absolute right-0 top-full mt-2 w-80 rounded-2xl z-20 overflow-hidden"
-                style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', boxShadow: '0 16px 48px rgba(15,23,42,0.14)' }}
+                className="absolute right-0 top-full mt-2 w-80 rounded-2xl z-20 overflow-hidden animate-slide-up"
+                style={{ background: '#fff', border: '1px solid #E2E8F0', boxShadow: '0 20px 60px rgba(15,23,42,0.14)' }}
               >
-                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between"
+                  style={{ background: 'linear-gradient(135deg, #EEF2FF 0%, #F0FDF4 100%)' }}>
                   <div className="flex items-center gap-2">
-                    <Bell className="w-3.5 h-3.5 text-blue-600" />
+                    <Bell className="w-3.5 h-3.5 text-indigo-600" />
                     <span className="text-sm font-semibold text-gray-900">Alerts & Reminders</span>
                   </div>
-                  <span className="text-xs text-gray-400">{pendingReminders.length} pending</span>
+                  {pendingReminders.length > 0 && (
+                    <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+                      {pendingReminders.length} pending
+                    </span>
+                  )}
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+
+                <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
                   {pendingReminders.length === 0 ? (
-                    <div className="px-4 py-8 text-center">
-                      <Bell className="w-6 h-6 mx-auto mb-2 text-gray-300" />
-                      <p className="text-xs text-gray-400">No pending alerts</p>
+                    <div className="px-4 py-10 text-center">
+                      <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Bell className="w-5 h-5 text-emerald-500" />
+                      </div>
+                      <p className="text-xs text-gray-500 font-medium">All clear — no pending alerts</p>
                     </div>
                   ) : (
-                    pendingReminders.slice(0, 10).map(r => (
+                    pendingReminders.slice(0, 8).map(r => (
                       <div
                         key={r.id}
                         className={cn(
-                          'px-4 py-3 border-b border-gray-50 text-xs',
-                          r.priority === 'urgent' && 'bg-red-50',
-                          r.priority === 'high'   && 'bg-orange-50',
+                          'px-4 py-3 text-xs cursor-pointer hover:bg-gray-50 transition-colors',
+                          r.priority === 'urgent' && 'border-l-2 border-red-400',
+                          r.priority === 'high'   && 'border-l-2 border-orange-400',
                         )}
                       >
-                        <p className={cn(
-                          'font-medium text-gray-800',
-                          r.priority === 'urgent' && 'text-red-700',
-                        )}>{r.message}</p>
-                        <p className="text-gray-400 mt-0.5">{fmtDate(r.dueDate)}</p>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={cn(
+                            'inline-block w-1.5 h-1.5 rounded-full',
+                            r.priority === 'urgent' ? 'bg-red-500' :
+                            r.priority === 'high'   ? 'bg-orange-500' :
+                            r.priority === 'medium' ? 'bg-amber-400' : 'bg-gray-400',
+                          )} />
+                          <span className={cn(
+                            'font-semibold text-[10px] uppercase tracking-wide',
+                            r.priority === 'urgent' ? 'text-red-600' :
+                            r.priority === 'high'   ? 'text-orange-600' : 'text-gray-500',
+                          )}>{r.priority}</span>
+                        </div>
+                        <p className="text-gray-700 leading-snug">{r.message}</p>
+                        <p className="text-gray-400 mt-1">{fmtDate(r.dueDate)}</p>
                       </div>
                     ))
                   )}
                 </div>
-                <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+
+                <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60">
                   <button
                     onClick={() => { navigate('/operations'); setNotifOpen(false); }}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 w-full text-center"
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 w-full text-center"
                   >
                     View all reminders →
                   </button>
@@ -140,45 +168,42 @@ export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
           )}
         </div>
 
-        {/* Quick Add */}
+        {/* Quick Add split button */}
         <div className="relative flex">
-          <Button size="sm" onClick={onNewTrip} className="rounded-r-none gap-1.5">
+          <Button size="sm" onClick={onNewTrip} className="rounded-r-none gap-1.5 pr-3">
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Trip</span>
           </Button>
           <Button
             size="sm"
             onClick={() => setQuickOpen(o => !o)}
-            className="rounded-l-none border-l border-blue-500 px-2"
+            className="rounded-l-none border-l border-indigo-400/40 px-2"
           >
-            <ChevronDown className="w-3 h-3" />
+            <ChevronDown className="w-3.5 h-3.5" />
           </Button>
 
           {quickOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setQuickOpen(false)} />
               <div
-                className="absolute right-0 top-full mt-2 w-52 rounded-xl overflow-hidden z-20"
-                style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', boxShadow: '0 8px 24px rgba(15,23,42,0.12)' }}
+                className="absolute right-0 top-full mt-2 w-52 rounded-xl overflow-hidden z-20 animate-slide-up"
+                style={{ background: '#fff', border: '1px solid #E2E8F0', boxShadow: '0 12px 32px rgba(15,23,42,0.12)' }}
               >
-                <button
-                  onClick={() => { onNewTrip(); setQuickOpen(false); }}
-                  className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <FolderPlus className="w-4 h-4 text-blue-600" /> New Trip File
-                </button>
-                <button
-                  onClick={() => { navigate('/leads'); setQuickOpen(false); }}
-                  className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <UserPlus className="w-4 h-4 text-emerald-600" /> New Lead
-                </button>
-                <button
-                  onClick={() => { navigate('/bookings'); setQuickOpen(false); }}
-                  className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <Ticket className="w-4 h-4 text-purple-600" /> New Booking
-                </button>
+                {[
+                  { label: 'New Trip File', icon: FolderPlus, color: 'text-indigo-600 bg-indigo-50', action: () => { onNewTrip(); setQuickOpen(false); } },
+                  { label: 'New Lead',      icon: UserPlus,  color: 'text-emerald-600 bg-emerald-50', action: () => { navigate('/leads'); setQuickOpen(false); } },
+                ].map(({ label, icon: Icon, color, action }) => (
+                  <button
+                    key={label}
+                    onClick={action}
+                    className="w-full text-left px-4 py-3 text-sm flex items-center gap-3 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', color)}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    {label}
+                  </button>
+                ))}
               </div>
             </>
           )}

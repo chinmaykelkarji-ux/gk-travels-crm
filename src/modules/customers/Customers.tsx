@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Contact, Search, Phone } from 'lucide-react';
+import { Contact, Search, Phone, Mail } from 'lucide-react';
 import { useStore } from '@/store';
 import { Badge } from '@/shared/components/ui/badge';
 import { fmtDate } from '@/shared/utils/date';
 import { initials } from '@/shared/utils/format';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { GmailButton } from '@/shared/components/GmailButton';
+import { gmail } from '@/shared/utils/email';
 
 export default function Customers() {
   const customers = useStore(s => s.customers);
@@ -69,8 +71,20 @@ export default function Customers() {
                   </div>
                 </div>
                 {c.phone && (
-                  <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-1.5">
-                    <Phone className="w-3.5 h-3.5 text-gray-400" />{c.phone}
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600 mb-1">
+                    <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span>{c.phone}</span>
+                  </div>
+                )}
+                {c.email && (
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-500 truncate flex-1">{c.email}</span>
+                    <GmailButton
+                      email={c.email}
+                      onClick={() => gmail.toCustomer(c.email!, c.name)}
+                      label="Email"
+                    />
                   </div>
                 )}
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">

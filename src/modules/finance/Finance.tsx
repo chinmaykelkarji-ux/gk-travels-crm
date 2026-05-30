@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  IndianRupee, TrendingUp, TrendingDown, AlertTriangle,
-  CheckCircle2, Clock, ArrowUpRight, ArrowDownRight,
+  IndianRupee, TrendingUp, AlertTriangle,
+  Clock, ArrowUpRight, ArrowDownRight, Edit2, Trash2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
@@ -16,9 +16,15 @@ import {
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, isThisMonth, isLastMonth, monthKey } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import type { Payment } from '@/shared/types';
+import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { PaymentForm } from '@/shared/components/PaymentForm';
+import { GmailIcon } from '@/shared/components/GmailButton';
+import { gmail } from '@/shared/utils/email';
 
 // ─── Metric KPI ──────────────────────────────────────────────
 
@@ -67,10 +73,43 @@ function FinMetric({
 // ─── Finance Module ───────────────────────────────────────────
 
 export default function Finance() {
-  const navigate  = useNavigate();
-  const trips     = useStore(s => s.trips);
-  const payments  = useStore(s => s.payments);
-  const bookings  = useStore(s => s.bookings);
+  const navigate      = useNavigate();
+  const trips         = useStore(s => s.trips);
+  const payments      = useStore(s => s.payments);
+  const bookings      = useStore(s => s.bookings);
+  const updatePayment = useStore(s => s.updatePayment);
+  const deletePayment = useStore(s => s.deletePayment);
+
+  const [payFormOpen, setPayFormOpen] = useState(false);
+  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+  const [editPayType, setEditPayType] = useState<'customer' | 'supplier'>('customer');
+
+  function openEdit(p: Payment, type: 'customer' | 'supplier') {
+    setEditPayment(p);
+    setEditPayType(type);
+    setPayFormOpen(true);
+  }
+
+  function handleSavePayment(data: Partial<Payment>) {
+    if (!editPayment) return;
+    updatePayment(editPayment.id, editPayType, data);
+    toast.success('Payment updated');
+    setPayFormOpen(false);
+    setEditPayment(null);
+  }
+
+  async function handleDelete(p: Payment, type: 'customer' | 'supplier') {
+    const ok = await confirm({
+      title:        'Delete payment?',
+      description:  `Remove ₹${p.amount} payment record?`,
+      confirmLabel: 'Delete',
+      variant:      'destructive',
+    });
+    if (ok) {
+      deletePayment(p.id, type);
+      toast.success('Payment deleted');
+    }
+  }
 
   const stats = useMemo(() => {
     const cp = payments.customerPayments;
@@ -286,7 +325,7 @@ export default function Finance() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        {['Pay ID', 'Customer', 'Trip', 'Amount', 'Method', 'Date', 'Status'].map(h => (
+                        {['Pay ID', 'Customer', 'Trip', 'Amount', 'Method', 'Date', 'Status', ''].map(h => (
                           <th key={h} className="text-left font-semibold text-gray-500 pb-2 pr-3">{h}</th>
                         ))}
                       </tr>
@@ -296,14 +335,39 @@ export default function Finance() {
                         <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                           <td className="py-2.5 pr-3 font-mono text-gray-400">{p.id}</td>
                           <td className="py-2.5 pr-3 font-medium text-gray-800">{p.customer || '—'}</td>
-                          <td className="py-2.5 pr-3 text-gray-500">{p.tripId || '—'}</td>
+                          <td className="py-2.5 pr-3 text-gray-500 text-blue-600 cursor-pointer hover:underline"
+                            onClick={() => p.tripId && navigate(`/trips/${p.tripId}`)}>
+                            {p.tripId || '—'}
+                          </td>
                           <td className="py-2.5 pr-3 font-semibold text-emerald-600">{formatCurrency(p.amount)}</td>
                           <td className="py-2.5 pr-3 text-gray-600">{p.method}</td>
                           <td className="py-2.5 pr-3 text-gray-500">{fmtDate(p.date)}</td>
-                          <td className="py-2.5">
+                          <td className="py-2.5 pr-3">
                             <Badge variant={p.status === 'received' ? 'success' : 'warning'}>
                               {p.status}
                             </Badge>
+                          </td>
+                          <td className="py-2.5">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => openEdit(p, 'customer')}
+                                className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => handleDelete(p, 'customer')}
+                                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                              {/* Gmail — look up trip to find customer email */}
+                              {(() => {
+                                const t = trips.find(x => x.id === p.tripId);
+                                return t?.email ? (
+                                  <GmailIcon
+                                    email={t.email}
+                                    onClick={() => gmail.toCustomer(t.email!, t.customer, t.destination)}
+                                  />
+                                ) : null;
+                              })()}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -329,7 +393,7 @@ export default function Finance() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        {['Pay ID', 'Supplier', 'Trip', 'Amount', 'Method', 'Date', 'Status'].map(h => (
+                        {['Pay ID', 'Supplier', 'Trip', 'Amount', 'Method', 'Date', 'Status', ''].map(h => (
                           <th key={h} className="text-left font-semibold text-gray-500 pb-2 pr-3">{h}</th>
                         ))}
                       </tr>
@@ -339,14 +403,29 @@ export default function Finance() {
                         <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                           <td className="py-2.5 pr-3 font-mono text-gray-400">{p.id}</td>
                           <td className="py-2.5 pr-3 font-medium text-gray-800">{p.customer || '—'}</td>
-                          <td className="py-2.5 pr-3 text-gray-500">{p.tripId || '—'}</td>
+                          <td className="py-2.5 pr-3 text-gray-500 cursor-pointer hover:underline text-blue-600"
+                            onClick={() => p.tripId && navigate(`/trips/${p.tripId}`)}>
+                            {p.tripId || '—'}
+                          </td>
                           <td className="py-2.5 pr-3 font-semibold text-red-500">{formatCurrency(p.amount)}</td>
                           <td className="py-2.5 pr-3 text-gray-600">{p.method}</td>
                           <td className="py-2.5 pr-3 text-gray-500">{fmtDate(p.date)}</td>
-                          <td className="py-2.5">
+                          <td className="py-2.5 pr-3">
                             <Badge variant={p.status === 'paid' ? 'success' : 'warning'}>
                               {p.status}
                             </Badge>
+                          </td>
+                          <td className="py-2.5">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => openEdit(p, 'supplier')}
+                                className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button onClick={() => handleDelete(p, 'supplier')}
+                                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -403,6 +482,14 @@ export default function Finance() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PaymentForm
+        open={payFormOpen}
+        onClose={() => { setPayFormOpen(false); setEditPayment(null); }}
+        onSave={handleSavePayment}
+        payment={editPayment}
+        payType={editPayType}
+      />
     </div>
   );
 }

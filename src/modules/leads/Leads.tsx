@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, Users, ArrowRight, Phone, Calendar,
-  MapPin, TrendingUp, RefreshCw, Edit2,
+  Plus, Search, Users, ArrowRight, Phone,
+  MapPin, RefreshCw, Edit2, Trash2,
 } from 'lucide-react';
+import apiClient from '@/lib/apiClient';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import type { LeadFormSchema } from '@/shared/schemas/lead';
@@ -20,6 +21,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/shared/components/ui/select';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { GmailIcon } from '@/shared/components/GmailButton';
+import { gmail } from '@/shared/utils/email';
 
 const STATUSES: { value: LeadStatus | 'all'; label: string; color: string }[] = [
   { value: 'all',            label: 'All',          color: 'bg-gray-400'    },
@@ -57,11 +60,14 @@ export default function Leads() {
   const convertLead = useStore(s => s.convertLead);
   const setLeadStatus = useStore(s => s.setLeadStatus);
 
-  const [formOpen, setFormOpen]     = useState(false);
-  const [editLead, setEditLead]     = useState<Lead | null>(null);
-  const [search, setSearch]         = useState('');
+  const logActivity = useStore(s => s.logActivity);
+
+  const [formOpen, setFormOpen]       = useState(false);
+  const [editLead, setEditLead]       = useState<Lead | null>(null);
+  const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
-  const [creating, setCreating]     = useState(false);
+  const [creating, setCreating]       = useState(false);
+  const [deletingId, setDeletingId]   = useState<string | null>(null);
 
   const pipeline = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -156,14 +162,26 @@ export default function Leads() {
 
   async function handleDelete(id: string, name: string) {
     const ok = await confirm({
-      title:        `Delete lead "${name}"?`,
-      description:  'This will permanently remove this lead.',
+      title:        `Delete "${name}"?`,
+      description:  'This will permanently remove this lead from the database. This cannot be undone.',
       confirmLabel: 'Delete Lead',
       variant:      'destructive',
     });
-    if (ok) {
+    if (!ok) return;
+
+    setDeletingId(id);
+    try {
+      await apiClient.delete(`/leads/${id}`);
+      // State update only after DB confirms the delete
       deleteLead(id);
-      toast.success('Lead deleted');
+      logActivity('lead_deleted', `Lead deleted: ${name}`, 'lead', id);
+      toast.success('Lead deleted', `"${name}" has been removed.`);
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error ?? 'Failed to delete lead. Please try again.';
+      toast.error('Delete failed', message);
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -255,7 +273,7 @@ export default function Leads() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {['Lead ID', 'Name', 'Destination', 'Travel Date', 'Pax', 'Budget', 'Source', 'Priority', 'Follow-up', 'Status', ''].map(h => (
+                  {['Lead ID', 'Name', 'Email', 'Destination', 'Travel Date', 'Pax', 'Budget', 'Source', 'Priority', 'Follow-up', 'Status', ''].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">
                       {h}
                     </th>
@@ -280,6 +298,17 @@ export default function Leads() {
                           <Phone className="w-3 h-3" />{lead.phone}
                         </div>
                       )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      {lead.email ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-gray-500 max-w-[120px] truncate">{lead.email}</span>
+                          <GmailIcon
+                            email={lead.email}
+                            onClick={() => gmail.toLead(lead.email!, lead.name, lead.destination)}
+                          />
+                        </div>
+                      ) : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
                       {lead.destination ? (
@@ -311,6 +340,13 @@ export default function Leads() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                        {/* Gmail */}
+                        {lead.email && (
+                          <GmailIcon
+                            email={lead.email}
+                            onClick={() => gmail.toLead(lead.email!, lead.name, lead.destination)}
+                          />
+                        )}
                         {/* Status quick-change */}
                         {!['converted', 'cancelled'].includes(lead.status) && (
                           <Select
@@ -352,9 +388,22 @@ export default function Leads() {
                           size="icon-sm"
                           variant="ghost"
                           onClick={() => setEditLead(lead)}
-                          title="Edit"
+                          title="Edit lead"
                         >
                           <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          title="Delete lead"
+                          disabled={deletingId === lead.id}
+                          onClick={() => handleDelete(lead.id, lead.name)}
+                          className="hover:bg-red-50 hover:text-red-600"
+                        >
+                          {deletingId === lead.id
+                            ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin block" />
+                            : <Trash2 className="w-3.5 h-3.5" />
+                          }
                         </Button>
                       </div>
                     </td>

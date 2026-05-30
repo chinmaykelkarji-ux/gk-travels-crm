@@ -60,3 +60,33 @@ export function reminderUid(): string {
 export function activityUid(): string {
   return `AL-${uid()}`;
 }
+
+export function nextVendorId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'VEN', 2) + 1;
+  return `VEN-${year}-${String(seq).padStart(4, '0')}`;
+}
+
+export function nextVendorPaymentId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'VP', 2) + 1;
+  return `VP-${year}-${String(seq).padStart(4, '0')}`;
+}
+
+export function nextQuotationId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'Q', 2) + 1;
+  return `Q-${year}-${String(seq).padStart(4, '0')}`;
+}
+
+export function nextItineraryId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'ITN', 2) + 1;
+  return `ITN-${year}-${String(seq).padStart(4, '0')}`;
+}
+
+export function nextVoucherId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'VCH', 2) + 1;
+  return `VCH-${year}-${String(seq).padStart(4, '0')}`;
+}

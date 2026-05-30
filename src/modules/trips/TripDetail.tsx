@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Calendar, Users, Phone, IndianRupee,
-  Edit2, Trash2, CheckCircle, Clock, FileText, Activity,
-  Plane, Hotel, Globe, Car, Plus,
+  Edit2, Trash2, CheckCircle, Clock, Plane, Hotel, Globe, Plus,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
@@ -14,7 +13,8 @@ import { fmtDate, daysUntilLabel, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { canConfirmTrip } from '@/shared/schemas/trip';
 import type { TripFormSchema } from '@/shared/schemas/trip';
-import type { TripStatus } from '@/shared/types';
+import type { TripStatus, Payment } from '@/shared/types';
+import { VOUCHER_TYPES, VOUCHER_STATUS_BADGE } from '@/modules/vouchers/Vouchers';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { Button } from '@/shared/components/ui/button';
@@ -22,6 +22,9 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
 import { Separator } from '@/shared/components/ui/separator';
 import { TripForm } from './TripForm';
+import { PaymentForm } from '@/shared/components/PaymentForm';
+import { GmailButton } from '@/shared/components/GmailButton';
+import { gmail } from '@/shared/utils/email';
 
 const TRIP_STATUS_FLOW: TripStatus[] = [
   'draft', 'quotation', 'confirmed', 'in_progress', 'completed',
@@ -37,11 +40,20 @@ export default function TripDetail() {
   const setTripStatus = useStore(s => s.setTripStatus);
   const payments     = useStore(selectors.paymentsForTrip(id ?? ''));
   const bookings     = useStore(selectors.bookingsForTrip(id ?? ''));
+  const vouchers     = useStore(selectors.vouchersForTrip(id ?? ''));
   const recordPayment = useStore(s => s.recordPayment);
+
+  const updatePayment = useStore(s => s.updatePayment);
+  const deletePayment = useStore(s => s.deletePayment);
 
   const [editOpen, setEditOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
+
+  // Payment edit dialog state
+  const [payFormOpen, setPayFormOpen]   = useState(false);
+  const [editPayment, setEditPayment]   = useState<Payment | null>(null);
+  const [editPayType, setEditPayType]   = useState<'customer' | 'supplier'>('customer');
 
   if (!trip) {
     return (
@@ -116,6 +128,37 @@ export default function TripDetail() {
     setPayAmount('');
   }
 
+  function openEditPayment(p: Payment, type: 'customer' | 'supplier') {
+    setEditPayment(p);
+    setEditPayType(type);
+    setPayFormOpen(true);
+  }
+
+  function handleSavePayment(data: Partial<Payment>) {
+    if (editPayment) {
+      updatePayment(editPayment.id, editPayType, data);
+      toast.success('Payment updated');
+    } else {
+      recordPayment({ ...data, type: editPayType, tripId: id });
+      toast.success('Payment recorded');
+    }
+    setPayFormOpen(false);
+    setEditPayment(null);
+  }
+
+  async function handleDeletePayment(p: Payment, type: 'customer' | 'supplier') {
+    const ok = await confirm({
+      title:        'Delete payment?',
+      description:  `This will remove the ₹${p.amount} payment record.`,
+      confirmLabel: 'Delete',
+      variant:      'destructive',
+    });
+    if (ok) {
+      deletePayment(p.id, type);
+      toast.success('Payment deleted');
+    }
+  }
+
   const confirmCheck = canConfirmTrip(trip);
 
   return (
@@ -130,7 +173,11 @@ export default function TripDetail() {
           <ArrowLeft className="w-4 h-4" />
           Back to Trips
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="ghost" size="sm" className="gap-1.5"
+            onClick={() => navigate(`/itineraries/new?tripId=${id}`)}>
+            <Plus className="w-3.5 h-3.5" /> Itinerary
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
             <Edit2 className="w-3.5 h-3.5" /> Edit
           </Button>
@@ -173,6 +220,16 @@ export default function TripDetail() {
                   <Phone className="w-3.5 h-3.5 text-gray-400" />
                   {trip.phone}
                 </span>
+              )}
+              {trip.email && (
+                <GmailButton
+                  email={trip.email}
+                  onClick={() => gmail.toCustomer(trip.email!, trip.customer, trip.destination)}
+                  label={trip.email}
+                />
+              )}
+              {!trip.email && trip.balanceDue > 0 && (
+                <span className="text-xs text-gray-400 italic">no email on file</span>
               )}
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -262,6 +319,7 @@ export default function TripDetail() {
           <TabsTrigger value="finance">Finance</TabsTrigger>
           <TabsTrigger value="operations">Operations</TabsTrigger>
           <TabsTrigger value="bookings">Bookings ({bookings.length})</TabsTrigger>
+          <TabsTrigger value="vouchers">Vouchers ({vouchers.length})</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
@@ -271,9 +329,19 @@ export default function TripDetail() {
 
             {/* Finance Summary */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <IndianRupee className="w-4 h-4 text-blue-600" /> Financial Summary
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <IndianRupee className="w-4 h-4 text-blue-600" /> Financial Summary
+                </h3>
+                {trip.balanceDue > 0 && trip.email && (
+                  <GmailButton
+                    email={trip.email}
+                    onClick={() => gmail.paymentReminder(trip.email!, trip.customer, trip.balanceDue, trip.id)}
+                    label="Send Reminder"
+                    size="sm"
+                  />
+                )}
+              </div>
               <div className="space-y-3">
                 {[
                   { label: 'Selling Price',   val: trip.totalAmount  !== null ? formatCurrency(trip.totalAmount)  : '⚠ Not Set', warn: trip.totalAmount === null },
@@ -305,58 +373,160 @@ export default function TripDetail() {
               </div>
             </div>
 
-            {/* Record Payment */}
+            {/* Customer Payments */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-              <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-600" /> Record Customer Payment
-              </h3>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-600">Amount (₹)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={payAmount}
-                      onChange={e => setPayAmount(e.target.value)}
-                      placeholder="Enter amount"
-                      className="w-full pl-6 h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-600">Payment Method</label>
-                  <select
-                    value={payMethod}
-                    onChange={e => setPayMethod(e.target.value)}
-                    className="w-full h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Credit Card', 'Debit Card'].map(m => (
-                      <option key={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-                <Button onClick={handleRecordPayment} className="w-full gap-2" size="sm">
-                  <CheckCircle className="w-3.5 h-3.5" /> Record Payment
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" /> Customer Payments
+                </h3>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={() => { setEditPayment(null); setEditPayType('customer'); setPayFormOpen(true); }}
+                >
+                  <Plus className="w-3 h-3" /> Add Payment
                 </Button>
               </div>
 
-              {/* Payment history */}
+              {/* Quick record inline */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                  <input
+                    type="number" min={0} value={payAmount}
+                    onChange={e => setPayAmount(e.target.value)}
+                    placeholder="Quick amount"
+                    className="w-full pl-6 h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <select
+                  value={payMethod} onChange={e => setPayMethod(e.target.value)}
+                  className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {['Cash', 'Bank Transfer', 'UPI', 'Cheque', 'Credit Card'].map(m => (
+                    <option key={m}>{m}</option>
+                  ))}
+                </select>
+                <Button onClick={handleRecordPayment} size="sm" className="gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" /> Record
+                </Button>
+              </div>
+
               {payments.customer.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-xs font-medium text-gray-600 mb-2">Payment History</p>
-                  <div className="space-y-2">
-                    {payments.customer.map(p => (
-                      <div key={p.id} className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-3 py-2">
-                        <div>
-                          <span className="font-medium text-gray-700">{formatCurrency(p.amount)}</span>
-                          <span className="text-gray-400 ml-2">{p.method}</span>
-                        </div>
-                        <span className="text-gray-400">{fmtDate(p.date)}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Amount</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Method</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Date</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Status</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Ref</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {payments.customer.map(p => (
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="py-2 font-semibold text-emerald-600">{formatCurrency(p.amount)}</td>
+                          <td className="py-2 text-gray-600 pr-3">{p.method}</td>
+                          <td className="py-2 text-gray-500 pr-3">{fmtDate(p.date)}</td>
+                          <td className="py-2 pr-3">
+                            <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]',
+                              p.status === 'received' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700')}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="py-2 text-gray-400 pr-3">{p.reference || '—'}</td>
+                          <td className="py-2">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openEditPayment(p, 'customer')}
+                                className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePayment(p, 'customer')}
+                                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Supplier Payments */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800">Supplier Payments</h3>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={() => { setEditPayment(null); setEditPayType('supplier'); setPayFormOpen(true); }}
+                >
+                  <Plus className="w-3 h-3" /> Add Supplier
+                </Button>
+              </div>
+
+              {payments.supplier.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">No supplier payments recorded</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Supplier</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Amount</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Method</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Date</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Status</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {payments.supplier.map(p => (
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="py-2 font-medium text-gray-700 pr-3">{p.customer || '—'}</td>
+                          <td className="py-2 font-semibold text-red-500 pr-3">{formatCurrency(p.amount)}</td>
+                          <td className="py-2 text-gray-600 pr-3">{p.method}</td>
+                          <td className="py-2 text-gray-500 pr-3">{fmtDate(p.date)}</td>
+                          <td className="py-2 pr-3">
+                            <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]',
+                              p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700')}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="py-2">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openEditPayment(p, 'supplier')}
+                                className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeletePayment(p, 'supplier')}
+                                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -441,6 +611,70 @@ export default function TripDetail() {
           </div>
         </TabsContent>
 
+        {/* Vouchers Tab */}
+        <TabsContent value="vouchers">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-800">Vouchers for this Trip</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                {VOUCHER_TYPES.map(t => (
+                  <Button key={t.value} size="sm" variant="outline" className="gap-1.5 text-xs"
+                    onClick={() => navigate(`/vouchers/new?tripId=${id}&type=${t.value}`)}>
+                    <span>{t.emoji}</span> {t.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            {vouchers.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm">
+                <p>No vouchers yet for this trip.</p>
+                <p className="text-xs mt-1">Generate hotel, transfer, activity or flight vouchers above.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      {['Voucher #', 'Type', 'Vendor', 'Details', 'Status', ''].map(h => (
+                        <th key={h} className="text-left font-semibold text-gray-500 px-3 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {vouchers.map(v => {
+                      const tm = VOUCHER_TYPES.find(t => t.value === v.type);
+                      const detail = v.type === 'hotel'    ? v.hotelName :
+                                     v.type === 'transfer' ? `${v.pickupPoint} → ${v.dropPoint}` :
+                                     v.type === 'activity' ? v.activityName :
+                                     v.type === 'flight'   ? `${v.departure} → ${v.arrival} · ${v.pnr}` :
+                                     v.type === 'visa'     ? v.country :
+                                     v.notes;
+                      return (
+                        <tr key={v.id} className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/vouchers/${v.id}`)}>
+                          <td className="px-3 py-2.5 font-mono text-indigo-600 font-semibold">{v.voucherNumber}</td>
+                          <td className="px-3 py-2.5">{tm?.emoji} {tm?.label}</td>
+                          <td className="px-3 py-2.5 text-gray-600">{v.vendorName || '—'}</td>
+                          <td className="px-3 py-2.5 text-gray-600 max-w-[180px] truncate">{detail || '—'}</td>
+                          <td className="px-3 py-2.5">
+                            <Badge variant={VOUCHER_STATUS_BADGE[v.status]}>{v.status}</Badge>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Button size="icon-sm" variant="ghost"
+                              onClick={e => { e.stopPropagation(); navigate(`/vouchers/${v.id}`); }}>
+                              <Plus className="w-3.5 h-3.5 rotate-45 text-gray-400" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
         {/* Timeline Tab */}
         <TabsContent value="timeline">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -469,13 +703,22 @@ export default function TripDetail() {
         </TabsContent>
       </Tabs>
 
-      {/* Edit Form */}
+      {/* Edit Trip Form */}
       <TripForm
         open={editOpen}
         onClose={() => setEditOpen(false)}
         onSubmit={handleEdit}
         defaultValues={trip}
         title="Edit Trip"
+      />
+
+      {/* Payment Add / Edit Form */}
+      <PaymentForm
+        open={payFormOpen}
+        onClose={() => { setPayFormOpen(false); setEditPayment(null); }}
+        onSave={handleSavePayment}
+        payment={editPayment}
+        payType={editPayType}
       />
     </div>
   );

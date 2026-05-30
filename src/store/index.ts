@@ -1,28 +1,28 @@
 // ============================================================
 // GK TRAVELS CRM — ZUSTAND STORE
 //
-// Replaces the old window.GKData + window.GKWorkflow globals.
-// Stores the same JSON shape in localStorage key "gkcrm_data"
-// so existing user data migrates automatically.
-//
 // Architecture:
-//   - Single store, split into typed slices via Zustand
-//   - persist() middleware keeps data in localStorage
+//   - In-memory store (no localStorage — data lives in PostgreSQL)
+//   - On init: fetchAll() loads all data from Express API
+//   - Mutations: update store immediately (optimistic) + fire API async
 //   - All financial calculations happen in actions, never in UI
-//   - Activity log updated on every mutation
 // ============================================================
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import apiClient from '@/lib/apiClient';
 import type {
   Trip, Lead, Customer, Booking, Payment, Task, Reminder,
   ActivityLog, Staff, GKStoreState, TripStatus, LeadStatus,
-  ActivityEntityType,
+  ActivityEntityType, Vendor, VendorPayment,
+  Quotation, QuotationItem, QuotationStatus,
+  Itinerary, ItineraryStatus,
+  Voucher, VoucherStatus,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance } from '@/shared/utils/finance';
 import {
   nextTripId, nextLeadId, nextCustomerId, nextBookingId,
-  nextTaskId, nextPayId, uid, reminderUid, activityUid,
+  nextTaskId, nextPayId, nextVendorId, nextVendorPaymentId,
+  nextQuotationId, nextItineraryId, nextVoucherId, uid, reminderUid, activityUid,
 } from '@/shared/utils/id';
 import { today } from '@/shared/utils/date';
 import { canConfirmTrip } from '@/shared/schemas/trip';
@@ -60,15 +60,20 @@ const defaultStaff: Staff[] = [
 ];
 
 const defaultState: GKStoreState = {
-  trips:       [],
-  leads:       [],
-  customers:   [],
-  bookings:    [],
-  tasks:       [],
-  reminders:   [],
-  activityLog: [],
-  payments:    { customerPayments: [], supplierPayments: [] },
-  staff:       defaultStaff,
+  trips:          [],
+  leads:          [],
+  customers:      [],
+  bookings:       [],
+  tasks:          [],
+  reminders:      [],
+  activityLog:    [],
+  payments:       { customerPayments: [], supplierPayments: [] },
+  vendors:        [],
+  vendorPayments: [],
+  quotations:     [],
+  itineraries:    [],
+  vouchers:       [],
+  staff:          defaultStaff,
 };
 
 // ─── Store Actions Interface ──────────────────────────────────
@@ -100,6 +105,7 @@ interface StoreActions {
 
   // ── Payments ────────────────────────────────────────────
   recordPayment:  (payment: Partial<Payment> & { type: 'customer' | 'supplier' }) => Payment;
+  updatePayment:  (id: string, type: 'customer' | 'supplier', data: Partial<Payment>) => void;
   deletePayment:  (id: string, type: 'customer' | 'supplier') => void;
 
   // ── Tasks ───────────────────────────────────────────────
@@ -120,8 +126,41 @@ interface StoreActions {
     meta?: { before?: unknown; after?: unknown },
   ) => void;
 
+  // ── Vendors ─────────────────────────────────────────────
+  createVendor:        (data: Partial<Vendor>) => Vendor;
+  updateVendor:        (id: string, data: Partial<Vendor>) => void;
+  deleteVendor:        (id: string) => void;
+
+  // ── Vendor Payments ──────────────────────────────────────
+  createVendorPayment: (data: Partial<VendorPayment>) => VendorPayment;
+  updateVendorPayment: (id: string, data: Partial<VendorPayment>) => void;
+  deleteVendorPayment: (id: string) => void;
+  markVendorPaid:      (id: string, paidDate?: string) => void;
+
+  // ── Quotations ──────────────────────────────────────────
+  createQuotation:        (data: Partial<Quotation> & { items?: Partial<QuotationItem>[] }) => Quotation;
+  updateQuotation:        (id: string, data: Partial<Quotation> & { items?: Partial<QuotationItem>[] }) => void;
+  deleteQuotation:        (id: string) => void;
+  setQuotationStatus:     (id: string, status: QuotationStatus) => void;
+  duplicateQuotation:     (sourceId: string) => Quotation | null;
+  convertQuotationToTrip: (id: string) => Promise<{ ok: boolean; trip?: Trip; reason?: string }>;
+
+  // ── Itineraries ──────────────────────────────────────────
+  createItinerary:     (data: Partial<Itinerary>) => Itinerary;
+  updateItinerary:     (id: string, data: Partial<Itinerary>) => void;
+  deleteItinerary:     (id: string) => void;
+  setItineraryStatus:  (id: string, status: ItineraryStatus) => void;
+
+  // ── Vouchers ─────────────────────────────────────────────
+  createVoucher:      (data: Partial<Voucher>) => Voucher;
+  updateVoucher:      (id: string, data: Partial<Voucher>) => void;
+  deleteVoucher:      (id: string) => void;
+  setVoucherStatus:   (id: string, status: VoucherStatus) => void;
+  duplicateVoucher:   (sourceId: string) => Voucher | null;
+
   // ── Utility ─────────────────────────────────────────────
-  clearAll: () => void;
+  clearAll:   () => void;
+  fetchAll:   () => Promise<void>;
 }
 
 type GKStore = GKStoreState & StoreActions;
@@ -147,8 +186,7 @@ function supplierTotalsForTrip(state: GKStoreState, tripId: string) {
 // ─── Store Creation ──────────────────────────────────────────
 
 export const useStore = create<GKStore>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       ...defaultState,
 
       // ══ Trip Actions ════════════════════════════════════════
@@ -227,7 +265,7 @@ export const useStore = create<GKStore>()(
           activityLog: [tripEntry, ...s.activityLog].slice(0, 500),
         }));
 
-        // Auto-generate reminders
+        void apiClient.post('/trips', trip).catch(e => console.error('[api] createTrip', e));
         get().refreshAllReminders();
         return trip;
       },
@@ -251,11 +289,14 @@ export const useStore = create<GKStore>()(
             };
           }),
         }));
+        const updated = get().trips.find(t => t.id === id);
+        if (updated) void apiClient.put(`/trips/${id}`, updated).catch(e => console.error('[api] updateTrip', e));
         get().refreshAllReminders();
       },
 
       deleteTrip(id) {
         set((s: GKStore) => ({ trips: s.trips.filter(t => t.id !== id) }));
+        void apiClient.delete(`/trips/${id}`).catch(e => console.error('[api] deleteTrip', e));
       },
 
       setTripStatus(id, status) {
@@ -360,6 +401,7 @@ export const useStore = create<GKStore>()(
           leads:       [lead, ...s.leads],
           activityLog: [leadEntry, ...s.activityLog].slice(0, 500),
         }));
+        void apiClient.post('/leads', lead).catch(e => console.error('[api] createLead', e));
         return lead;
       },
 
@@ -367,9 +409,13 @@ export const useStore = create<GKStore>()(
         set((s: GKStore) => ({
           leads: s.leads.map(l => l.id === id ? { ...l, ...data } : l),
         }));
+        const updated = get().leads.find(l => l.id === id);
+        if (updated) void apiClient.put(`/leads/${id}`, updated).catch(e => console.error('[api] updateLead', e));
       },
 
       deleteLead(id) {
+        // Pure state removal — callers are responsible for the API call
+        // so they can handle errors and show toasts before committing the state change.
         set((s: GKStore) => ({ leads: s.leads.filter(l => l.id !== id) }));
       },
 
@@ -474,6 +520,7 @@ export const useStore = create<GKStore>()(
           ...data,
         };
         set((s: GKStore) => ({ customers: [cust, ...s.customers] }));
+        void apiClient.post('/customers', cust).catch(e => console.error('[api] createCustomer', e));
         return cust;
       },
 
@@ -481,6 +528,8 @@ export const useStore = create<GKStore>()(
         set((s: GKStore) => ({
           customers: s.customers.map(c => c.id === id ? { ...c, ...data } : c),
         }));
+        const updated = get().customers.find(c => c.id === id);
+        if (updated) void apiClient.put(`/customers/${id}`, updated).catch(e => console.error('[api] updateCustomer', e));
       },
 
       // ══ Booking Actions ═════════════════════════════════════
@@ -513,7 +562,7 @@ export const useStore = create<GKStore>()(
           notes:         data.notes         ?? '',
         };
         set((s: GKStore) => ({ bookings: [booking, ...s.bookings] }));
-        // Recalc linked trip
+        void apiClient.post('/bookings', booking).catch(e => console.error('[api] createBooking', e));
         if (booking.refId) get().recalcTripFinance(booking.refId);
         return booking;
       },
@@ -528,12 +577,14 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const booking = get().bookings.find(b => b.id === id);
+        if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(e => console.error('[api] updateBooking', e));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
       deleteBooking(id) {
         const booking = get().bookings.find(b => b.id === id);
         set((s: GKStore) => ({ bookings: s.bookings.filter(b => b.id !== id) }));
+        void apiClient.delete(`/bookings/${id}`).catch(e => console.error('[api] deleteBooking', e));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
@@ -583,7 +634,30 @@ export const useStore = create<GKStore>()(
           payment.tripId || payment.bookingId || id,
         );
 
+        void apiClient.post('/payments', payment).catch(e => console.error('[api] recordPayment', e));
         return payment;
+      },
+
+      updatePayment(id, type, data) {
+        set((s: GKStore) => {
+          const payments = { ...s.payments };
+          if (type === 'customer') {
+            payments.customerPayments = s.payments.customerPayments.map(p =>
+              p.id === id ? { ...p, ...data } : p
+            );
+          } else {
+            payments.supplierPayments = s.payments.supplierPayments.map(p =>
+              p.id === id ? { ...p, ...data } : p
+            );
+          }
+          return { payments };
+        });
+        const list = type === 'customer'
+          ? get().payments.customerPayments
+          : get().payments.supplierPayments;
+        const pay = list.find(p => p.id === id);
+        if (pay?.tripId) get().recalcTripFinance(pay.tripId);
+        if (pay) void apiClient.put(`/payments/${id}`, pay).catch(e => console.error('[api] updatePayment', e));
       },
 
       deletePayment(id, type) {
@@ -600,6 +674,7 @@ export const useStore = create<GKStore>()(
           return { payments };
         });
         if (pay?.tripId) get().recalcTripFinance(pay.tripId);
+        void apiClient.delete(`/payments/${id}`).catch(e => console.error('[api] deletePayment', e));
       },
 
       // ══ Task Actions ════════════════════════════════════════
@@ -621,11 +696,14 @@ export const useStore = create<GKStore>()(
           createdDate: today(),
         };
         set((s: GKStore) => ({ tasks: [task, ...s.tasks] }));
+        void apiClient.post('/tasks', task).catch(e => console.error('[api] createTask', e));
         return task;
       },
 
       updateTask(id, data) {
         set((s: GKStore) => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }));
+        const updated = get().tasks.find(t => t.id === id);
+        if (updated) void apiClient.put(`/tasks/${id}`, updated).catch(e => console.error('[api] updateTask', e));
       },
 
       completeTask(id) {
@@ -717,35 +795,435 @@ export const useStore = create<GKStore>()(
         }));
       },
 
+      // ══ Vendor Actions ══════════════════════════════════════
+
+      createVendor(data) {
+        const state = get();
+        const id    = nextVendorId(state.vendors.map(v => v.id));
+        const vendor: Vendor = {
+          id,
+          name:          data.name          ?? '',
+          companyName:   data.companyName,
+          type:          data.type          ?? 'miscellaneous',
+          contactPerson: data.contactPerson,
+          phone:         data.phone         ?? '',
+          whatsapp:      data.whatsapp,
+          email:         data.email,
+          destinations:  data.destinations  ?? [],
+          paymentTerms:  data.paymentTerms,
+          bankDetails:   data.bankDetails   ?? {},
+          gstNumber:     data.gstNumber,
+          notes:         data.notes,
+          isActive:      data.isActive      ?? true,
+          createdDate:   today(),
+        };
+        set((s: GKStore) => ({ vendors: [vendor, ...s.vendors] }));
+        void apiClient.post('/vendors', vendor).catch(e => console.error('[api] createVendor', e));
+        return vendor;
+      },
+
+      updateVendor(id, data) {
+        set((s: GKStore) => ({
+          vendors: s.vendors.map(v => v.id === id ? { ...v, ...data } : v),
+        }));
+        const updated = get().vendors.find(v => v.id === id);
+        if (updated) void apiClient.put(`/vendors/${id}`, updated).catch(e => console.error('[api] updateVendor', e));
+      },
+
+      deleteVendor(id) {
+        set((s: GKStore) => ({
+          vendors:        s.vendors.filter(v => v.id !== id),
+          vendorPayments: s.vendorPayments.filter(p => p.vendorId !== id),
+        }));
+        // No fire-and-forget — callers handle the API call before calling this
+      },
+
+      // ══ Vendor Payment Actions ══════════════════════════════
+
+      createVendorPayment(data) {
+        const state = get();
+        const id    = nextVendorPaymentId(state.vendorPayments.map(p => p.id));
+        const totalCost   = data.totalCost   ?? 0;
+        const advancePaid = data.advancePaid ?? 0;
+        const isPaid      = data.isPaid      ?? false;
+        const payment: VendorPayment = {
+          id,
+          vendorId:    data.vendorId    ?? '',
+          vendorName:  data.vendorName  ?? '',
+          tripId:      data.tripId,
+          tripName:    data.tripName,
+          description: data.description,
+          totalCost,
+          advancePaid,
+          outstanding: isPaid ? 0 : Math.max(0, totalCost - advancePaid),
+          isPaid,
+          paidDate:    data.paidDate,
+          dueDate:     data.dueDate,
+          notes:       data.notes,
+          createdDate: today(),
+        };
+        set((s: GKStore) => ({ vendorPayments: [payment, ...s.vendorPayments] }));
+        void apiClient.post('/vendors/payments', payment).catch(e => console.error('[api] createVendorPayment', e));
+        return payment;
+      },
+
+      updateVendorPayment(id, data) {
+        set((s: GKStore) => ({
+          vendorPayments: s.vendorPayments.map(p => {
+            if (p.id !== id) return p;
+            const updated = { ...p, ...data };
+            const outstanding = updated.isPaid ? 0 : Math.max(0, updated.totalCost - updated.advancePaid);
+            return { ...updated, outstanding };
+          }),
+        }));
+        const updated = get().vendorPayments.find(p => p.id === id);
+        if (updated) void apiClient.put(`/vendors/payments/${id}`, updated).catch(e => console.error('[api] updateVendorPayment', e));
+      },
+
+      deleteVendorPayment(id) {
+        // State-only — callers own the API call
+        set((s: GKStore) => ({ vendorPayments: s.vendorPayments.filter(p => p.id !== id) }));
+      },
+
+      markVendorPaid(id, paidDate) {
+        const date = paidDate ?? today();
+        set((s: GKStore) => ({
+          vendorPayments: s.vendorPayments.map(p =>
+            p.id === id ? { ...p, isPaid: true, outstanding: 0, paidDate: date } : p
+          ),
+        }));
+        void apiClient.put(`/vendors/payments/${id}/mark-paid`, { paidDate: date })
+          .catch(e => console.error('[api] markVendorPaid', e));
+      },
+
+      // ══ Quotation Actions ═══════════════════════════════════
+
+      createQuotation(data) {
+        const state = get();
+        const id    = nextQuotationId(state.quotations.map(q => q.id));
+        const quotation: Quotation = {
+          id,
+          quotationNumber: id,
+          customerId:      data.customerId,
+          customerName:    data.customerName   ?? '',
+          customerPhone:   data.customerPhone,
+          customerEmail:   data.customerEmail,
+          destination:     data.destination    ?? '',
+          startDate:       data.startDate,
+          endDate:         data.endDate,
+          pax:             data.pax            ?? 1,
+          status:          'draft',
+          notes:           data.notes,
+          termsAndConds:   data.termsAndConds,
+          validUntil:      data.validUntil,
+          totalCost:       0, totalSelling: 0, grossProfit: 0, marginPct: 0,
+          createdDate:     today(),
+          items:           [],
+        };
+        set((s: GKStore) => ({ quotations: [quotation, ...s.quotations] }));
+        void apiClient.post('/quotations', { ...quotation, items: data.items ?? [] })
+          .then(r => {
+            // Replace optimistic record with server-computed one (correct item IDs + totals)
+            set((s: GKStore) => ({
+              quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
+            }));
+          })
+          .catch(e => console.error('[api] createQuotation', e));
+        return quotation;
+      },
+
+      updateQuotation(id, data) {
+        set((s: GKStore) => ({
+          quotations: s.quotations.map(q => q.id === id ? { ...q, ...data } : q),
+        }));
+        void apiClient.put(`/quotations/${id}`, data)
+          .then(r => {
+            set((s: GKStore) => ({
+              quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
+            }));
+          })
+          .catch(e => console.error('[api] updateQuotation', e));
+      },
+
+      deleteQuotation(id) {
+        set((s: GKStore) => ({ quotations: s.quotations.filter(q => q.id !== id) }));
+      },
+
+      setQuotationStatus(id, status) {
+        const now = today();
+        set((s: GKStore) => ({
+          quotations: s.quotations.map(q => {
+            if (q.id !== id) return q;
+            return {
+              ...q, status,
+              sentAt:     status === 'sent'     ? now : q.sentAt,
+              acceptedAt: status === 'accepted' ? now : q.acceptedAt,
+              rejectedAt: status === 'rejected' ? now : q.rejectedAt,
+            };
+          }),
+        }));
+        void apiClient.put(`/quotations/${id}/status`, { status })
+          .then(r => set((s: GKStore) => ({
+            quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
+          })))
+          .catch(e => console.error('[api] setQuotationStatus', e));
+      },
+
+      duplicateQuotation(sourceId) {
+        const src = get().quotations.find(q => q.id === sourceId);
+        if (!src) return null;
+        const state = get();
+        const id    = nextQuotationId(state.quotations.map(q => q.id));
+        const copy: Quotation = {
+          ...src,
+          id, quotationNumber: id,
+          status: 'draft',
+          sentAt: undefined, acceptedAt: undefined, rejectedAt: undefined,
+          convertedTripId: undefined, convertedAt: undefined,
+          createdDate: today(),
+          items: src.items.map(it => ({ ...it, id: uid(), quotationId: id })),
+        };
+        set((s: GKStore) => ({ quotations: [copy, ...s.quotations] }));
+        void apiClient.post(`/quotations/${sourceId}/duplicate`)
+          .then(r => set((s: GKStore) => ({
+            quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
+          })))
+          .catch(e => console.error('[api] duplicateQuotation', e));
+        return copy;
+      },
+
+      async convertQuotationToTrip(id) {
+        try {
+          const res = await apiClient.post(`/quotations/${id}/convert-trip`);
+          const { quotation, trip } = res.data as { quotation: Quotation; trip: Trip };
+          set((s: GKStore) => ({
+            quotations: s.quotations.map(q => q.id === id ? quotation : q),
+            trips:      [trip, ...s.trips],
+          }));
+          return { ok: true, trip };
+        } catch (err: unknown) {
+          const msg = (err as { response?: { data?: { error?: string } } })
+            ?.response?.data?.error ?? 'Conversion failed';
+          return { ok: false, reason: msg };
+        }
+      },
+
+      // ══ Itinerary Actions ═══════════════════════════════════
+
+      createItinerary(data) {
+        const state = get();
+        const id    = nextItineraryId(state.itineraries.map(i => i.id));
+        const itinerary: Itinerary = {
+          id,
+          tripId:          data.tripId,
+          quotationId:     data.quotationId,
+          title:           data.title         ?? '',
+          destination:     data.destination   ?? '',
+          customerName:    data.customerName  ?? '',
+          customerPhone:   data.customerPhone,
+          customerEmail:   data.customerEmail,
+          startDate:       data.startDate,
+          endDate:         data.endDate,
+          pax:             data.pax            ?? 1,
+          status:          'draft',
+          notes:           data.notes,
+          emergencyContact: data.emergencyContact,
+          template:        data.template,
+          createdDate:     today(),
+          days:            data.days ?? [],
+        };
+        set((s: GKStore) => ({ itineraries: [itinerary, ...s.itineraries] }));
+        void apiClient.post('/itineraries', itinerary)
+          .then(r => set((s: GKStore) => ({
+            itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
+          })))
+          .catch(e => console.error('[api] createItinerary', e));
+        return itinerary;
+      },
+
+      updateItinerary(id, data) {
+        set((s: GKStore) => ({
+          itineraries: s.itineraries.map(i => i.id === id ? { ...i, ...data } : i),
+        }));
+        const updated = get().itineraries.find(i => i.id === id);
+        if (updated) {
+          void apiClient.put(`/itineraries/${id}`, updated)
+            .then(r => set((s: GKStore) => ({
+              itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
+            })))
+            .catch(e => console.error('[api] updateItinerary', e));
+        }
+      },
+
+      deleteItinerary(id) {
+        set((s: GKStore) => ({ itineraries: s.itineraries.filter(i => i.id !== id) }));
+      },
+
+      setItineraryStatus(id, status) {
+        set((s: GKStore) => ({
+          itineraries: s.itineraries.map(i => i.id === id ? { ...i, status } : i),
+        }));
+        void apiClient.put(`/itineraries/${id}/status`, { status })
+          .then(r => set((s: GKStore) => ({
+            itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
+          })))
+          .catch(e => console.error('[api] setItineraryStatus', e));
+      },
+
+      // ══ Voucher Actions ═════════════════════════════════════
+
+      createVoucher(data) {
+        const state = get();
+        const id    = nextVoucherId(state.vouchers.map(v => v.id));
+        const voucher: Voucher = {
+          id,
+          voucherNumber: id,
+          tripId:        data.tripId,
+          customerId:    data.customerId,
+          vendorId:      data.vendorId,
+          type:          data.type          ?? 'general',
+          status:        'draft',
+          issueDate:     data.issueDate,
+          customerName:  data.customerName  ?? '',
+          customerPhone: data.customerPhone,
+          guestNames:    data.guestNames,
+          destination:   data.destination,
+          hotelName:     data.hotelName,     hotelAddress:   data.hotelAddress,
+          hotelPhone:    data.hotelPhone,    checkIn:        data.checkIn,
+          checkOut:      data.checkOut,      roomType:       data.roomType,
+          mealPlan:      data.mealPlan,      confirmationNo: data.confirmationNo,
+          nights:        data.nights,
+          pickupPoint:   data.pickupPoint,   dropPoint:      data.dropPoint,
+          pickupDate:    data.pickupDate,    pickupTime:     data.pickupTime,
+          vehicleType:   data.vehicleType,   driverName:     data.driverName,
+          driverPhone:   data.driverPhone,   flightInfo:     data.flightInfo,
+          activityName:  data.activityName,  activityDate:   data.activityDate,
+          activityTime:  data.activityTime,  activityVenue:  data.activityVenue,
+          activityNotes: data.activityNotes,
+          airline:       data.airline,       flightNumber:   data.flightNumber,
+          pnr:           data.pnr,           departure:      data.departure,
+          arrival:       data.arrival,       departureDate:  data.departureDate,
+          arrivalDate:   data.arrivalDate,   flightClass:    data.flightClass,
+          visaType:      data.visaType,      country:        data.country,
+          entryType:     data.entryType,     validity:       data.validity,
+          visaFee:       data.visaFee,
+          vendorName:    data.vendorName,    vendorPhone:    data.vendorPhone,
+          vendorEmail:   data.vendorEmail,
+          pax:           data.pax            ?? 1,
+          notes:         data.notes,
+          emergencyContact: data.emergencyContact,
+          internalNotes: data.internalNotes,
+          createdDate:   today(),
+        };
+        set((s: GKStore) => ({ vouchers: [voucher, ...s.vouchers] }));
+        void apiClient.post('/vouchers', voucher)
+          .then(r => set((s: GKStore) => ({
+            vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
+          })))
+          .catch(e => console.error('[api] createVoucher', e));
+        return voucher;
+      },
+
+      updateVoucher(id, data) {
+        set((s: GKStore) => ({
+          vouchers: s.vouchers.map(v => v.id === id ? { ...v, ...data } : v),
+        }));
+        const updated = get().vouchers.find(v => v.id === id);
+        if (updated) void apiClient.put(`/vouchers/${id}`, updated)
+          .then(r => set((s: GKStore) => ({
+            vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
+          })))
+          .catch(e => console.error('[api] updateVoucher', e));
+      },
+
+      deleteVoucher(id) {
+        // Caller handles the API call; this removes from state only
+        set((s: GKStore) => ({ vouchers: s.vouchers.filter(v => v.id !== id) }));
+      },
+
+      setVoucherStatus(id, status) {
+        const issueDate = status === 'issued' ? today() : undefined;
+        set((s: GKStore) => ({
+          vouchers: s.vouchers.map(v =>
+            v.id === id ? { ...v, status, ...(issueDate ? { issueDate } : {}) } : v
+          ),
+        }));
+        void apiClient.put(`/vouchers/${id}/status`, { status })
+          .then(r => set((s: GKStore) => ({
+            vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
+          })))
+          .catch(e => console.error('[api] setVoucherStatus', e));
+      },
+
+      duplicateVoucher(sourceId) {
+        const src = get().vouchers.find(v => v.id === sourceId);
+        if (!src) return null;
+        const id   = nextVoucherId(get().vouchers.map(v => v.id));
+        const copy: Voucher = {
+          ...src,
+          id, voucherNumber: id,
+          status: 'draft', issueDate: undefined,
+          createdDate: today(),
+        };
+        set((s: GKStore) => ({ vouchers: [copy, ...s.vouchers] }));
+        void apiClient.post(`/vouchers/${sourceId}/duplicate`)
+          .then(r => set((s: GKStore) => ({
+            vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
+          })))
+          .catch(e => console.error('[api] duplicateVoucher', e));
+        return copy;
+      },
+
       // ── Utility ────────────────────────────────────────────
 
       clearAll() {
         set(defaultState);
       },
-    }),
-    {
-      name:    'gkcrm_data',  // Same key as legacy app for seamless migration
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        trips:       state.trips,
-        leads:       state.leads,
-        customers:   state.customers,
-        bookings:    state.bookings,
-        tasks:       state.tasks,
-        reminders:   state.reminders,
-        activityLog: state.activityLog,
-        payments:    state.payments,
-        staff:       state.staff,
-      }),
-      // After hydrating from localStorage, recalc all trip finances
-      onRehydrateStorage: () => (state) => {
-        if (state) {
-          state.recalcAllTrips();
-          state.refreshAllReminders();
+
+      // ── API hydration ──────────────────────────────────────
+      async fetchAll() {
+        try {
+          const res = await apiClient.get('/data/all');
+          const d   = res.data as {
+            trips:          Trip[];
+            leads:          Lead[];
+            customers:      Customer[];
+            bookings:       Booking[];
+            tasks:          Task[];
+            reminders:      Reminder[];
+            activityLog:    ActivityLog[];
+            payments:       { customerPayments: Payment[]; supplierPayments: Payment[] };
+            vendors:        Vendor[];
+            vendorPayments: VendorPayment[];
+            quotations:     Quotation[];
+            itineraries:    Itinerary[];
+            vouchers:       Voucher[];
+          };
+          set({
+            trips:          d.trips          ?? [],
+            leads:          d.leads          ?? [],
+            customers:      d.customers      ?? [],
+            bookings:       d.bookings       ?? [],
+            tasks:          d.tasks          ?? [],
+            reminders:      d.reminders      ?? [],
+            activityLog:    d.activityLog    ?? [],
+            payments:       d.payments       ?? { customerPayments: [], supplierPayments: [] },
+            vendors:        d.vendors        ?? [],
+            vendorPayments: d.vendorPayments ?? [],
+            quotations:     d.quotations     ?? [],
+            itineraries:    d.itineraries    ?? [],
+            vouchers:       d.vouchers       ?? [],
+          });
+          // Recalc in-memory after load
+          setTimeout(() => {
+            get().recalcAllTrips();
+            get().refreshAllReminders();
+          }, 0);
+        } catch (err) {
+          console.error('[store] fetchAll failed — data will be empty until API is available', err);
         }
       },
-    },
-  ),
+    })
 );
 
 // ─── Derived selectors ────────────────────────────────────────
@@ -771,4 +1249,28 @@ export const selectors = {
 
   bookingsForTrip: (tripId: string) => (s: GKStore) =>
     s.bookings.filter(b => b.refId === tripId),
+
+  vendorById: (id: string) => (s: GKStore) => s.vendors.find(v => v.id === id),
+
+  vendorPaymentsForVendor: (vendorId: string) => (s: GKStore) =>
+    s.vendorPayments.filter(p => p.vendorId === vendorId),
+
+  vendorPaymentsForTrip: (tripId: string) => (s: GKStore) =>
+    s.vendorPayments.filter(p => p.tripId === tripId),
+
+  totalVendorOutstanding: (s: GKStore) =>
+    s.vendorPayments.filter(p => !p.isPaid).reduce((sum, p) => sum + p.outstanding, 0),
+
+  itineraryById: (id: string) => (s: GKStore) => s.itineraries.find(i => i.id === id),
+
+  itinerariesForTrip: (tripId: string) => (s: GKStore) =>
+    s.itineraries.filter(i => i.tripId === tripId),
+
+  itinerariesForQuotation: (quotationId: string) => (s: GKStore) =>
+    s.itineraries.filter(i => i.quotationId === quotationId),
+
+  voucherById:    (id: string) => (s: GKStore) => s.vouchers.find(v => v.id === id),
+
+  vouchersForTrip: (tripId: string) => (s: GKStore) =>
+    s.vouchers.filter(v => v.tripId === tripId),
 };

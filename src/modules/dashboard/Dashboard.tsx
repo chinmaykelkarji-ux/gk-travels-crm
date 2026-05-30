@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
-  AlertTriangle, Clock, CalendarDays, Activity, ArrowRight,
+  AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
@@ -77,12 +77,31 @@ function KpiCard({ title, value, sub, trend, icon: Icon, color, onClick }: KpiCa
 // ─── Main Dashboard ──────────────────────────────────────────
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const trips    = useStore(s => s.trips);
-  const leads    = useStore(s => s.leads);
-  const payments = useStore(s => s.payments);
-  const activityLog = useStore(s => s.activityLog);
-  const reminders   = useStore(selectors.pendingReminders);
+  const navigate          = useNavigate();
+  const trips             = useStore(s => s.trips);
+  const leads             = useStore(s => s.leads);
+  const payments          = useStore(s => s.payments);
+  const activityLog       = useStore(s => s.activityLog);
+  const reminders         = useStore(selectors.pendingReminders);
+  const vendors           = useStore(s => s.vendors);
+  const vendorPayments    = useStore(s => s.vendorPayments);
+  const totalVendorOwed   = useStore(selectors.totalVendorOutstanding);
+  const quotations        = useStore(s => s.quotations);
+  const itineraries       = useStore(s => s.itineraries);
+  const vouchers          = useStore(s => s.vouchers);
+
+  // Quotation KPIs
+  const quotationKpis = useMemo(() => {
+    const sent     = quotations.filter(q => ['sent', 'accepted', 'rejected'].includes(q.status)).length;
+    const accepted = quotations.filter(q => q.status === 'accepted').length;
+    const pipeline = quotations.filter(q => ['draft', 'sent'].includes(q.status))
+      .reduce((s, q) => s + (q.totalSelling ?? 0), 0);
+    return {
+      total:          quotations.length,
+      pipeline,
+      acceptanceRate: sent > 0 ? Math.round((accepted / sent) * 100) : 0,
+    };
+  }, [quotations]);
 
   const stats = useMemo(() => {
     // Financial portfolio — trips must be mapped to PortfolioItem first because
@@ -205,6 +224,38 @@ export default function Dashboard() {
           icon={Users}
           color="purple"
           onClick={() => navigate('/leads')}
+        />
+        <KpiCard
+          title="Vendor Payable"
+          value={totalVendorOwed > 0 ? formatCurrencyShort(totalVendorOwed) : '—'}
+          sub={`${vendors.filter(v => v.isActive).length} active vendors`}
+          icon={Building2}
+          color="red"
+          onClick={() => navigate('/vendors')}
+        />
+        <KpiCard
+          title="Quotation Pipeline"
+          value={quotationKpis.pipeline > 0 ? formatCurrencyShort(quotationKpis.pipeline) : String(quotationKpis.total)}
+          sub={`${quotationKpis.acceptanceRate}% acceptance rate`}
+          icon={FileText}
+          color="purple"
+          onClick={() => navigate('/quotations')}
+        />
+        <KpiCard
+          title="Itineraries"
+          value={String(itineraries.length)}
+          sub={`${itineraries.filter(i => i.status === 'finalized').length} finalized`}
+          icon={Map}
+          color="orange"
+          onClick={() => navigate('/itineraries')}
+        />
+        <KpiCard
+          title="Vouchers"
+          value={String(vouchers.length)}
+          sub={`${vouchers.filter(v => v.status === 'issued').length} issued · ${vouchers.filter(v => v.status === 'completed').length} completed`}
+          icon={FileCheck}
+          color="green"
+          onClick={() => navigate('/vouchers')}
         />
       </div>
 

@@ -1,28 +1,13 @@
-// ============================================================
-// GK TRAVELS CRM — Auth Context & Provider
-//
-// Wraps Supabase Auth with CRM-specific profile state.
-// All authentication state flows through this context — never
-// read supabase.auth.* directly from components or pages.
-//
-// Flow on mount:
-//   1. getCurrentUser() restores any persisted Supabase session.
-//   2. onAuthChange listener keeps state in sync for the lifetime
-//      of the app (JWT refresh, sign-out from another tab, etc.).
-//
-// Session persistence is handled by the Supabase client
-// (persistSession: true, storageKey: 'gkcrm_session').
-// ============================================================
-
 import {
-  createContext, useContext, useState, useCallback, type ReactNode,
+  createContext, useContext, useEffect, useState, useCallback, type ReactNode,
 } from 'react';
+import { apiClient, tokenStorage } from '@/lib/apiClient';
 import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser } from './types';
 import type { Permission } from './permissions';
 import type { UserRole } from '@/backend/supabase/database.types';
 
-// ─── Context shape ────────────────────────────────────────────
+// ─── Context shape ─────────────────────────────────────────────
 
 interface AuthContextValue {
   user:            AuthUser | null;
@@ -35,27 +20,58 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// ─── Provider ────────────────────────────────────────────────
+// ── Helper: map API user to AuthUser shape ─────────────────────
 
-// ─── DEV MODE — skip all Supabase auth ───────────────────────
-const DEV_USER: AuthUser = {
-  id:       'dev-admin',
-  orgId:    'dev-org',
-  email:    'gktravels8249@gmail.com',
-  name:     'Admin',
-  role:     'ADMIN',
-  avatar:   null,
-  phone:    null,
-  isActive: true,
-};
+function toAuthUser(u: { id: string; email: string; name: string; role: string }): AuthUser {
+  return {
+    id:       u.id,
+    orgId:    'local',
+    email:    u.email,
+    name:     u.name,
+    role:     (u.role as UserRole) ?? 'ADMIN',
+    avatar:   null,
+    phone:    null,
+    isActive: true,
+  };
+}
+
+// ─── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user,      setUser]      = useState<AuthUser | null>(DEV_USER);
-  const [isLoading, setIsLoading] = useState(false);
+  const [user,      setUser]      = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const signIn  = useCallback(async (_email: string, _password: string) => { setUser(DEV_USER); }, []);
-  const signUp  = useCallback(async (_email: string, _password: string, _name: string) => {}, []);
-  const signOut = useCallback(async () => { setUser(null); }, []);
+  // On mount: restore session from stored JWT
+  useEffect(() => {
+    const token = tokenStorage.get();
+    if (!token) { setIsLoading(false); return; }
+
+    apiClient.get('/auth/me')
+      .then(res => setUser(toAuthUser(res.data.user)))
+      .catch(() => { tokenStorage.clear(); setUser(null); })
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const res = await apiClient.post('/auth/login', { email, password });
+      tokenStorage.set(res.data.token);
+      setUser(toAuthUser(res.data.user));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const signUp = useCallback(async (_email: string, _password: string, _name: string) => {
+    // Not implemented for local single-user setup.
+    // Add user via DB seed or Prisma Studio.
+  }, []);
+
+  const signOut = useCallback(async () => {
+    tokenStorage.clear();
+    setUser(null);
+  }, []);
 
   return (
     <AuthContext.Provider value={{
@@ -71,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// ─── Hooks ───────────────────────────────────────────────────
+// ─── Hooks ─────────────────────────────────────────────────────
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
@@ -79,13 +95,11 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-/** Returns true if the current user has the given permission. */
 export function usePermission(permission: Permission): boolean {
   const { user } = useAuth();
   return hasPermission(user?.role ?? null, permission);
 }
 
-/** Returns true if the current user's role is at least the minimum required role. */
 export function useIsAtLeast(minRole: UserRole): boolean {
   const { user } = useAuth();
   return isAtLeast(user?.role ?? null, minRole);

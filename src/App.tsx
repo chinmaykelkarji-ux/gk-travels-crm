@@ -10,7 +10,7 @@
 //   QueryClientProvider → AuthProvider → BrowserRouter → Routes
 // ============================================================
 
-import { useState, Suspense, lazy } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
@@ -44,8 +44,20 @@ const Leads      = lazy(() => import('@/modules/leads/Leads'));
 const Bookings   = lazy(() => import('@/modules/bookings/Bookings'));
 const Customers  = lazy(() => import('@/modules/customers/Customers'));
 const Finance    = lazy(() => import('@/modules/finance/Finance'));
-const Operations = lazy(() => import('@/modules/operations/Operations'));
-const Settings   = lazy(() => import('@/modules/settings/Settings'));
+const Operations    = lazy(() => import('@/modules/operations/Operations'));
+const Vendors          = lazy(() => import('@/modules/vendors/Vendors'));
+const VendorDetail     = lazy(() => import('@/modules/vendors/VendorDetail'));
+const Quotations         = lazy(() => import('@/modules/quotations/Quotations'));
+const QuotationDetail    = lazy(() => import('@/modules/quotations/QuotationDetail'));
+const QuotationBuilder   = lazy(() => import('@/modules/quotations/QuotationBuilder'));
+const Itineraries        = lazy(() => import('@/modules/itineraries/Itineraries'));
+const ItineraryBuilder   = lazy(() => import('@/modules/itineraries/ItineraryBuilder'));
+const ItineraryDetail    = lazy(() => import('@/modules/itineraries/ItineraryDetail'));
+const Analytics          = lazy(() => import('@/modules/analytics/Analytics'));
+const Vouchers           = lazy(() => import('@/modules/vouchers/Vouchers'));
+const VoucherFormPage    = lazy(() => import('@/modules/vouchers/VoucherForm'));
+const VoucherDetail      = lazy(() => import('@/modules/vouchers/VoucherDetail'));
+const Settings           = lazy(() => import('@/modules/settings/Settings'));
 
 console.log('[GK CRM] App.tsx module loaded');
 
@@ -84,6 +96,10 @@ function AppShell() {
   const [tripFormOpen, setTripFormOpen] = useState(false);
   const [creating,     setCreating]     = useState(false);
   const createTrip = useStore(s => s.createTrip);
+  const fetchAll   = useStore(s => s.fetchAll);
+
+  // Load all data from PostgreSQL on mount
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
 
   async function handleCreateTrip(data: TripFormSchema) {
     setCreating(true);
@@ -111,7 +127,7 @@ function AppShell() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden" style={{ background: '#EEF2F7' }}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -172,7 +188,22 @@ export default function App() {
                 <Route path="/trips/:id"  element={<TripDetail />} />
                 <Route path="/bookings"   element={<Bookings />} />
                 <Route path="/customers"  element={<Customers />} />
-                <Route path="/operations" element={<Operations />} />
+                <Route path="/operations"   element={<Operations />} />
+                <Route path="/vendors"         element={<Vendors />} />
+                <Route path="/vendors/:id"     element={<VendorDetail />} />
+                <Route path="/quotations"      element={<Quotations />} />
+                <Route path="/quotations/new"  element={<QuotationBuilder />} />
+                <Route path="/quotations/:id"  element={<QuotationDetail />} />
+                <Route path="/quotations/:id/edit"    element={<QuotationBuilder />} />
+                <Route path="/itineraries"             element={<Itineraries />} />
+                <Route path="/itineraries/new"         element={<ItineraryBuilder />} />
+                <Route path="/itineraries/:id"         element={<ItineraryDetail />} />
+                <Route path="/itineraries/:id/edit"    element={<ItineraryBuilder />} />
+                <Route path="/analytics"         element={<Analytics />} />
+                <Route path="/vouchers"          element={<Vouchers />} />
+                <Route path="/vouchers/new"      element={<VoucherFormPage />} />
+                <Route path="/vouchers/:id"      element={<VoucherDetail />} />
+                <Route path="/vouchers/:id/edit" element={<VoucherFormPage />} />
                 <Route path="/settings"   element={<Settings />} />
 
                 {/* Finance — MANAGER+ permission required */}

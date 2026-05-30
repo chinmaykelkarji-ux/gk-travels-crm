@@ -1,26 +1,432 @@
-import { Settings as SettingsIcon, Database, Trash2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Settings as SettingsIcon, Database, Trash2,
+  Users, Plus, Edit2, KeyRound, Shield, CheckCircle, XCircle,
+} from 'lucide-react';
 import { useStore } from '@/store';
+import { useAuth } from '@/backend/auth/AuthContext';
+import apiClient from '@/lib/apiClient';
 import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
+import { Badge } from '@/shared/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogFooter, DialogBody,
+} from '@/shared/components/ui/dialog';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { toast } from '@/shared/hooks/useToast';
+import { cn } from '@/shared/utils/cn';
+
+// ─── Types ───────────────────────────────────────────────────
+
+interface CrmUser {
+  id:        string;
+  email:     string;
+  name:      string;
+  role:      string;
+  isActive:  boolean;
+  createdAt: string;
+}
+
+const ROLES = ['ADMIN', 'MANAGER', 'STAFF'] as const;
+type Role = typeof ROLES[number];
+
+const ROLE_BADGE: Record<string, 'default' | 'warning' | 'secondary'> = {
+  ADMIN:   'default',
+  MANAGER: 'warning',
+  STAFF:   'secondary',
+};
+
+// ─── User form dialog ────────────────────────────────────────
+
+interface UserFormProps {
+  open:     boolean;
+  onClose:  () => void;
+  onSaved:  (user: CrmUser) => void;
+  editing?: CrmUser | null;
+}
+
+function UserFormDialog({ open, onClose, onSaved, editing }: UserFormProps) {
+  const [name,     setName]     = useState('');
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [role,     setRole]     = useState<Role>('STAFF');
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setName(editing?.name  ?? '');
+    setEmail(editing?.email ?? '');
+    setRole((editing?.role as Role) ?? 'STAFF');
+    setPassword('');
+    setError('');
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSave() {
+    if (!name.trim())  { setError('Name is required'); return; }
+    if (!email.trim()) { setError('Email is required'); return; }
+    if (!editing && password.length < 6) { setError('Password must be at least 6 characters'); return; }
+
+    setSaving(true);
+    setError('');
+    try {
+      let user: CrmUser;
+      if (editing) {
+        const res = await apiClient.put(`/users/${editing.id}`, { name, email, role });
+        user = res.data as CrmUser;
+        // Change password if provided
+        if (password.length >= 6) {
+          await apiClient.put(`/users/${editing.id}/password`, { newPassword: password });
+        }
+      } else {
+        const res = await apiClient.post('/users', { name, email, password, role });
+        user = res.data as CrmUser;
+      }
+      onSaved(user);
+      onClose();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })
+        ?.response?.data?.error ?? 'Failed to save user';
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>{editing ? 'Edit User' : 'Create User'}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="u-name" required>Full Name</Label>
+            <Input id="u-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Priya Singh" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-email" required>Email</Label>
+            <Input id="u-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="user@gktravels.local" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="u-password">
+              {editing ? 'New Password' : 'Password'}
+              {editing && <span className="ml-1 text-[10px] text-gray-400 font-normal">(leave blank to keep current)</span>}
+            </Label>
+            <Input
+              id="u-password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={editing ? 'Leave blank to keep current' : 'Min. 6 characters'}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Role</Label>
+            <div className="flex gap-2">
+              {ROLES.map(r => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  className={cn(
+                    'flex-1 py-2 rounded-xl text-xs font-semibold border transition-all',
+                    role === r
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>
+            {editing ? 'Save Changes' : 'Create User'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Reset password dialog ────────────────────────────────────
+
+interface ResetPasswordProps { open: boolean; onClose: () => void; userId: string; userName: string; }
+
+function ResetPasswordDialog({ open, onClose, userId, userName }: ResetPasswordProps) {
+  const [password, setPassword] = useState('');
+  const [saving,   setSaving]   = useState(false);
+
+  useEffect(() => { if (open) setPassword(''); }, [open]);
+
+  async function handleReset() {
+    if (password.length < 6) { toast.error('Too short', 'Password must be at least 6 characters'); return; }
+    setSaving(true);
+    try {
+      await apiClient.put(`/users/${userId}/password`, { newPassword: password });
+      toast.success('Password reset', `Password for ${userName} has been updated.`);
+      onClose();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to reset password';
+      toast.error('Reset failed', msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Reset Password — {userName}</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="space-y-1.5">
+            <Label htmlFor="rp-pw" required>New Password</Label>
+            <Input
+              id="rp-pw"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Min. 6 characters"
+              autoFocus
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleReset}>Reset Password</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Users tab ───────────────────────────────────────────────
+
+function UsersTab() {
+  const { user: currentUser } = useAuth();
+  const [users,     setUsers]     = useState<CrmUser[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [formOpen,  setFormOpen]  = useState(false);
+  const [editUser,  setEditUser]  = useState<CrmUser | null>(null);
+  const [resetUser, setResetUser] = useState<CrmUser | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get('/users');
+      setUsers(res.data as CrmUser[]);
+    } catch {
+      toast.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadUsers(); }, [loadUsers]);
+
+  function handleSaved(user: CrmUser) {
+    setUsers(prev => {
+      const idx = prev.findIndex(u => u.id === user.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = user;
+        return next;
+      }
+      return [...prev, user];
+    });
+    toast.success(editUser ? 'User updated' : 'User created', user.email);
+  }
+
+  async function handleToggleActive(u: CrmUser) {
+    const action = u.isActive ? 'deactivate' : 'reactivate';
+    const ok = await confirm({
+      title:        `${u.isActive ? 'Deactivate' : 'Reactivate'} ${u.name}?`,
+      description:  u.isActive
+        ? 'This user will no longer be able to log in.'
+        : 'This user will be able to log in again.',
+      confirmLabel: u.isActive ? 'Deactivate' : 'Reactivate',
+      variant:      u.isActive ? 'destructive' : 'default',
+    });
+    if (!ok) return;
+    try {
+      const res = await apiClient.put(`/users/${u.id}`, { isActive: !u.isActive });
+      setUsers(prev => prev.map(x => x.id === u.id ? res.data as CrmUser : x));
+      toast.success(`User ${u.isActive ? 'deactivated' : 'reactivated'}`);
+    } catch {
+      toast.error('Failed to update user');
+    }
+  }
+
+  async function handleDelete(u: CrmUser) {
+    const ok = await confirm({
+      title:        `Delete ${u.name}?`,
+      description:  'This will permanently remove this user. This cannot be undone.',
+      confirmLabel: 'Delete User',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeletingId(u.id);
+    try {
+      await apiClient.delete(`/users/${u.id}`);
+      setUsers(prev => prev.filter(x => x.id !== u.id));
+      toast.success('User deleted');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to delete user';
+      toast.error('Delete failed', msg);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">{users.length} user{users.length !== 1 ? 's' : ''} in the system</p>
+        <Button size="sm" className="gap-1.5" onClick={() => { setEditUser(null); setFormOpen(true); }}>
+          <Plus className="w-3.5 h-3.5" /> Create User
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50">
+              {['Name', 'Email', 'Role', 'Status', 'Actions'].map(h => (
+                <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {users.map(u => (
+              <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#6366F1,#8B5CF6)' }}>
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-gray-900 text-sm">{u.name}</div>
+                      {u.id === currentUser?.id && (
+                        <div className="text-[10px] text-indigo-600 font-medium">You</div>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{u.email}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={ROLE_BADGE[u.role] ?? 'secondary'}>{u.role}</Badge>
+                </td>
+                <td className="px-4 py-3">
+                  {u.isActive
+                    ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle className="w-3.5 h-3.5" /> Active</span>
+                    : <span className="inline-flex items-center gap-1 text-xs text-red-500"><XCircle className="w-3.5 h-3.5" /> Inactive</span>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon-sm" variant="ghost"
+                      title="Edit user"
+                      onClick={() => { setEditUser(u); setFormOpen(true); }}
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+                    </Button>
+                    <Button
+                      size="icon-sm" variant="ghost"
+                      title="Reset password"
+                      onClick={() => setResetUser(u)}
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-gray-400" />
+                    </Button>
+                    {u.id !== currentUser?.id && (
+                      <>
+                        <Button
+                          size="icon-sm" variant="ghost"
+                          title={u.isActive ? 'Deactivate' : 'Reactivate'}
+                          onClick={() => handleToggleActive(u)}
+                        >
+                          <Shield className={cn('w-3.5 h-3.5', u.isActive ? 'text-amber-500' : 'text-emerald-500')} />
+                        </Button>
+                        <Button
+                          size="icon-sm" variant="ghost"
+                          title="Delete user"
+                          disabled={deletingId === u.id}
+                          onClick={() => handleDelete(u)}
+                          className="hover:bg-red-50 hover:text-red-600"
+                        >
+                          {deletingId === u.id
+                            ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin block" />
+                            : <Trash2 className="w-3.5 h-3.5" />
+                          }
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <UserFormDialog
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditUser(null); }}
+        onSaved={handleSaved}
+        editing={editUser}
+      />
+      {resetUser && (
+        <ResetPasswordDialog
+          open={!!resetUser}
+          onClose={() => setResetUser(null)}
+          userId={resetUser.id}
+          userName={resetUser.name}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Main Settings page ───────────────────────────────────────
 
 export default function Settings() {
-  const clearAll = useStore(s => s.clearAll);
-  const trips    = useStore(s => s.trips);
-  const leads    = useStore(s => s.leads);
+  const clearAll  = useStore(s => s.clearAll);
+  const trips     = useStore(s => s.trips);
+  const leads     = useStore(s => s.leads);
   const customers = useStore(s => s.customers);
 
   async function handleClearAll() {
     const ok = await confirm({
-      title:        'Reset all data?',
-      description:  'This will permanently delete ALL trips, leads, customers, payments, and bookings. This cannot be undone.',
-      confirmLabel: 'Reset Everything',
+      title:        'Reset all local data?',
+      description:  'This clears the in-memory store. Data in PostgreSQL is not affected.',
+      confirmLabel: 'Reset',
       variant:      'destructive',
     });
-    if (ok) {
-      clearAll();
-      toast.success('All data cleared');
-    }
+    if (ok) { clearAll(); toast.success('Local store cleared'); }
   }
 
   return (
@@ -29,48 +435,62 @@ export default function Settings() {
         <h2 className="text-base font-bold text-gray-900 font-display">Settings</h2>
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3.5">
-        <p className="text-sm text-blue-700 font-medium">Full Settings Module — Phase 4</p>
-        <p className="text-xs text-blue-600 mt-1">
-          Company profile, GST settings, invoice templates, user management, WhatsApp/email integrations,
-          and automation rules are coming in Phase 4.
-        </p>
-      </div>
+      <Tabs defaultValue="users">
+        <TabsList>
+          <TabsTrigger value="users" className="gap-1.5">
+            <Users className="w-3.5 h-3.5" /> User Management
+          </TabsTrigger>
+          <TabsTrigger value="data" className="gap-1.5">
+            <Database className="w-3.5 h-3.5" /> Data
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Data stats */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <Database className="w-4 h-4 text-blue-600" /> Data Summary
-        </h3>
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Trips',     count: trips.length    },
-            { label: 'Leads',     count: leads.length    },
-            { label: 'Customers', count: customers.length },
-          ].map(item => (
-            <div key={item.label} className="text-center p-4 bg-gray-50 rounded-xl">
-              <div className="text-2xl font-bold text-gray-900 font-display">{item.count}</div>
-              <div className="text-xs text-gray-500 mt-1">{item.label}</div>
+        {/* Users tab */}
+        <TabsContent value="users">
+          <UsersTab />
+        </TabsContent>
+
+        {/* Data tab */}
+        <TabsContent value="data">
+          <div className="space-y-4">
+            {/* Stats */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5">
+              <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Database className="w-4 h-4 text-indigo-600" /> Data Summary
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: 'Trips',     count: trips.length     },
+                  { label: 'Leads',     count: leads.length     },
+                  { label: 'Customers', count: customers.length },
+                ].map(item => (
+                  <div key={item.label} className="text-center p-4 bg-gray-50 rounded-xl">
+                    <div className="text-2xl font-bold text-gray-900 font-display">{item.count}</div>
+                    <div className="text-xs text-gray-500 mt-1">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-4">
+                All data is stored in your local PostgreSQL database. The in-memory Zustand store is
+                re-loaded from the API on every page refresh.
+              </p>
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-4">
-          Data is stored in your browser's localStorage. Migrate to a database in Phase 2.
-        </p>
-      </div>
 
-      {/* Danger zone */}
-      <div className="bg-white rounded-xl border border-red-200 p-5">
-        <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-2">
-          <Trash2 className="w-4 h-4" /> Danger Zone
-        </h3>
-        <p className="text-xs text-gray-600 mb-4">
-          Permanently delete all data from this CRM. This action cannot be undone.
-        </p>
-        <Button variant="destructive" size="sm" onClick={handleClearAll} className="gap-2">
-          <Trash2 className="w-3.5 h-3.5" /> Reset All Data
-        </Button>
-      </div>
+            {/* Danger zone */}
+            <div className="bg-white rounded-2xl border border-red-200 p-5">
+              <h3 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-2">
+                <Trash2 className="w-4 h-4" /> Danger Zone
+              </h3>
+              <p className="text-xs text-gray-600 mb-4">
+                Reset the in-memory store (does not affect PostgreSQL). Use for debugging only.
+              </p>
+              <Button variant="destructive" size="sm" onClick={handleClearAll} className="gap-2">
+                <Trash2 className="w-3.5 h-3.5" /> Clear In-Memory Store
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

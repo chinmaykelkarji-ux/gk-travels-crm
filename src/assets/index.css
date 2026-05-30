@@ -2,112 +2,134 @@
 @tailwind components;
 @tailwind utilities;
 
-/* CSS custom properties for shadcn/ui semantic tokens */
+/* ── CSS Design Tokens ─────────────────────────────────────── */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --background:            0 0% 100%;
+    --foreground:            222.2 84% 4.9%;
+    --primary:               226 71% 55%;
+    --primary-foreground:    210 40% 98%;
+    --secondary:             210 40% 96%;
+    --secondary-foreground:  222.2 47.4% 11.2%;
+    --destructive:           0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --muted:                 210 40% 96.1%;
+    --muted-foreground:      215.4 16.3% 46.9%;
+    --popover:               0 0% 100%;
+    --popover-foreground:    222.2 84% 4.9%;
+    --input:                 214.3 31.8% 91.4%;
+    --ring:                  226 71% 55%;
   }
 }
 
+/* ── Base Reset & Typography ───────────────────────────────── */
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 
   html {
-    -webkit-font-smoothing: antialiased;
+    -webkit-font-smoothing:  antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scroll-behavior:         smooth;
   }
 
   body {
-    font-family: 'Inter', 'Manrope', system-ui, sans-serif;
-    background: #F8F9FA;
-    color: #111827;
+    font-family: 'Inter', system-ui, sans-serif;
+    background:  #EEF2F7;
+    color:       #111827;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% 0%, rgba(99,102,241,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(16,185,129,0.04) 0%, transparent 60%);
+    min-height: 100vh;
   }
 
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-
-  /* Custom scrollbars */
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #CBD5E1;
-    border-radius: 2px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #94A3B8;
-  }
+  /* Thin, elegant scrollbars */
+  ::-webkit-scrollbar       { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 }
 
+/* ── Utilities ─────────────────────────────────────────────── */
 @layer utilities {
-  .font-display {
-    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
-  }
+  .font-display { font-family: 'Manrope', 'Inter', system-ui, sans-serif; }
 
-  /* Animation for page transitions */
+  /* Page-enter animation */
   .animate-fade-in {
-    animation: fade-in 0.2s ease-out both;
+    animation: fade-in 0.22s ease-out both;
   }
-
   @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
   }
 
-  /* Touch-friendly tap target */
-  .tap-target {
-    min-height: 44px;
-    min-width: 44px;
+  /* Slide up for modals / panels */
+  .animate-slide-up {
+    animation: slide-up 0.2s cubic-bezier(.16,1,.3,1) both;
   }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+  }
+
+  /* Glow helpers */
+  .glow-blue   { box-shadow: 0 0 0 3px rgba(99,102,241,0.20); }
+  .glow-green  { box-shadow: 0 0 0 3px rgba(16,185,129,0.20); }
+  .glow-red    { box-shadow: 0 0 0 3px rgba(239,68,68,0.20);  }
+
+  /* Glass card */
+  .glass {
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Touch target */
+  .tap-target { min-height: 44px; min-width: 44px; }
+
+  /* Metric number style */
+  .text-money { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 }
 
-/* Navigation active state */
+/* ── Print / PDF ────────────────────────────────────────────── */
+@media print {
+  /* Hide all navigation chrome */
+  nav, aside, header, .print\:hidden { display: none !important; }
+
+  /* Full-page quotation print layout */
+  body { background: white !important; }
+  .print\:block { display: block !important; }
+
+  /* Preserve colours when printing */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Page breaks */
+  table { page-break-inside: auto; }
+  tr    { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+}
+
+/* ── Focus visible ──────────────────────────────────────────── */
+:focus-visible {
+  outline:        2px solid #4F46E5;
+  outline-offset: 2px;
+}
+[aria-invalid="true"] { border-color: #EF4444 !important; }
+
+/* ── Table ──────────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; }
+
+/* ── Sidebar active nav link ────────────────────────────────── */
 .nav-link[data-active="true"],
 .nav-link.active {
-  background: rgba(37, 99, 235, 0.15);
-  color: #60A5FA;
-}
-
-/* Table base styles */
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-/* Form accessibility */
-[aria-invalid="true"] {
-  border-color: #EF4444 !important;
-}
-
-/* Focus visible for keyboard nav */
-:focus-visible {
-  outline: 2px solid #2563EB;
-  outline-offset: 2px;
+  background: rgba(99,102,241,0.15);
+  color:      #818CF8;
 }

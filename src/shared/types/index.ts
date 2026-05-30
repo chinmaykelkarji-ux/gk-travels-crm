@@ -118,9 +118,10 @@ export interface TravelDocument {
   uploadedDate: string;
 }
 
-// ─── Itinerary ──────────────────────────────────────────────
+// ─── Trip Itinerary Day (inline JSON on Trip — legacy) ───────
+// The standalone Itinerary module (Phase 5) uses its own ItineraryDay below.
 
-export interface ItineraryDay {
+export interface TripItineraryDay {
   day: number;
   date?: string;
   title: string;
@@ -251,7 +252,7 @@ export interface Trip {
 
   // Nested collections
   timeline: TimelineEvent[];
-  itinerary: ItineraryDay[];
+  itinerary: TripItineraryDay[];
   documents: TravelDocument[];
   flights?: FlightDetail[];
   hotels?: HotelDetail[];
@@ -397,6 +398,63 @@ export interface Reminder {
   sentAt?: string;
 }
 
+// ─── Quotation ───────────────────────────────────────────────
+
+export type QuotationStatus   = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+export type QuotationCategory = 'hotel' | 'flight' | 'transfer' | 'activity' | 'visa' | 'insurance' | 'misc';
+
+export interface QuotationItem {
+  id:           string;
+  quotationId:  string;
+  category:     QuotationCategory;
+  description:  string;
+  quantity:     number;
+  costPrice:    number;
+  sellingPrice: number;
+  vendorId?:    string;
+  vendorName?:  string;
+  // Computed per line
+  totalCost:    number;
+  totalSelling: number;
+  grossProfit:  number;
+  marginPct:    number;
+  sortOrder:    number;
+}
+
+export interface Quotation {
+  id:              string;   // Q-2025-0001
+  quotationNumber: string;   // same value — display string
+  customerId?:     string;
+  customerName:    string;
+  customerPhone?:  string;
+  customerEmail?:  string;
+  destination:     string;
+  startDate?:      string;
+  endDate?:        string;
+  pax:             number;
+  status:          QuotationStatus;
+  notes?:          string;
+  termsAndConds?:  string;
+  validUntil?:     string;
+
+  // Financial summary
+  totalCost:    number;
+  totalSelling: number;
+  grossProfit:  number;
+  marginPct:    number;
+
+  // Conversion
+  convertedTripId?: string;
+  convertedAt?:     string;
+
+  createdDate: string;
+  sentAt?:     string;
+  acceptedAt?: string;
+  rejectedAt?: string;
+
+  items: QuotationItem[];
+}
+
 export interface Staff {
   id: number;
   name: string;
@@ -407,21 +465,201 @@ export interface Staff {
   avatar: string;
 }
 
+// ─── Vendor ──────────────────────────────────────────────────
+
+export type VendorType =
+  | 'hotel'
+  | 'transport'
+  | 'activity'
+  | 'guide'
+  | 'visa'
+  | 'miscellaneous';
+
+export interface VendorBankDetails {
+  accountNo?:      string;
+  ifsc?:           string;
+  bankName?:       string;
+  accountHolder?:  string;
+}
+
+export interface Vendor {
+  id:            string;
+  name:          string;
+  companyName?:  string;
+  type:          VendorType;
+  contactPerson?: string;
+  phone:         string;
+  whatsapp?:     string;
+  email?:        string;
+  destinations:  string[];
+  paymentTerms?: string;
+  bankDetails:   VendorBankDetails;
+  gstNumber?:    string;
+  notes?:        string;
+  isActive:      boolean;
+  createdDate:   string;
+}
+
+export interface VendorPayment {
+  id:           string;
+  vendorId:     string;
+  vendorName:   string;
+  tripId?:      string;
+  tripName?:    string;
+  description?: string;
+  totalCost:    number;
+  advancePaid:  number;
+  outstanding:  number;   // = totalCost - advancePaid (computed, stored)
+  isPaid:       boolean;
+  paidDate?:    string;
+  dueDate?:     string;
+  notes?:       string;
+  createdDate:  string;
+}
+
+// ─── Itinerary ───────────────────────────────────────────────
+
+export type ItineraryStatus   = 'draft' | 'finalized';
+export type ItineraryTemplate = 'domestic' | 'international' | 'luxury' | 'honeymoon' | 'family';
+export type MealType          = 'breakfast' | 'lunch' | 'dinner';
+
+export interface ItineraryDay {
+  id:           string;
+  itineraryId:  string;
+  dayNumber:    number;
+  date?:        string;
+  title:        string;
+  morning?:     string;
+  afternoon?:   string;
+  evening?:     string;
+  hotelName?:   string;
+  hotelAddress?: string;
+  meals:        MealType[];
+  transfers?:   string;
+  activities:   string[];
+  notes?:       string;
+  sortOrder:    number;
+}
+
+export interface Itinerary {
+  id:               string;   // ITN-YYYY-NNNN
+  tripId?:          string;
+  quotationId?:     string;
+  title:            string;
+  destination:      string;
+  customerName:     string;
+  customerPhone?:   string;
+  customerEmail?:   string;
+  startDate?:       string;
+  endDate?:         string;
+  pax:              number;
+  status:           ItineraryStatus;
+  notes?:           string;
+  emergencyContact?: string;
+  template?:        ItineraryTemplate;
+  createdDate:      string;
+  days:             ItineraryDay[];
+}
+
+// ─── Voucher ─────────────────────────────────────────────────
+
+export type VoucherType   = 'hotel' | 'transfer' | 'activity' | 'flight' | 'visa' | 'general';
+export type VoucherStatus = 'draft' | 'issued' | 'completed' | 'cancelled';
+
+export interface Voucher {
+  id:            string;    // VCH-YYYY-NNNN
+  voucherNumber: string;    // same as id
+  tripId?:       string;
+  customerId?:   string;
+  vendorId?:     string;
+  type:          VoucherType;
+  status:        VoucherStatus;
+  issueDate?:    string;
+
+  // Customer / guests
+  customerName:  string;
+  customerPhone?: string;
+  guestNames?:   string;
+  destination?:  string;
+
+  // Hotel
+  hotelName?:      string;
+  hotelAddress?:   string;
+  hotelPhone?:     string;
+  checkIn?:        string;
+  checkOut?:       string;
+  roomType?:       string;
+  mealPlan?:       string;
+  confirmationNo?: string;
+  nights?:         number;
+
+  // Transfer
+  pickupPoint?: string;
+  dropPoint?:   string;
+  pickupDate?:  string;
+  pickupTime?:  string;
+  vehicleType?: string;
+  driverName?:  string;
+  driverPhone?: string;
+  flightInfo?:  string;
+
+  // Activity
+  activityName?:  string;
+  activityDate?:  string;
+  activityTime?:  string;
+  activityVenue?: string;
+  activityNotes?: string;
+
+  // Flight
+  airline?:       string;
+  flightNumber?:  string;
+  pnr?:           string;
+  departure?:     string;
+  arrival?:       string;
+  departureDate?: string;
+  arrivalDate?:   string;
+  flightClass?:   string;
+
+  // Visa
+  visaType?:  string;
+  country?:   string;
+  entryType?: string;
+  validity?:  string;
+  visaFee?:   number;
+
+  // Vendor (denormalized)
+  vendorName?:  string;
+  vendorPhone?: string;
+  vendorEmail?: string;
+
+  // Common
+  pax:              number;
+  notes?:           string;
+  emergencyContact?: string;
+  internalNotes?:   string;
+  createdDate:      string;
+}
+
 // ─── Store Root Shape ────────────────────────────────────────
 
 export interface GKStoreState {
-  trips: Trip[];
-  leads: Lead[];
-  customers: Customer[];
-  bookings: Booking[];
-  tasks: Task[];
-  reminders: Reminder[];
-  activityLog: ActivityLog[];
+  trips:           Trip[];
+  leads:           Lead[];
+  customers:       Customer[];
+  bookings:        Booking[];
+  tasks:           Task[];
+  reminders:       Reminder[];
+  activityLog:     ActivityLog[];
   payments: {
     customerPayments: Payment[];
     supplierPayments: Payment[];
   };
-  staff: Staff[];
+  vendors:         Vendor[];
+  vendorPayments:  VendorPayment[];
+  quotations:      Quotation[];
+  itineraries:     Itinerary[];
+  vouchers:        Voucher[];
+  staff:           Staff[];
 }
 
 // ─── Form Shapes (subset of entities, used by React Hook Form) ─
