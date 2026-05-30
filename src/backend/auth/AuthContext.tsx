@@ -1,7 +1,6 @@
 import {
-  createContext, useContext, useEffect, useState, useCallback, type ReactNode,
+  createContext, useContext, useCallback, type ReactNode,
 } from 'react';
-import { apiClient, tokenStorage } from '@/lib/apiClient';
 import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser } from './types';
 import type { Permission } from './permissions';
@@ -20,64 +19,31 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// ── Helper: map API user to AuthUser shape ─────────────────────
+// ─── Default admin user — no login required ────────────────────
 
-function toAuthUser(u: { id: string; email: string; name: string; role: string }): AuthUser {
-  return {
-    id:       u.id,
-    orgId:    'local',
-    email:    u.email,
-    name:     u.name,
-    role:     (u.role as UserRole) ?? 'ADMIN',
-    avatar:   null,
-    phone:    null,
-    isActive: true,
-  };
-}
+const DEFAULT_USER: AuthUser = {
+  id:       'local-admin',
+  orgId:    'local',
+  email:    'admin@gktravels.com',
+  name:     'GK Travels Admin',
+  role:     'ADMIN',
+  avatar:   null,
+  phone:    null,
+  isActive: true,
+};
 
 // ─── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user,      setUser]      = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // On mount: restore session from stored JWT
-  useEffect(() => {
-    const token = tokenStorage.get();
-    if (!token) { setIsLoading(false); return; }
-
-    apiClient.get('/auth/me')
-      .then(res => setUser(toAuthUser(res.data.user)))
-      .catch(() => { tokenStorage.clear(); setUser(null); })
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const res = await apiClient.post('/auth/login', { email, password });
-      tokenStorage.set(res.data.token);
-      setUser(toAuthUser(res.data.user));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const signUp = useCallback(async (_email: string, _password: string, _name: string) => {
-    // Not implemented for local single-user setup.
-    // Add user via DB seed or Prisma Studio.
-  }, []);
-
-  const signOut = useCallback(async () => {
-    tokenStorage.clear();
-    setUser(null);
-  }, []);
+  const signIn  = useCallback(async (_email: string, _password: string) => {}, []);
+  const signUp  = useCallback(async (_email: string, _password: string, _name: string) => {}, []);
+  const signOut = useCallback(async () => {}, []);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      isLoading,
-      isAuthenticated: user !== null,
+      user:            DEFAULT_USER,
+      isLoading:       false,
+      isAuthenticated: true,
       signIn,
       signUp,
       signOut,

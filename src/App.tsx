@@ -1,13 +1,6 @@
 // ============================================================
 // GK TRAVELS CRM — Application Root
-//
-// Route hierarchy:
-//   /login, /signup, /forgot-password   → PublicRoute (no shell, redirects if authed)
-//   /auth/reset-password                → standalone (no shell, handles recovery token)
-//   / and all CRM paths                 → ProtectedRoute → AppShell → Outlet
-//
-// Provider order:
-//   QueryClientProvider → AuthProvider → BrowserRouter → Routes
+// Provider order: QueryClientProvider → AuthProvider → BrowserRouter → Routes
 // ============================================================
 
 import { useState, useEffect, Suspense, lazy } from 'react';
@@ -16,7 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { AuthProvider }                   from '@/backend/auth/AuthContext';
-import { ProtectedRoute, PublicRoute }    from '@/backend/auth/ProtectedRoute';
+import { ProtectedRoute }                from '@/backend/auth/ProtectedRoute';
 import { shouldRetry, STALE_TIME }        from '@/backend/api/apiError';
 
 import { Sidebar }           from '@/shared/components/Sidebar';
@@ -31,11 +24,6 @@ import { toast }             from '@/shared/hooks/useToast';
 import { TripForm }          from '@/modules/trips/TripForm';
 
 // ─── Lazy module imports ─────────────────────────────────────
-
-const LoginPage          = lazy(() => import('@/modules/auth/LoginPage'));
-const SignupPage         = lazy(() => import('@/modules/auth/SignupPage'));
-const ForgotPasswordPage = lazy(() => import('@/modules/auth/ForgotPasswordPage'));
-const ResetPasswordPage  = lazy(() => import('@/modules/auth/ResetPasswordPage'));
 
 const Dashboard  = lazy(() => import('@/modules/dashboard/Dashboard'));
 const Trips      = lazy(() => import('@/modules/trips/Trips'));
@@ -166,22 +154,8 @@ export default function App() {
         <BrowserRouter>
           <Routes>
 
-            {/* ── Auth pages — no shell, redirect to / if already signed in ── */}
-            <Route element={<PublicRoute />}>
-              <Route path="/login"           element={<Suspense fallback={<PageSpinner />}><LoginPage /></Suspense>} />
-              <Route path="/signup"          element={<Suspense fallback={<PageSpinner />}><SignupPage /></Suspense>} />
-              <Route path="/forgot-password" element={<Suspense fallback={<PageSpinner />}><ForgotPasswordPage /></Suspense>} />
-            </Route>
-
-            {/* ── Password reset — Supabase lands here with a recovery token ── */}
-            <Route
-              path="/auth/reset-password"
-              element={<Suspense fallback={<PageSpinner />}><ResetPasswordPage /></Suspense>}
-            />
-
-            {/* ── Protected CRM shell — requires active Supabase session ────── */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppShell />}>
+            {/* ── CRM shell — direct access, no login required ── */}
+            <Route element={<AppShell />}>
                 <Route index              element={<Dashboard />} />
                 <Route path="/leads"      element={<Leads />} />
                 <Route path="/trips"      element={<Trips />} />
@@ -212,7 +186,6 @@ export default function App() {
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
             </Route>
 
           </Routes>
