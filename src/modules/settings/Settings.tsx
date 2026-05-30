@@ -229,7 +229,7 @@ function UsersTab() {
     setLoading(true);
     try {
       const res = await apiClient.get('/users');
-      setUsers(res.data as CrmUser[]);
+      setUsers(Array.isArray(res.data) ? res.data : []);
     } catch {
       toast.error('Failed to load users');
     } finally {

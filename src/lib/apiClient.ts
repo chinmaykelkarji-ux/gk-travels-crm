@@ -15,19 +15,9 @@ apiClient.interceptors.request.use(config => {
   return config;
 });
 
-// On 401, clear token and redirect to login
 apiClient.interceptors.response.use(
   res => res,
-  err => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      // Only redirect if not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(err);
-  }
+  err => Promise.reject(err)
 );
 
 export const tokenStorage = {

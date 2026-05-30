@@ -265,14 +265,14 @@ export default function Analytics() {
         apiClient.get(`/analytics/customers${qs}&limit=20`),
         apiClient.get('/analytics/alerts'),
       ]);
-      setOverview(ov.data);
-      setMonthly(mo.data);
-      setYearly(yr.data);
-      setDests(de.data);
-      setVendors(ve.data);
-      setTrips(tr.data);
-      setCustomers(cu.data);
-      setAlerts(al.data);
+      setOverview(ov.data ?? null);
+      setMonthly(Array.isArray(mo.data) ? mo.data : []);
+      setYearly(Array.isArray(yr.data) ? yr.data : []);
+      setDests(Array.isArray(de.data) ? de.data : []);
+      setVendors(Array.isArray(ve.data) ? ve.data : []);
+      setTrips(tr.data ?? null);
+      setCustomers(Array.isArray(cu.data) ? cu.data : []);
+      setAlerts(al.data ?? null);
     } catch (err) {
       console.error('[analytics] fetch failed', err);
     } finally {
@@ -688,7 +688,7 @@ export default function Analytics() {
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-emerald-700">🏆 Most Profitable Trips</CardTitle>
                         <Button size="sm" variant="ghost" className="gap-1.5 text-xs"
-                          onClick={() => downloadCSV(trips.byProfit as unknown as Record<string, unknown>[], 'top-trips.csv')}>
+                          onClick={() => downloadCSV((trips.byProfit ?? []) as unknown as Record<string, unknown>[], 'top-trips.csv')}>
                           <Download className="w-3.5 h-3.5" /> CSV
                         </Button>
                       </div>
@@ -704,13 +704,13 @@ export default function Analytics() {
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-red-700">⚠️ Loss-Making Trips</CardTitle>
                         <Button size="sm" variant="ghost" className="gap-1.5 text-xs"
-                          onClick={() => downloadCSV(trips.lossMaking as unknown as Record<string, unknown>[], 'loss-trips.csv')}>
+                          onClick={() => downloadCSV((trips.lossMaking ?? []) as unknown as Record<string, unknown>[], 'loss-trips.csv')}>
                           <Download className="w-3.5 h-3.5" /> CSV
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {trips.lossMaking.length === 0
+                      {!(trips.lossMaking?.length)
                         ? <p className="text-xs text-gray-400 py-6 text-center">No loss-making trips 🎉</p>
                         : <TripTable rows={trips.lossMaking} navigate={navigate} />
                       }
@@ -727,7 +727,7 @@ export default function Analytics() {
                   <Card>
                     <CardHeader><CardTitle>📉 Lowest Margin Trips</CardTitle></CardHeader>
                     <CardContent>
-                      {trips.bottomMargin.length === 0
+                      {!(trips.bottomMargin?.length)
                         ? <p className="text-xs text-gray-400 py-6 text-center">No data</p>
                         : <TripTable rows={trips.bottomMargin} navigate={navigate} />
                       }
@@ -904,8 +904,8 @@ export default function Analytics() {
 
 // ─── Sub-components ───────────────────────────────────────────
 
-function TripTable({ rows, navigate }: { rows: TripProfit[]; navigate: (path: string) => void }) {
-  if (!rows.length) return <p className="text-xs text-gray-400 py-6 text-center">No data</p>;
+function TripTable({ rows, navigate }: { rows: TripProfit[] | undefined | null; navigate: (path: string) => void }) {
+  if (!rows?.length) return <p className="text-xs text-gray-400 py-6 text-center">No data</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">

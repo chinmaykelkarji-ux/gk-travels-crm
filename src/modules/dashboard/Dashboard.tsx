@@ -227,7 +227,7 @@ export default function Dashboard() {
         />
         <KpiCard
           title="Vendor Payable"
-          value={totalVendorOwed > 0 ? formatCurrencyShort(totalVendorOwed) : '—'}
+          value={formatCurrencyShort(totalVendorOwed)}
           sub={`${vendors.filter(v => v.isActive).length} active vendors`}
           icon={Building2}
           color="red"
