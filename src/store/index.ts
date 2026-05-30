@@ -1,8 +1,8 @@
-// ============================================================
-// GK TRAVELS CRM — ZUSTAND STORE
+﻿// ============================================================
+// GK TRAVELS CRM â€” ZUSTAND STORE
 //
 // Architecture:
-//   - In-memory store (no localStorage — data lives in PostgreSQL)
+//   - In-memory store (no localStorage â€” data lives in PostgreSQL)
 //   - On init: fetchAll() loads all data from Express API
 //   - Mutations: update store immediately (optimistic) + fire API async
 //   - All financial calculations happen in actions, never in UI
@@ -26,8 +26,35 @@ import {
 } from '@/shared/utils/id';
 import { today } from '@/shared/utils/date';
 import { canConfirmTrip } from '@/shared/schemas/trip';
+import { toast } from '@/shared/hooks/useToast';
 
-// ─── Activity Entry Factory ───────────────────────────────────
+// â”€â”€â”€ Mutation error handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// All store mutations are optimistic: the Zustand state updates
+// immediately, then the API call fires asynchronously. If the API
+// call fails (401, network error, DB constraint, etc.) the data
+// exists in the in-memory store but was NOT written to PostgreSQL
+// â€” it will disappear on the next page refresh.
+//
+// This helper is attached to every fire-and-forget API call so
+// failures are surfaced as a visible toast instead of silently
+// swallowed by console.error.
+function onMutationError(label: string) {
+  return (err: unknown) => {
+    console.error(`[api] ${label}`, err);
+    const status = (err as { response?: { status?: number } })?.response?.status;
+    if (status === 401) {
+      toast.error('Session expired', 'Your session expired. The page will refresh to reconnect.');
+      setTimeout(() => window.location.reload(), 1500);
+    } else {
+      toast.error(
+        'Save failed',
+        `"${label}" could not be saved to the database. Check your connection and try again.`,
+      );
+    }
+  };
+}
+
+// â”€â”€â”€ Activity Entry Factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Using a typed factory function guarantees that `entityType` is checked
 // against ActivityEntityType at the call site, avoiding generic string
 // inference inside Zustand set() closures where contextual typing may not
@@ -51,7 +78,7 @@ function makeActivityEntry(
   };
 }
 
-// ─── Defaults ────────────────────────────────────────────────
+// â”€â”€â”€ Defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const defaultStaff: Staff[] = [
   { id: 1, name: 'Priya Singh',  role: 'Senior Operations', trips: 0, tasks: 0, avatar: 'PS' },
@@ -74,12 +101,14 @@ const defaultState: GKStoreState = {
   itineraries:    [],
   vouchers:       [],
   staff:          defaultStaff,
+  dataLoading:    true,
+  dataError:      null,
 };
 
-// ─── Store Actions Interface ──────────────────────────────────
+// â”€â”€â”€ Store Actions Interface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface StoreActions {
-  // ── Trips ───────────────────────────────────────────────
+  // â”€â”€ Trips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createTrip:  (data: Partial<Trip>) => Trip;
   updateTrip:  (id: string, data: Partial<Trip>) => void;
   deleteTrip:  (id: string) => void;
@@ -87,37 +116,37 @@ interface StoreActions {
   recalcTripFinance: (tripId: string) => void;
   recalcAllTrips:    () => void;
 
-  // ── Leads ───────────────────────────────────────────────
+  // â”€â”€ Leads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createLead:     (data: Partial<Lead>) => Lead;
   updateLead:     (id: string, data: Partial<Lead>) => void;
   deleteLead:     (id: string) => void;
   setLeadStatus:  (id: string, status: LeadStatus) => void;
   convertLead:    (leadId: string) => { ok: boolean; trip?: Trip; reason?: string };
 
-  // ── Customers ───────────────────────────────────────────
+  // â”€â”€ Customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createCustomer: (data: Partial<Customer>) => Customer;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
 
-  // ── Bookings ────────────────────────────────────────────
+  // â”€â”€ Bookings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createBooking:  (data: Partial<Booking>) => Booking;
   updateBooking:  (id: string, data: Partial<Booking>) => void;
   deleteBooking:  (id: string) => void;
 
-  // ── Payments ────────────────────────────────────────────
+  // â”€â”€ Payments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   recordPayment:  (payment: Partial<Payment> & { type: 'customer' | 'supplier' }) => Payment;
   updatePayment:  (id: string, type: 'customer' | 'supplier', data: Partial<Payment>) => void;
   deletePayment:  (id: string, type: 'customer' | 'supplier') => void;
 
-  // ── Tasks ───────────────────────────────────────────────
+  // â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createTask:     (data: Partial<Task>) => Task;
   updateTask:     (id: string, data: Partial<Task>) => void;
   completeTask:   (id: string) => void;
 
-  // ── Reminders ───────────────────────────────────────────
+  // â”€â”€ Reminders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   refreshAllReminders: () => void;
   markReminderSent:    (id: string) => void;
 
-  // ── Activity Log ────────────────────────────────────────
+  // â”€â”€ Activity Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   logActivity: (
     type: string,
     message: string,
@@ -126,18 +155,18 @@ interface StoreActions {
     meta?: { before?: unknown; after?: unknown },
   ) => void;
 
-  // ── Vendors ─────────────────────────────────────────────
+  // â”€â”€ Vendors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createVendor:        (data: Partial<Vendor>) => Vendor;
   updateVendor:        (id: string, data: Partial<Vendor>) => void;
   deleteVendor:        (id: string) => void;
 
-  // ── Vendor Payments ──────────────────────────────────────
+  // â”€â”€ Vendor Payments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createVendorPayment: (data: Partial<VendorPayment>) => VendorPayment;
   updateVendorPayment: (id: string, data: Partial<VendorPayment>) => void;
   deleteVendorPayment: (id: string) => void;
   markVendorPaid:      (id: string, paidDate?: string) => void;
 
-  // ── Quotations ──────────────────────────────────────────
+  // â”€â”€ Quotations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createQuotation:        (data: Partial<Quotation> & { items?: Partial<QuotationItem>[] }) => Quotation;
   updateQuotation:        (id: string, data: Partial<Quotation> & { items?: Partial<QuotationItem>[] }) => void;
   deleteQuotation:        (id: string) => void;
@@ -145,27 +174,28 @@ interface StoreActions {
   duplicateQuotation:     (sourceId: string) => Quotation | null;
   convertQuotationToTrip: (id: string) => Promise<{ ok: boolean; trip?: Trip; reason?: string }>;
 
-  // ── Itineraries ──────────────────────────────────────────
+  // â”€â”€ Itineraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createItinerary:     (data: Partial<Itinerary>) => Itinerary;
   updateItinerary:     (id: string, data: Partial<Itinerary>) => void;
   deleteItinerary:     (id: string) => void;
   setItineraryStatus:  (id: string, status: ItineraryStatus) => void;
 
-  // ── Vouchers ─────────────────────────────────────────────
+  // â”€â”€ Vouchers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createVoucher:      (data: Partial<Voucher>) => Voucher;
   updateVoucher:      (id: string, data: Partial<Voucher>) => void;
   deleteVoucher:      (id: string) => void;
   setVoucherStatus:   (id: string, status: VoucherStatus) => void;
   duplicateVoucher:   (sourceId: string) => Voucher | null;
 
-  // ── Utility ─────────────────────────────────────────────
-  clearAll:   () => void;
-  fetchAll:   () => Promise<void>;
+  // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  clearAll:    () => void;
+  fetchAll:    () => Promise<void>;
+  retryFetch:  () => Promise<void>;
 }
 
 type GKStore = GKStoreState & StoreActions;
 
-// ─── Helper: compute supplier totals for a trip ──────────────
+// â”€â”€â”€ Helper: compute supplier totals for a trip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function supplierTotalsForTrip(state: GKStoreState, tripId: string) {
   const supplierPaymentsTotal = state.payments.supplierPayments
@@ -183,13 +213,13 @@ function supplierTotalsForTrip(state: GKStoreState, tripId: string) {
   return { supplierPaymentsTotal, bookingSupplierTotal, customerPaymentsTotal };
 }
 
-// ─── Store Creation ──────────────────────────────────────────
+// â”€â”€â”€ Store Creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const useStore = create<GKStore>()(
   (set, get) => ({
       ...defaultState,
 
-      // ══ Trip Actions ════════════════════════════════════════
+      // â•â• Trip Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createTrip(data) {
         const state = get();
@@ -231,7 +261,7 @@ export const useStore = create<GKStore>()(
             {
               id:    uid(),
               date:  now,
-              event: `Trip created — ${data.destination}`,
+              event: `Trip created â€” ${data.destination}`,
               type:  'system',
             },
           ],
@@ -255,7 +285,7 @@ export const useStore = create<GKStore>()(
 
         const tripEntry = makeActivityEntry(
           'trip_created',
-          `Trip ${id} created for ${trip.customer} → ${trip.destination}`,
+          `Trip ${id} created for ${trip.customer} â†’ ${trip.destination}`,
           'trip',
           id,
           now,
@@ -265,7 +295,7 @@ export const useStore = create<GKStore>()(
           activityLog: [tripEntry, ...s.activityLog].slice(0, 500),
         }));
 
-        void apiClient.post('/trips', trip).catch(e => console.error('[api] createTrip', e));
+        void apiClient.post('/trips', trip).catch(onMutationError(''));
         get().refreshAllReminders();
         return trip;
       },
@@ -290,13 +320,13 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const updated = get().trips.find(t => t.id === id);
-        if (updated) void apiClient.put(`/trips/${id}`, updated).catch(e => console.error('[api] updateTrip', e));
+        if (updated) void apiClient.put(`/trips/${id}`, updated).catch(onMutationError(''));
         get().refreshAllReminders();
       },
 
       deleteTrip(id) {
         set((s: GKStore) => ({ trips: s.trips.filter(t => t.id !== id) }));
-        void apiClient.delete(`/trips/${id}`).catch(e => console.error('[api] deleteTrip', e));
+        void apiClient.delete(`/trips/${id}`).catch(onMutationError(''));
       },
 
       setTripStatus(id, status) {
@@ -320,7 +350,7 @@ export const useStore = create<GKStore>()(
             },
           ],
         });
-        get().logActivity('status_change', `Trip ${id} status → ${status}`, 'trip', id);
+        get().logActivity('status_change', `Trip ${id} status â†’ ${status}`, 'trip', id);
         return { ok: true };
       },
 
@@ -363,7 +393,7 @@ export const useStore = create<GKStore>()(
         }));
       },
 
-      // ══ Lead Actions ════════════════════════════════════════
+      // â•â• Lead Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createLead(data) {
         const state = get();
@@ -392,7 +422,7 @@ export const useStore = create<GKStore>()(
 
         const leadEntry = makeActivityEntry(
           'lead_created',
-          `Lead ${id} created — ${lead.name} (${lead.source})`,
+          `Lead ${id} created â€” ${lead.name} (${lead.source})`,
           'lead',
           id,
           now,
@@ -401,7 +431,7 @@ export const useStore = create<GKStore>()(
           leads:       [lead, ...s.leads],
           activityLog: [leadEntry, ...s.activityLog].slice(0, 500),
         }));
-        void apiClient.post('/leads', lead).catch(e => console.error('[api] createLead', e));
+        void apiClient.post('/leads', lead).catch(onMutationError(''));
         return lead;
       },
 
@@ -410,11 +440,11 @@ export const useStore = create<GKStore>()(
           leads: s.leads.map(l => l.id === id ? { ...l, ...data } : l),
         }));
         const updated = get().leads.find(l => l.id === id);
-        if (updated) void apiClient.put(`/leads/${id}`, updated).catch(e => console.error('[api] updateLead', e));
+        if (updated) void apiClient.put(`/leads/${id}`, updated).catch(onMutationError(''));
       },
 
       deleteLead(id) {
-        // Pure state removal — callers are responsible for the API call
+        // Pure state removal â€” callers are responsible for the API call
         // so they can handle errors and show toasts before committing the state change.
         set((s: GKStore) => ({ leads: s.leads.filter(l => l.id !== id) }));
       },
@@ -426,10 +456,10 @@ export const useStore = create<GKStore>()(
           status,
           timeline: [
             ...(lead.timeline || []),
-            { id: uid(), date: today(), event: `Status → ${status}`, type: 'system' },
+            { id: uid(), date: today(), event: `Status â†’ ${status}`, type: 'system' },
           ],
         });
-        get().logActivity('lead_status', `Lead ${id} status → ${status}`, 'lead', id);
+        get().logActivity('lead_status', `Lead ${id} status â†’ ${status}`, 'lead', id);
       },
 
       convertLead(leadId) {
@@ -477,7 +507,7 @@ export const useStore = create<GKStore>()(
           convertedBy:  'admin',
         });
 
-        // Link customer → trip
+        // Link customer â†’ trip
         get().updateCustomer(cust.id, {
           tripIds: [...(cust.tripIds || []), trip.id],
         });
@@ -493,7 +523,7 @@ export const useStore = create<GKStore>()(
 
         get().logActivity(
           'lead_converted',
-          `Lead ${leadId} converted → Trip ${trip.id}`,
+          `Lead ${leadId} converted â†’ Trip ${trip.id}`,
           'lead',
           leadId,
         );
@@ -501,7 +531,7 @@ export const useStore = create<GKStore>()(
         return { ok: true, trip };
       },
 
-      // ══ Customer Actions ════════════════════════════════════
+      // â•â• Customer Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createCustomer(data) {
         const state = get();
@@ -520,7 +550,7 @@ export const useStore = create<GKStore>()(
           ...data,
         };
         set((s: GKStore) => ({ customers: [cust, ...s.customers] }));
-        void apiClient.post('/customers', cust).catch(e => console.error('[api] createCustomer', e));
+        void apiClient.post('/customers', cust).catch(onMutationError(''));
         return cust;
       },
 
@@ -529,10 +559,10 @@ export const useStore = create<GKStore>()(
           customers: s.customers.map(c => c.id === id ? { ...c, ...data } : c),
         }));
         const updated = get().customers.find(c => c.id === id);
-        if (updated) void apiClient.put(`/customers/${id}`, updated).catch(e => console.error('[api] updateCustomer', e));
+        if (updated) void apiClient.put(`/customers/${id}`, updated).catch(onMutationError(''));
       },
 
-      // ══ Booking Actions ═════════════════════════════════════
+      // â•â• Booking Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createBooking(data) {
         const state = get();
@@ -562,7 +592,7 @@ export const useStore = create<GKStore>()(
           notes:         data.notes         ?? '',
         };
         set((s: GKStore) => ({ bookings: [booking, ...s.bookings] }));
-        void apiClient.post('/bookings', booking).catch(e => console.error('[api] createBooking', e));
+        void apiClient.post('/bookings', booking).catch(onMutationError(''));
         if (booking.refId) get().recalcTripFinance(booking.refId);
         return booking;
       },
@@ -577,18 +607,18 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const booking = get().bookings.find(b => b.id === id);
-        if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(e => console.error('[api] updateBooking', e));
+        if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(onMutationError(''));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
       deleteBooking(id) {
         const booking = get().bookings.find(b => b.id === id);
         set((s: GKStore) => ({ bookings: s.bookings.filter(b => b.id !== id) }));
-        void apiClient.delete(`/bookings/${id}`).catch(e => console.error('[api] deleteBooking', e));
+        void apiClient.delete(`/bookings/${id}`).catch(onMutationError(''));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
-      // ══ Payment Actions ═════════════════════════════════════
+      // â•â• Payment Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       recordPayment(paymentData) {
         const state = get();
@@ -629,12 +659,12 @@ export const useStore = create<GKStore>()(
 
         get().logActivity(
           'payment_recorded',
-          `${isCustomer ? 'Customer' : 'Supplier'} payment ₹${payment.amount} recorded`,
+          `${isCustomer ? 'Customer' : 'Supplier'} payment â‚¹${payment.amount} recorded`,
           'payment',
           payment.tripId || payment.bookingId || id,
         );
 
-        void apiClient.post('/payments', payment).catch(e => console.error('[api] recordPayment', e));
+        void apiClient.post('/payments', payment).catch(onMutationError(''));
         return payment;
       },
 
@@ -657,7 +687,7 @@ export const useStore = create<GKStore>()(
           : get().payments.supplierPayments;
         const pay = list.find(p => p.id === id);
         if (pay?.tripId) get().recalcTripFinance(pay.tripId);
-        if (pay) void apiClient.put(`/payments/${id}`, pay).catch(e => console.error('[api] updatePayment', e));
+        if (pay) void apiClient.put(`/payments/${id}`, pay).catch(onMutationError(''));
       },
 
       deletePayment(id, type) {
@@ -674,10 +704,10 @@ export const useStore = create<GKStore>()(
           return { payments };
         });
         if (pay?.tripId) get().recalcTripFinance(pay.tripId);
-        void apiClient.delete(`/payments/${id}`).catch(e => console.error('[api] deletePayment', e));
+        void apiClient.delete(`/payments/${id}`).catch(onMutationError(''));
       },
 
-      // ══ Task Actions ════════════════════════════════════════
+      // â•â• Task Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createTask(data) {
         const state = get();
@@ -696,21 +726,21 @@ export const useStore = create<GKStore>()(
           createdDate: today(),
         };
         set((s: GKStore) => ({ tasks: [task, ...s.tasks] }));
-        void apiClient.post('/tasks', task).catch(e => console.error('[api] createTask', e));
+        void apiClient.post('/tasks', task).catch(onMutationError(''));
         return task;
       },
 
       updateTask(id, data) {
         set((s: GKStore) => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }));
         const updated = get().tasks.find(t => t.id === id);
-        if (updated) void apiClient.put(`/tasks/${id}`, updated).catch(e => console.error('[api] updateTask', e));
+        if (updated) void apiClient.put(`/tasks/${id}`, updated).catch(onMutationError(''));
       },
 
       completeTask(id) {
         get().updateTask(id, { status: 'completed', completedDate: today() });
       },
 
-      // ══ Reminder Actions ════════════════════════════════════
+      // â•â• Reminder Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       refreshAllReminders() {
         const state = get();
@@ -729,7 +759,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'web_checkin', priority: 'urgent',
-              message: `Web check-in for ${trip.customer} — ${daysLeft === 0 ? 'today' : 'tomorrow'} (${trip.departure})`,
+              message: `Web check-in for ${trip.customer} â€” ${daysLeft === 0 ? 'today' : 'tomorrow'} (${trip.departure})`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -737,14 +767,14 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'balance_payment', priority: 'urgent',
-              message: `Balance ₹${trip.balanceDue} due from ${trip.customer} — departing in ${daysLeft}d`,
+              message: `Balance â‚¹${trip.balanceDue} due from ${trip.customer} â€” departing in ${daysLeft}d`,
               dueDate: trip.departure, sent: false,
             });
           } else if (daysLeft > 3 && daysLeft <= 7 && (trip.balanceDue ?? 0) > 0) {
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'balance_payment', priority: 'high',
-              message: `Balance ₹${trip.balanceDue} pending — ${trip.customer} (${trip.destination})`,
+              message: `Balance â‚¹${trip.balanceDue} pending â€” ${trip.customer} (${trip.destination})`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -752,7 +782,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'visa_followup', priority: 'medium',
-              message: `Follow up visa status for ${trip.customer} — ${trip.destination}`,
+              message: `Follow up visa status for ${trip.customer} â€” ${trip.destination}`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -760,7 +790,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'final_documents', priority: 'high',
-              message: `Send final documents to ${trip.customer} — departing in ${daysLeft}d to ${trip.destination}`,
+              message: `Send final documents to ${trip.customer} â€” departing in ${daysLeft}d to ${trip.destination}`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -779,7 +809,7 @@ export const useStore = create<GKStore>()(
         }));
       },
 
-      // ══ Activity Log ════════════════════════════════════════
+      // â•â• Activity Log â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       logActivity(type, message, entityType, entityId, meta) {
         const entry: ActivityLog = {
@@ -795,7 +825,7 @@ export const useStore = create<GKStore>()(
         }));
       },
 
-      // ══ Vendor Actions ══════════════════════════════════════
+      // â•â• Vendor Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createVendor(data) {
         const state = get();
@@ -818,7 +848,7 @@ export const useStore = create<GKStore>()(
           createdDate:   today(),
         };
         set((s: GKStore) => ({ vendors: [vendor, ...s.vendors] }));
-        void apiClient.post('/vendors', vendor).catch(e => console.error('[api] createVendor', e));
+        void apiClient.post('/vendors', vendor).catch(onMutationError(''));
         return vendor;
       },
 
@@ -827,7 +857,7 @@ export const useStore = create<GKStore>()(
           vendors: s.vendors.map(v => v.id === id ? { ...v, ...data } : v),
         }));
         const updated = get().vendors.find(v => v.id === id);
-        if (updated) void apiClient.put(`/vendors/${id}`, updated).catch(e => console.error('[api] updateVendor', e));
+        if (updated) void apiClient.put(`/vendors/${id}`, updated).catch(onMutationError(''));
       },
 
       deleteVendor(id) {
@@ -835,10 +865,10 @@ export const useStore = create<GKStore>()(
           vendors:        s.vendors.filter(v => v.id !== id),
           vendorPayments: s.vendorPayments.filter(p => p.vendorId !== id),
         }));
-        // No fire-and-forget — callers handle the API call before calling this
+        // No fire-and-forget â€” callers handle the API call before calling this
       },
 
-      // ══ Vendor Payment Actions ══════════════════════════════
+      // â•â• Vendor Payment Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createVendorPayment(data) {
         const state = get();
@@ -863,7 +893,7 @@ export const useStore = create<GKStore>()(
           createdDate: today(),
         };
         set((s: GKStore) => ({ vendorPayments: [payment, ...s.vendorPayments] }));
-        void apiClient.post('/vendors/payments', payment).catch(e => console.error('[api] createVendorPayment', e));
+        void apiClient.post('/vendors/payments', payment).catch(onMutationError(''));
         return payment;
       },
 
@@ -877,11 +907,11 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const updated = get().vendorPayments.find(p => p.id === id);
-        if (updated) void apiClient.put(`/vendors/payments/${id}`, updated).catch(e => console.error('[api] updateVendorPayment', e));
+        if (updated) void apiClient.put(`/vendors/payments/${id}`, updated).catch(onMutationError(''));
       },
 
       deleteVendorPayment(id) {
-        // State-only — callers own the API call
+        // State-only â€” callers own the API call
         set((s: GKStore) => ({ vendorPayments: s.vendorPayments.filter(p => p.id !== id) }));
       },
 
@@ -893,10 +923,10 @@ export const useStore = create<GKStore>()(
           ),
         }));
         void apiClient.put(`/vendors/payments/${id}/mark-paid`, { paidDate: date })
-          .catch(e => console.error('[api] markVendorPaid', e));
+          .catch(onMutationError(''));
       },
 
-      // ══ Quotation Actions ═══════════════════════════════════
+      // â•â• Quotation Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createQuotation(data) {
         const state = get();
@@ -928,7 +958,7 @@ export const useStore = create<GKStore>()(
               quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
             }));
           })
-          .catch(e => console.error('[api] createQuotation', e));
+          .catch(onMutationError(''));
         return quotation;
       },
 
@@ -942,7 +972,7 @@ export const useStore = create<GKStore>()(
               quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
             }));
           })
-          .catch(e => console.error('[api] updateQuotation', e));
+          .catch(onMutationError(''));
       },
 
       deleteQuotation(id) {
@@ -966,7 +996,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
           })))
-          .catch(e => console.error('[api] setQuotationStatus', e));
+          .catch(onMutationError(''));
       },
 
       duplicateQuotation(sourceId) {
@@ -988,7 +1018,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
           })))
-          .catch(e => console.error('[api] duplicateQuotation', e));
+          .catch(onMutationError(''));
         return copy;
       },
 
@@ -1008,7 +1038,7 @@ export const useStore = create<GKStore>()(
         }
       },
 
-      // ══ Itinerary Actions ═══════════════════════════════════
+      // â•â• Itinerary Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createItinerary(data) {
         const state = get();
@@ -1037,7 +1067,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
           })))
-          .catch(e => console.error('[api] createItinerary', e));
+          .catch(onMutationError(''));
         return itinerary;
       },
 
@@ -1051,7 +1081,7 @@ export const useStore = create<GKStore>()(
             .then(r => set((s: GKStore) => ({
               itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
             })))
-            .catch(e => console.error('[api] updateItinerary', e));
+            .catch(onMutationError(''));
         }
       },
 
@@ -1067,10 +1097,10 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
           })))
-          .catch(e => console.error('[api] setItineraryStatus', e));
+          .catch(onMutationError(''));
       },
 
-      // ══ Voucher Actions ═════════════════════════════════════
+      // â•â• Voucher Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createVoucher(data) {
         const state = get();
@@ -1120,7 +1150,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(e => console.error('[api] createVoucher', e));
+          .catch(onMutationError(''));
         return voucher;
       },
 
@@ -1133,7 +1163,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(e => console.error('[api] updateVoucher', e));
+          .catch(onMutationError(''));
       },
 
       deleteVoucher(id) {
@@ -1152,7 +1182,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(e => console.error('[api] setVoucherStatus', e));
+          .catch(onMutationError(''));
       },
 
       duplicateVoucher(sourceId) {
@@ -1170,63 +1200,98 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(e => console.error('[api] duplicateVoucher', e));
+          .catch(onMutationError(''));
         return copy;
       },
 
-      // ── Utility ────────────────────────────────────────────
+      // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
       clearAll() {
-        set(defaultState);
+        set({ ...defaultState, dataLoading: false, dataError: null });
       },
 
-      // ── API hydration ──────────────────────────────────────
+      // â”€â”€ API hydration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      //
+      // Retries up to 3 times with exponential back-off (1 s, 2 s, 3 s).
+      // Sets dataLoading / dataError so AppShell can show meaningful UI
+      // instead of a silent empty screen.
+      //
       async fetchAll() {
-        try {
-          const res = await apiClient.get('/data/all');
-          const d   = res.data as {
-            trips:          Trip[];
-            leads:          Lead[];
-            customers:      Customer[];
-            bookings:       Booking[];
-            tasks:          Task[];
-            reminders:      Reminder[];
-            activityLog:    ActivityLog[];
-            payments:       { customerPayments: Payment[]; supplierPayments: Payment[] };
-            vendors:        Vendor[];
-            vendorPayments: VendorPayment[];
-            quotations:     Quotation[];
-            itineraries:    Itinerary[];
-            vouchers:       Voucher[];
-          };
-          set({
-            trips:          d.trips          ?? [],
-            leads:          d.leads          ?? [],
-            customers:      d.customers      ?? [],
-            bookings:       d.bookings       ?? [],
-            tasks:          d.tasks          ?? [],
-            reminders:      d.reminders      ?? [],
-            activityLog:    d.activityLog    ?? [],
-            payments:       d.payments       ?? { customerPayments: [], supplierPayments: [] },
-            vendors:        d.vendors        ?? [],
-            vendorPayments: d.vendorPayments ?? [],
-            quotations:     d.quotations     ?? [],
-            itineraries:    d.itineraries    ?? [],
-            vouchers:       d.vouchers       ?? [],
-          });
-          // Recalc in-memory after load
-          setTimeout(() => {
-            get().recalcAllTrips();
-            get().refreshAllReminders();
-          }, 0);
-        } catch (err) {
-          console.error('[store] fetchAll failed — data will be empty until API is available', err);
+        set({ dataLoading: true, dataError: null });
+
+        const MAX_ATTEMPTS = 3;
+        let lastError: unknown;
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            const res = await apiClient.get('/data/all');
+            const d   = res.data as {
+              trips:          Trip[];
+              leads:          Lead[];
+              customers:      Customer[];
+              bookings:       Booking[];
+              tasks:          Task[];
+              reminders:      Reminder[];
+              activityLog:    ActivityLog[];
+              payments:       { customerPayments: Payment[]; supplierPayments: Payment[] };
+              vendors:        Vendor[];
+              vendorPayments: VendorPayment[];
+              quotations:     Quotation[];
+              itineraries:    Itinerary[];
+              vouchers:       Voucher[];
+            };
+
+            set({
+              trips:          Array.isArray(d.trips)          ? d.trips          : [],
+              leads:          Array.isArray(d.leads)          ? d.leads          : [],
+              customers:      Array.isArray(d.customers)      ? d.customers      : [],
+              bookings:       Array.isArray(d.bookings)       ? d.bookings       : [],
+              tasks:          Array.isArray(d.tasks)          ? d.tasks          : [],
+              reminders:      Array.isArray(d.reminders)      ? d.reminders      : [],
+              activityLog:    Array.isArray(d.activityLog)    ? d.activityLog    : [],
+              payments:       d.payments ?? { customerPayments: [], supplierPayments: [] },
+              vendors:        Array.isArray(d.vendors)        ? d.vendors        : [],
+              vendorPayments: Array.isArray(d.vendorPayments) ? d.vendorPayments : [],
+              quotations:     Array.isArray(d.quotations)     ? d.quotations     : [],
+              itineraries:    Array.isArray(d.itineraries)    ? d.itineraries    : [],
+              vouchers:       Array.isArray(d.vouchers)       ? d.vouchers       : [],
+              dataLoading:    false,
+              dataError:      null,
+            });
+
+            // Recalculate derived financial fields after hydration
+            setTimeout(() => {
+              get().recalcAllTrips();
+              get().refreshAllReminders();
+            }, 0);
+
+            return; // success â€” exit retry loop
+          } catch (err) {
+            lastError = err;
+            console.warn(`[store] fetchAll attempt ${attempt}/${MAX_ATTEMPTS} failed`, err);
+            if (attempt < MAX_ATTEMPTS) {
+              // Exponential back-off: 1 s, 2 s, 3 s
+              await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
+          }
         }
+
+        // All attempts exhausted
+        const msg = (lastError as { response?: { data?: { error?: string }; status?: number } })
+          ?.response?.data?.error
+          ?? (lastError instanceof Error ? lastError.message : 'Could not connect to server');
+
+        console.error('[store] fetchAll failed after all retries:', lastError);
+        set({ dataLoading: false, dataError: msg });
+      },
+
+      async retryFetch() {
+        await get().fetchAll();
       },
     })
 );
 
-// ─── Derived selectors ────────────────────────────────────────
+// â”€â”€â”€ Derived selectors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Use these in components instead of computing inline.
 
 export const selectors = {
@@ -1274,3 +1339,4 @@ export const selectors = {
   vouchersForTrip: (tripId: string) => (s: GKStore) =>
     s.vouchers.filter(v => v.tripId === tripId),
 };
+

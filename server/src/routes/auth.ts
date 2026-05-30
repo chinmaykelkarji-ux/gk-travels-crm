@@ -51,6 +51,40 @@ router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/auth/setup
+// No credentials required. Idempotently creates the default admin user
+// if it does not already exist, then returns a valid JWT.
+// Used by the frontend on every cold start to bootstrap auth
+// without a login screen.
+router.post('/setup', async (_req, res) => {
+  try {
+    const ADMIN_EMAIL    = 'admin@gktravels.local';
+    const ADMIN_PASSWORD = 'GKAdmin2026!';
+
+    const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    const user   = await prisma.user.upsert({
+      where:  { email: ADMIN_EMAIL },
+      update: { isActive: true },           // re-enable if previously deactivated
+      create: {
+        email:    ADMIN_EMAIL,
+        password: hashed,
+        name:     'GK Travels Admin',
+        role:     'ADMIN',
+        isActive: true,
+      },
+    });
+
+    const token = signToken({ id: user.id, email: user.email, role: user.role });
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  } catch (err) {
+    console.error('[auth/setup]', err);
+    res.status(500).json({ error: 'Setup failed' });
+  }
+});
+
 // PUT /api/auth/password  — change password
 router.put('/password', requireAuth, async (req: AuthRequest, res) => {
   try {

@@ -126,7 +126,7 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
       createBooking({
         type:         form.type,
         customerName: form.customerName.trim(),
-        refId:        form.refId || undefined,
+        refId:        form.refId && form.refId !== '__none__' ? form.refId : undefined,
         sellingPrice: selling,
         supplierCost: cost,
         advance:      adv,
@@ -188,12 +188,12 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bk-trip">Linked Trip (optional)</Label>
-              <Select value={form.refId} onValueChange={v => set('refId', v)}>
+              <Select value={form.refId || '__none__'} onValueChange={v => set('refId', v === '__none__' ? '' : v)}>
                 <SelectTrigger id="bk-trip">
                   <SelectValue placeholder="Select trip…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {trips.map(t => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.id} — {t.customer} ({t.destination})

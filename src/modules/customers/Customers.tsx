@@ -2,12 +2,15 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserCircle, Search, Phone, Mail, MapPin, Shield,
-  Star, Users, TrendingUp, Calendar, X,
+  Star, Users, TrendingUp, X, Plus,
   FileText, ChevronRight, Hash,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Customer } from '@/shared/types';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
+import { Input } from '@/shared/components/ui/input';
+import { Label } from '@/shared/components/ui/label';
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { initials } from '@/shared/utils/format';
@@ -16,8 +19,13 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogFooter, DialogBody,
+} from '@/shared/components/ui/dialog';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/shared/components/ui/select';
+import { toast } from '@/shared/hooks/useToast';
 
 // ─── Segment helpers ──────────────────────────────────────────
 
@@ -48,6 +56,200 @@ const AVATAR_COLORS = [
 function avatarColor(id: string) {
   const i = id.charCodeAt(id.length - 1) % AVATAR_COLORS.length;
   return AVATAR_COLORS[i];
+}
+
+// ─── New Customer Dialog ──────────────────────────────────────
+
+interface CustomerFormData {
+  name:           string;
+  phone:          string;
+  altPhone:       string;
+  email:          string;
+  city:           string;
+  address:        string;
+  passportNo:     string;
+  passportExpiry: string;
+  panNumber:      string;
+  notes:          string;
+}
+
+const DEFAULT_CUSTOMER: CustomerFormData = {
+  name:           '',
+  phone:          '',
+  altPhone:       '',
+  email:          '',
+  city:           '',
+  address:        '',
+  passportNo:     '',
+  passportExpiry: '',
+  panNumber:      '',
+  notes:          '',
+};
+
+interface NewCustomerDialogProps {
+  open:    boolean;
+  onClose: () => void;
+}
+
+function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
+  const createCustomer = useStore(s => s.createCustomer);
+  const [form, setForm] = useState<CustomerFormData>(DEFAULT_CUSTOMER);
+  const [saving, setSaving] = useState(false);
+
+  function field<K extends keyof CustomerFormData>(key: K, val: CustomerFormData[K]) {
+    setForm(f => ({ ...f, [key]: val }));
+  }
+
+  function handleClose() { setForm(DEFAULT_CUSTOMER); onClose(); }
+
+  function handleSave() {
+    if (!form.name.trim())  { toast.error('Name is required');  return; }
+    if (!form.phone.trim()) { toast.error('Phone is required'); return; }
+    setSaving(true);
+    try {
+      createCustomer({
+        name:           form.name.trim(),
+        phone:          form.phone.trim(),
+        altPhone:       form.altPhone  || undefined,
+        email:          form.email     || undefined,
+        city:           form.city      || undefined,
+        address:        form.address   || undefined,
+        passportNo:     form.passportNo     || undefined,
+        passportExpiry: form.passportExpiry || undefined,
+        panNumber:      form.panNumber || undefined,
+        notes:          form.notes     || undefined,
+        preferences:    {},
+        tripIds:        [],
+        documents:      [],
+      });
+      toast.success('Customer added', form.name);
+      handleClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>New Customer</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {/* Basic info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="cu-name" required>Full Name</Label>
+              <Input
+                id="cu-name"
+                value={form.name}
+                onChange={e => field('name', e.target.value)}
+                placeholder="e.g. Rajesh Kumar"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cu-phone" required>Phone</Label>
+              <Input
+                id="cu-phone"
+                type="tel"
+                value={form.phone}
+                onChange={e => field('phone', e.target.value)}
+                placeholder="+91 98765 43210"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cu-altphone">Alternate Phone</Label>
+              <Input
+                id="cu-altphone"
+                type="tel"
+                value={form.altPhone}
+                onChange={e => field('altPhone', e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="cu-email">Email</Label>
+              <Input
+                id="cu-email"
+                type="email"
+                value={form.email}
+                onChange={e => field('email', e.target.value)}
+                placeholder="customer@email.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cu-city">City</Label>
+              <Input
+                id="cu-city"
+                value={form.city}
+                onChange={e => field('city', e.target.value)}
+                placeholder="e.g. Mumbai"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cu-address">Address</Label>
+              <Input
+                id="cu-address"
+                value={form.address}
+                onChange={e => field('address', e.target.value)}
+                placeholder="Street, Area"
+              />
+            </div>
+          </div>
+
+          {/* Documents section */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Documents (optional)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-passport">Passport Number</Label>
+                <Input
+                  id="cu-passport"
+                  value={form.passportNo}
+                  onChange={e => field('passportNo', e.target.value)}
+                  placeholder="e.g. N1234567"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-passport-exp">Passport Expiry</Label>
+                <Input
+                  id="cu-passport-exp"
+                  type="date"
+                  value={form.passportExpiry}
+                  onChange={e => field('passportExpiry', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cu-pan">PAN Number</Label>
+                <Input
+                  id="cu-pan"
+                  value={form.panNumber}
+                  onChange={e => field('panNumber', e.target.value)}
+                  placeholder="e.g. ABCDE1234F"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-1.5">
+            <Label htmlFor="cu-notes">Notes</Label>
+            <Input
+              id="cu-notes"
+              value={form.notes}
+              onChange={e => field('notes', e.target.value)}
+              placeholder="Seat preference, dietary needs, VIP notes…"
+            />
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>Add Customer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Customer Detail Drawer ───────────────────────────────────
@@ -273,6 +475,7 @@ export default function Customers() {
   const [search,      setSearch]      = useState('');
   const [segment,     setSegment]     = useState<Segment>('all');
   const [selected,    setSelected]    = useState<Customer | null>(null);
+  const [newOpen,     setNewOpen]     = useState(false);
 
   // ── Stats ─────────────────────────────────────────────────
 
@@ -332,6 +535,9 @@ export default function Customers() {
           <h2 className="text-base font-bold text-gray-900 font-display">Customers</h2>
           <Badge variant="secondary">{customers.length} total</Badge>
         </div>
+        <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1.5">
+          <Plus className="w-3.5 h-3.5" /> New Customer
+        </Button>
       </div>
 
       {/* Stats bar */}
@@ -500,6 +706,8 @@ export default function Customers() {
       {selected && (
         <CustomerDrawer customer={selected} onClose={() => setSelected(null)} />
       )}
+
+      <NewCustomerDialog open={newOpen} onClose={() => setNewOpen(false)} />
     </div>
   );
 }

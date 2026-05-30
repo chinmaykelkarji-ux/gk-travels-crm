@@ -8,7 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
-import { AuthProvider }                   from '@/backend/auth/AuthContext';
+import { AuthProvider, useAuth }          from '@/backend/auth/AuthContext';
 import { ProtectedRoute }                from '@/backend/auth/ProtectedRoute';
 import { shouldRetry, STALE_TIME }        from '@/backend/api/apiError';
 
@@ -83,11 +83,18 @@ function AppShell() {
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [tripFormOpen, setTripFormOpen] = useState(false);
   const [creating,     setCreating]     = useState(false);
-  const createTrip = useStore(s => s.createTrip);
-  const fetchAll   = useStore(s => s.fetchAll);
 
-  // Load all data from PostgreSQL on mount
-  useEffect(() => { void fetchAll(); }, [fetchAll]);
+  const createTrip  = useStore(s => s.createTrip);
+  const fetchAll    = useStore(s => s.fetchAll);
+  const retryFetch  = useStore(s => s.retryFetch);
+  const dataLoading = useStore(s => s.dataLoading);
+  const dataError   = useStore(s => s.dataError);
+  const { isLoading: authLoading } = useAuth();
+
+  // Wait for auth bootstrap to finish, then load data
+  useEffect(() => {
+    if (!authLoading) void fetchAll();
+  }, [authLoading, fetchAll]);
 
   async function handleCreateTrip(data: TripFormSchema) {
     setCreating(true);
@@ -114,6 +121,20 @@ function AppShell() {
     }
   }
 
+  // Show full-screen spinner while auth bootstraps or first data load runs
+  if (authLoading || dataLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-500 font-medium">
+            {authLoading ? 'Connecting…' : 'Loading your data…'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#EEF2F7' }}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -123,6 +144,27 @@ function AppShell() {
           onMenuToggle={() => setSidebarOpen(o => !o)}
           onNewTrip={() => setTripFormOpen(true)}
         />
+
+        {/* Database error banner — shown above page content, non-blocking */}
+        {dataError && (
+          <div className="flex items-center justify-between gap-4 px-5 py-3 bg-red-50 border-b border-red-200 flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-red-500 text-base flex-shrink-0">⚠</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-red-800 truncate">
+                  Could not load data from database
+                </p>
+                <p className="text-xs text-red-600 truncate">{dataError}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => void retryFetch()}
+              className="flex-shrink-0 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto">
           <Suspense fallback={<DashboardSkeleton />}>

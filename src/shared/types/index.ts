@@ -660,6 +660,9 @@ export interface GKStoreState {
   itineraries:     Itinerary[];
   vouchers:        Voucher[];
   staff:           Staff[];
+  // Data-load lifecycle — used by AppShell to render loading/error UI
+  dataLoading:     boolean;
+  dataError:       string | null;
 }
 
 // ─── Form Shapes (subset of entities, used by React Hook Form) ─
