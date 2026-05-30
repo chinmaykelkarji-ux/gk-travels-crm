@@ -1217,6 +1217,14 @@ export const useStore = create<GKStore>()(
       // instead of a silent empty screen.
       //
       async fetchAll() {
+        // Short-circuit immediately if there's no auth token — no point
+        // retrying: every attempt will return 401 until auth bootstraps.
+        const token = localStorage.getItem('gkcrm_token');
+        if (!token) {
+          set({ dataLoading: false, dataError: 'Not authenticated — page will reload automatically.' });
+          return;
+        }
+
         set({ dataLoading: true, dataError: null });
 
         const MAX_ATTEMPTS = 3;

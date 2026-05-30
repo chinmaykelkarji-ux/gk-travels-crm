@@ -5,7 +5,7 @@ const TOKEN_KEY = 'gkcrm_token';
 export const apiClient = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 8000,  // 8 s — fast enough to feel responsive, enough for slow DB queries
 });
 
 // ── Request: attach JWT on every call ──────────────────────────

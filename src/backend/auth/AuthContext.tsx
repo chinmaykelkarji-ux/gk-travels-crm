@@ -63,8 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (existingToken) {
       try {
-        // Token present — verify it's still accepted by the backend
-        const res = await apiClient.get('/auth/me');
+        // Token present — verify it's still accepted by the backend (4 s max)
+        const res = await apiClient.get('/auth/me', { timeout: 4000 });
         setUser(toAuthUser(res.data.user));
         setIsLoading(false);
         return;
@@ -75,9 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // No valid token — call /auth/setup to get one
-    // This creates the admin user if it doesn't exist yet (idempotent)
+    // This creates the admin user if it doesn't exist yet (idempotent).
+    // Use a short 6 s timeout so the app doesn't hang if the backend is down.
     try {
-      const res = await apiClient.post('/auth/setup');
+      const res = await apiClient.post('/auth/setup', {}, { timeout: 6000 });
       tokenStorage.set(res.data.token);
       setUser(toAuthUser(res.data.user));
     } catch (err) {

@@ -121,15 +121,15 @@ function AppShell() {
     }
   }
 
-  // Show full-screen spinner while auth bootstraps or first data load runs
-  if (authLoading || dataLoading) {
+  // Block ONLY during auth bootstrap (getting JWT) — usually < 1 second.
+  // Never block on dataLoading: render content immediately so the app
+  // feels responsive; the store starts empty and fills in as data arrives.
+  if (authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-500 font-medium">
-            {authLoading ? 'Connecting…' : 'Loading your data…'}
-          </p>
+          <p className="text-sm text-slate-500 font-medium">Connecting…</p>
         </div>
       </div>
     );
@@ -145,21 +145,31 @@ function AppShell() {
           onNewTrip={() => setTripFormOpen(true)}
         />
 
-        {/* Database error banner — shown above page content, non-blocking */}
-        {dataError && (
+        {/* Thin progress bar while data is loading — non-blocking */}
+        {dataLoading && (
+          <div className="h-0.5 w-full bg-gray-100 flex-shrink-0 overflow-hidden">
+            <div
+              className="h-full bg-indigo-500 animate-pulse"
+              style={{ width: '60%', transition: 'width 0.5s ease' }}
+            />
+          </div>
+        )}
+
+        {/* Database error banner — shown above content, non-blocking */}
+        {dataError && !dataLoading && (
           <div className="flex items-center justify-between gap-4 px-5 py-3 bg-red-50 border-b border-red-200 flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-red-500 text-base flex-shrink-0">⚠</span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-red-800 truncate">
-                  Could not load data from database
+                <p className="text-sm font-semibold text-red-800">
+                  Could not load data — make sure the backend server and database are running
                 </p>
-                <p className="text-xs text-red-600 truncate">{dataError}</p>
+                <p className="text-xs text-red-500 mt-0.5 truncate">{dataError}</p>
               </div>
             </div>
             <button
               onClick={() => void retryFetch()}
-              className="flex-shrink-0 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors"
+              className="flex-shrink-0 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
             >
               Retry
             </button>
