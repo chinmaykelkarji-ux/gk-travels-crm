@@ -33,9 +33,11 @@ const PORT = Number(process.env.PORT) || 3001;
 // CORS: allow credentials (cookies) from the Vite dev server + production origin
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
   'http://localhost:5173',
   process.env.FRONTEND_URL,
-].filter(Boolean) as string[];
+].filter(Boolean) as string[]
 
 app.use(cors({
   origin: (origin, cb) => {
@@ -118,6 +120,12 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`🚀 GK Travels CRM API  →  http://localhost:${PORT}`);
     console.log(`   Health check        →  http://localhost:${PORT}/api/health`);
+  }).on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use. Run: npx kill-port ${PORT}`);
+      process.exit(1);
+    }
+    throw err;
   });
 }
 
