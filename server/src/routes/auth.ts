@@ -1,104 +1,143 @@
-import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../lib/prisma.js';
-import { signToken, verifyToken, requireAuth, type AuthRequest } from '../middleware/auth.js';
+// ============================================================
+// GK TRAVELS CRM — Authentication Routes
+//
+// POST /api/auth/login   — validate credentials, set HttpOnly cookie
+// POST /api/auth/logout  — clear cookie
+// GET  /api/auth/me      — verify cookie, return current user
+// PUT  /api/auth/password — change own password (authenticated)
+// ============================================================
+
+import { Router }     from 'express';
+import bcrypt         from 'bcryptjs';
+import { prisma }     from '../lib/prisma.js';
+import {
+  signToken, requireAuth, COOKIE_NAME, COOKIE_OPTIONS,
+  type AuthRequest,
+} from '../middleware/auth.js';
 
 const router = Router();
 
-// POST /api/auth/login
+// ─── POST /api/auth/login ─────────────────────────────────────
+
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body as { email: string; password: string };
-    if (!email || !password) {
-      res.status(400).json({ error: 'Email and password required' });
+    const { email, password } = req.body as { email?: string; password?: string };
+
+    if (!email?.trim() || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user || !user.isActive) {
-      res.status(401).json({ error: 'Invalid credentials' });
+    const user = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+
+    // Deliberately vague message — don't reveal whether email exists
+    if (!user) {
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    const valid = await bcrypt.compare(password, user.password);
+    if (!user.isActive) {
+      res.status(403).json({
+        error: 'Account is deactivated. Contact your administrator.',
+      });
+      return;
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
+    // Issue JWT stored in an HttpOnly cookie — not accessible from JS
     const token = signToken({ id: user.id, email: user.email, role: user.role });
+    res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
+
     res.json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: {
+        id:      user.id,
+        email:   user.email,
+        name:    user.name,
+        role:    user.role,
+      },
     });
   } catch (err) {
     console.error('[auth/login]', err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed — please try again' });
   }
 });
 
-// GET /api/auth/me
+// ─── POST /api/auth/logout ────────────────────────────────────
+
+router.post('/logout', (req, res) => {
+  res.clearCookie(COOKIE_NAME, { path: '/' });
+  res.json({ ok: true });
+});
+
+// ─── GET /api/auth/me ─────────────────────────────────────────
+
 router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   try {
     const user = await prisma.user.findUnique({
       where:  { id: req.userId },
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });
-    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    if (!user) {
+      res.clearCookie(COOKIE_NAME, { path: '/' });
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.clearCookie(COOKIE_NAME, { path: '/' });
+      res.status(403).json({ error: 'Account deactivated' });
+      return;
+    }
+
     res.json({ user });
   } catch (err) {
+    console.error('[auth/me]', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/auth/setup
-// No credentials required. Idempotently creates the default admin user
-// if it does not already exist, then returns a valid JWT.
-// Used by the frontend on every cold start to bootstrap auth
-// without a login screen.
-router.post('/setup', async (_req, res) => {
-  try {
-    const ADMIN_EMAIL    = 'admin@gktravels.local';
-    const ADMIN_PASSWORD = 'GKAdmin2026!';
+// ─── PUT /api/auth/password ───────────────────────────────────
 
-    const hashed = await bcrypt.hash(ADMIN_PASSWORD, 10);
-    const user   = await prisma.user.upsert({
-      where:  { email: ADMIN_EMAIL },
-      update: { isActive: true },           // re-enable if previously deactivated
-      create: {
-        email:    ADMIN_EMAIL,
-        password: hashed,
-        name:     'GK Travels Admin',
-        role:     'ADMIN',
-        isActive: true,
-      },
-    });
-
-    const token = signToken({ id: user.id, email: user.email, role: user.role });
-    res.json({
-      token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    });
-  } catch (err) {
-    console.error('[auth/setup]', err);
-    res.status(500).json({ error: 'Setup failed' });
-  }
-});
-
-// PUT /api/auth/password  — change password
 router.put('/password', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string;
+      newPassword?:     string;
+    };
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: 'currentPassword and newPassword are required' });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'New password must be at least 8 characters' });
+      return;
+    }
+
     const user = await prisma.user.findUnique({ where: { id: req.userId } });
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
 
-    const valid = await bcrypt.compare(currentPassword, user.password);
-    if (!valid) { res.status(400).json({ error: 'Current password incorrect' }); return; }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      res.status(400).json({ error: 'Current password is incorrect' });
+      return;
+    }
 
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({ where: { id: req.userId }, data: { password: hashed } });
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: req.userId }, data: { passwordHash } });
+
     res.json({ ok: true });
   } catch (err) {
+    console.error('[auth/password]', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

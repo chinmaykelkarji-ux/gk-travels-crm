@@ -19,15 +19,22 @@ generator client {
 
 // ─── Auth ────────────────────────────────────────────────────
 
+enum UserRole {
+  ADMIN
+  SALES
+  OPERATIONS
+  ACCOUNTS
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String   // bcrypt hash
-  name      String
-  role      String   @default("ADMIN")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")  // bcrypt hash — never plain text
+  name         String
+  role         UserRole @default(ADMIN)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("users")
 }

@@ -1,15 +1,15 @@
 // ============================================================
 // GK TRAVELS CRM — RBAC Permission Definitions
 //
-// Two layers of enforcement:
-//   1. Frontend: permission checks gate UI elements
-//   2. Database: RLS policies enforce at PostgreSQL level
+// Roles (matches Prisma UserRole enum):
+//   ADMIN      — full access
+//   SALES      — leads, trips, quotations, customers
+//   OPERATIONS — trips, bookings, tasks, vendors, itineraries, vouchers
+//   ACCOUNTS   — finance, payments, vendor payments, reports
 //
-// Never rely on frontend checks alone for security.
-//
-// NOTE: Supabase may return role values in lowercase ('admin').
-// All checker functions normalise the role to UPPER_CASE before
-// lookup so the mapping never misses due to case mismatch.
+// Two enforcement layers:
+//   1. Frontend — gates UI elements (never trust alone)
+//   2. Backend  — requireRole() middleware on sensitive routes
 // ============================================================
 
 import type { UserRole } from '@/backend/supabase/database.types';
@@ -31,7 +31,7 @@ export const PERMISSIONS = {
   LEADS_DELETE:        'leads:delete',
   LEADS_CONVERT:       'leads:convert',
 
-  // Finance — sensitive, restricted to ADMIN+
+  // Finance — ACCOUNTS + ADMIN only
   FINANCE_VIEW:        'finance:view',
   FINANCE_PAYMENTS:    'finance:payments',
   FINANCE_REPORTS:     'finance:reports',
@@ -70,10 +70,12 @@ export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
 const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  SUPER_ADMIN: ALL_PERMISSIONS,
-  ADMIN:       ALL_PERMISSIONS,
 
-  MANAGER: [
+  // ADMIN — everything
+  ADMIN: ALL_PERMISSIONS,
+
+  // SALES — lead/trip/quotation/customer workflow, no finance, no settings users
+  SALES: [
     PERMISSIONS.TRIPS_VIEW,
     PERMISSIONS.TRIPS_CREATE,
     PERMISSIONS.TRIPS_EDIT,
@@ -81,11 +83,26 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.LEADS_VIEW,
     PERMISSIONS.LEADS_CREATE,
     PERMISSIONS.LEADS_EDIT,
+    PERMISSIONS.LEADS_DELETE,
     PERMISSIONS.LEADS_CONVERT,
-    PERMISSIONS.FINANCE_VIEW,
-    PERMISSIONS.FINANCE_PAYMENTS,
-    PERMISSIONS.FINANCE_REPORTS,
-    PERMISSIONS.FINANCE_EXPORT,
+    PERMISSIONS.CUSTOMERS_VIEW,
+    PERMISSIONS.CUSTOMERS_CREATE,
+    PERMISSIONS.CUSTOMERS_EDIT,
+    PERMISSIONS.CUSTOMERS_DOCS,
+    PERMISSIONS.OPS_VIEW,
+    PERMISSIONS.OPS_TASKS,
+    PERMISSIONS.OPS_REMINDERS,
+    PERMISSIONS.BOOKINGS_VIEW,
+    PERMISSIONS.BOOKINGS_CREATE,
+    PERMISSIONS.SETTINGS_VIEW,
+  ],
+
+  // OPERATIONS — day-to-day trip execution, no finance, no leads
+  OPERATIONS: [
+    PERMISSIONS.TRIPS_VIEW,
+    PERMISSIONS.TRIPS_CREATE,
+    PERMISSIONS.TRIPS_EDIT,
+    PERMISSIONS.TRIPS_CONFIRM,
     PERMISSIONS.CUSTOMERS_VIEW,
     PERMISSIONS.CUSTOMERS_CREATE,
     PERMISSIONS.CUSTOMERS_EDIT,
@@ -99,27 +116,21 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.SETTINGS_VIEW,
   ],
 
-  STAFF: [
+  // ACCOUNTS — finance only, read-only on trips
+  ACCOUNTS: [
     PERMISSIONS.TRIPS_VIEW,
-    PERMISSIONS.TRIPS_CREATE,
-    PERMISSIONS.TRIPS_EDIT,
-    PERMISSIONS.LEADS_VIEW,
-    PERMISSIONS.LEADS_CREATE,
-    PERMISSIONS.LEADS_EDIT,
     PERMISSIONS.CUSTOMERS_VIEW,
-    PERMISSIONS.CUSTOMERS_CREATE,
-    PERMISSIONS.CUSTOMERS_EDIT,
-    PERMISSIONS.OPS_VIEW,
-    PERMISSIONS.OPS_TASKS,
-    PERMISSIONS.OPS_REMINDERS,
+    PERMISSIONS.FINANCE_VIEW,
+    PERMISSIONS.FINANCE_PAYMENTS,
+    PERMISSIONS.FINANCE_REPORTS,
+    PERMISSIONS.FINANCE_EXPORT,
+    PERMISSIONS.FINANCE_DELETE_PAYMENT,
     PERMISSIONS.BOOKINGS_VIEW,
-    PERMISSIONS.BOOKINGS_CREATE,
+    PERMISSIONS.SETTINGS_VIEW,
   ],
 };
 
-// ─── Internal normaliser ──────────────────────────────────────
-// Supabase may store roles in lowercase ('admin', 'super_admin').
-// Normalise once here so every downstream check is consistent.
+// ─── Normaliser ───────────────────────────────────────────────
 
 function normalise(role: string): UserRole {
   return role.toUpperCase() as UserRole;
@@ -127,35 +138,55 @@ function normalise(role: string): UserRole {
 
 // ─── Permission Checkers ─────────────────────────────────────
 
-export function hasPermission(role: UserRole | null | undefined, permission: Permission): boolean {
+export function hasPermission(
+  role: UserRole | string | null | undefined,
+  permission: Permission,
+): boolean {
   if (!role) return false;
-  const r = normalise(role);
-  // ADMIN and SUPER_ADMIN have every permission — explicit fast-path
-  // also handles any case variation coming directly from the DB ('admin').
-  if (r === 'ADMIN' || r === 'SUPER_ADMIN') return true;
+  const r = normalise(role as string);
+  if (r === 'ADMIN') return true;   // ADMIN always passes
   return ROLE_PERMISSIONS[r]?.includes(permission) ?? false;
 }
 
-export function hasAnyPermission(role: UserRole | null | undefined, permissions: Permission[]): boolean {
+export function hasAnyPermission(
+  role: UserRole | null | undefined,
+  permissions: Permission[],
+): boolean {
   return permissions.some(p => hasPermission(role, p));
 }
 
-export function hasAllPermissions(role: UserRole | null | undefined, permissions: Permission[]): boolean {
+export function hasAllPermissions(
+  role: UserRole | null | undefined,
+  permissions: Permission[],
+): boolean {
   return permissions.every(p => hasPermission(role, p));
 }
 
-export function isAtLeast(role: UserRole | null | undefined, minRole: UserRole): boolean {
-  const hierarchy: UserRole[] = ['STAFF', 'MANAGER', 'ADMIN', 'SUPER_ADMIN'];
-  const userIdx = role ? hierarchy.indexOf(normalise(role)) : -1;
-  const minIdx  = hierarchy.indexOf(minRole);
+// Role hierarchy for isAtLeast checks: ACCOUNTS < OPERATIONS < SALES < ADMIN
+const HIERARCHY: UserRole[] = ['ACCOUNTS', 'OPERATIONS', 'SALES', 'ADMIN'];
+
+export function isAtLeast(
+  role: UserRole | string | null | undefined,
+  minRole: UserRole,
+): boolean {
+  const normalised = role ? normalise(role as string) : null;
+  const userIdx    = normalised ? HIERARCHY.indexOf(normalised) : -1;
+  const minIdx     = HIERARCHY.indexOf(minRole);
   return userIdx >= minIdx;
 }
 
-// ─── Role labels for display ─────────────────────────────────
+// ─── Display labels ───────────────────────────────────────────
 
 export const ROLE_LABELS: Record<UserRole, string> = {
-  SUPER_ADMIN: 'Super Admin',
-  ADMIN:       'Admin',
-  MANAGER:     'Manager',
-  STAFF:       'Staff',
+  ADMIN:      'Admin',
+  SALES:      'Sales',
+  OPERATIONS: 'Operations',
+  ACCOUNTS:   'Accounts',
+};
+
+export const ROLE_COLORS: Record<UserRole, string> = {
+  ADMIN:      'bg-indigo-100 text-indigo-700',
+  SALES:      'bg-emerald-100 text-emerald-700',
+  OPERATIONS: 'bg-blue-100 text-blue-700',
+  ACCOUNTS:   'bg-amber-100 text-amber-700',
 };

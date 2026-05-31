@@ -20,7 +20,8 @@ export type Json =
 
 // ─── Enum types (must match Prisma schema enums) ─────────────
 
-export type UserRole      = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'STAFF';
+// Matches the Prisma UserRole enum in schema.prisma
+export type UserRole = 'ADMIN' | 'SALES' | 'OPERATIONS' | 'ACCOUNTS';
 export type TripStatus    = 'DRAFT' | 'QUOTATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type LeadStatus    = 'NEW' | 'CONTACTED' | 'FOLLOW_UP' | 'QUOTATION_SENT' | 'CONFIRMED' | 'CONVERTED' | 'CANCELLED';
 export type LeadPriority  = 'LOW' | 'MEDIUM' | 'HIGH';

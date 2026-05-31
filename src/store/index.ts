@@ -42,15 +42,12 @@ function onMutationError(label: string) {
   return (err: unknown) => {
     console.error(`[api] ${label}`, err);
     const status = (err as { response?: { status?: number } })?.response?.status;
-    if (status === 401) {
-      toast.error('Session expired', 'Your session expired. The page will refresh to reconnect.');
-      setTimeout(() => window.location.reload(), 1500);
-    } else {
-      toast.error(
-        'Save failed',
-        `"${label}" could not be saved to the database. Check your connection and try again.`,
-      );
-    }
+    // 401/403 — apiClient interceptor already redirects to /login, no toast needed
+    if (status === 401 || status === 403) return;
+    toast.error(
+      'Save failed',
+      `Could not save "${label}" to the database — check your connection.`,
+    );
   };
 }
 
@@ -1217,14 +1214,6 @@ export const useStore = create<GKStore>()(
       // instead of a silent empty screen.
       //
       async fetchAll() {
-        // Short-circuit immediately if there's no auth token — no point
-        // retrying: every attempt will return 401 until auth bootstraps.
-        const token = localStorage.getItem('gkcrm_token');
-        if (!token) {
-          set({ dataLoading: false, dataError: 'Not authenticated — page will reload automatically.' });
-          return;
-        }
-
         set({ dataLoading: true, dataError: null });
 
         const MAX_ATTEMPTS = 3;
@@ -1275,10 +1264,16 @@ export const useStore = create<GKStore>()(
 
             return; // success â€” exit retry loop
           } catch (err) {
+            const status = (err as { response?: { status?: number } })?.response?.status;
+            // Don't retry auth errors — the apiClient interceptor already
+            // redirects to /login, so retrying here is pointless and slow.
+            if (status === 401 || status === 403) {
+              set({ dataLoading: false, dataError: null });
+              return;
+            }
             lastError = err;
             console.warn(`[store] fetchAll attempt ${attempt}/${MAX_ATTEMPTS} failed`, err);
             if (attempt < MAX_ATTEMPTS) {
-              // Exponential back-off: 1 s, 2 s, 3 s
               await new Promise(r => setTimeout(r, 1000 * attempt));
             }
           }

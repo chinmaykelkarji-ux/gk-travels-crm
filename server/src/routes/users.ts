@@ -1,7 +1,7 @@
-import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../lib/prisma.js';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { Router }  from 'express';
+import bcrypt      from 'bcryptjs';
+import { prisma }  from '../lib/prisma.js';
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -16,6 +16,8 @@ const SAFE_SELECT = {
   updatedAt: true,
 } as const;
 
+const VALID_ROLES = ['ADMIN', 'SALES', 'OPERATIONS', 'ACCOUNTS'] as const;
+
 // GET /api/users
 router.get('/', async (_req, res) => {
   try {
@@ -29,27 +31,41 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// POST /api/users — create new user
-router.post('/', async (req: AuthRequest, res) => {
+// POST /api/users — create new user (ADMIN only)
+router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     const { email, password, name, role } = req.body as {
-      email: string; password: string; name: string; role?: string;
+      email?: string; password?: string; name?: string; role?: string;
     };
 
-    if (!email || !password || !name) {
+    if (!email?.trim() || !password || !name?.trim()) {
       res.status(400).json({ error: 'email, password and name are required' });
       return;
     }
 
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (password.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters' });
+      return;
+    }
+
+    const assignedRole = VALID_ROLES.includes(role as never) ? role : 'OPERATIONS';
+
+    const existing = await prisma.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
     if (existing) {
       res.status(409).json({ error: 'A user with this email already exists' });
       return;
     }
 
-    const hashed = await bcrypt.hash(password, 10);
-    const user   = await prisma.user.create({
-      data:   { email: email.toLowerCase(), password: hashed, name, role: role ?? 'STAFF' },
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.create({
+      data: {
+        email:        email.trim().toLowerCase(),
+        passwordHash,
+        name:         name.trim(),
+        role:         assignedRole as 'ADMIN' | 'SALES' | 'OPERATIONS' | 'ACCOUNTS',
+      },
       select: SAFE_SELECT,
     });
     res.status(201).json(user);
@@ -59,23 +75,22 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-// PUT /api/users/:id — update name, email, role, isActive
-router.put('/:id', async (req: AuthRequest, res) => {
+// PUT /api/users/:id — update name, email, role, isActive (ADMIN only)
+router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     const { name, email, role, isActive } = req.body as {
       name?: string; email?: string; role?: string; isActive?: boolean;
     };
 
-    // Prevent self-deactivation
     if (req.userId === req.params.id && isActive === false) {
       res.status(400).json({ error: 'You cannot deactivate your own account' });
       return;
     }
 
     const data: Record<string, unknown> = {};
-    if (name     !== undefined) data.name     = name;
-    if (email    !== undefined) data.email    = email.toLowerCase();
-    if (role     !== undefined) data.role     = role;
+    if (name     !== undefined) data.name     = name.trim();
+    if (email    !== undefined) data.email    = email.trim().toLowerCase();
+    if (role     !== undefined && VALID_ROLES.includes(role as never)) data.role = role;
     if (isActive !== undefined) data.isActive = isActive;
 
     const user = await prisma.user.update({
@@ -90,18 +105,20 @@ router.put('/:id', async (req: AuthRequest, res) => {
   }
 });
 
-// PUT /api/users/:id/password — change password (admin sets it directly)
-router.put('/:id/password', async (req: AuthRequest, res) => {
+// PUT /api/users/:id/password — admin resets another user's password
+router.put('/:id/password', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
-    const { newPassword } = req.body as { newPassword: string };
-    if (!newPassword || newPassword.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const { newPassword } = req.body as { newPassword?: string };
+
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters' });
       return;
     }
-    const hashed = await bcrypt.hash(newPassword, 10);
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
       where: { id: req.params.id },
-      data:  { password: hashed },
+      data:  { passwordHash },
     });
     res.json({ ok: true });
   } catch (err) {
@@ -109,8 +126,8 @@ router.put('/:id/password', async (req: AuthRequest, res) => {
   }
 });
 
-// DELETE /api/users/:id
-router.delete('/:id', async (req: AuthRequest, res) => {
+// DELETE /api/users/:id (ADMIN only)
+router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     if (req.userId === req.params.id) {
       res.status(400).json({ error: 'You cannot delete your own account' });

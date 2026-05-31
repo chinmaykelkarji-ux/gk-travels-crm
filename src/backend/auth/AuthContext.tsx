@@ -1,7 +1,29 @@
+// ============================================================
+// GK TRAVELS CRM — Auth Context
+//
+// Session flow:
+//   Mount → GET /auth/me (browser sends HttpOnly cookie automatically)
+//     ↳ 200 → user restored, app renders
+//     ↳ 401 → no valid session, show login page
+//
+// Login:
+//   POST /auth/login { email, password }
+//     ↳ server validates credentials, sets HttpOnly cookie
+//     ↳ returns { user } → stored in React state
+//
+// Logout:
+//   POST /auth/logout
+//     ↳ server clears the cookie
+//     ↳ React state cleared → login page shown
+//
+// The JWT lives ONLY in an HttpOnly cookie — never in localStorage,
+// sessionStorage, or JS-accessible memory.
+// ============================================================
+
 import {
   createContext, useContext, useEffect, useState, useCallback, type ReactNode,
 } from 'react';
-import { apiClient, tokenStorage } from '@/lib/apiClient';
+import apiClient from '@/lib/apiClient';
 import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser } from './types';
 import type { Permission } from './permissions';
@@ -14,7 +36,6 @@ interface AuthContextValue {
   isLoading:       boolean;
   isAuthenticated: boolean;
   signIn:          (email: string, password: string) => Promise<void>;
-  signUp:          (email: string, password: string, name: string) => Promise<void>;
   signOut:         () => Promise<void>;
 }
 
@@ -22,104 +43,54 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ─── Shape helper ──────────────────────────────────────────────
 
-function toAuthUser(u: { id: string; email: string; name: string; role: string }): AuthUser {
+function toAuthUser(u: {
+  id: string; email: string; name: string; role: string; isActive?: boolean;
+}): AuthUser {
   return {
     id:       u.id,
-    orgId:    'local',
+    orgId:    'gktravel',
     email:    u.email,
     name:     u.name,
-    role:     (u.role as UserRole) ?? 'ADMIN',
+    role:     u.role.toUpperCase() as UserRole,
     avatar:   null,
     phone:    null,
-    isActive: true,
+    isActive: u.isActive ?? true,
   };
 }
 
 // ─── Provider ──────────────────────────────────────────────────
-//
-// Bootstrap flow (no login screen):
-//   1. Check localStorage for an existing JWT.
-//   2. If found, call GET /auth/me to verify it's still valid.
-//   3. If not found (or expired/invalid), call POST /auth/setup.
-//      /auth/setup idempotently creates the admin user if needed
-//      and returns a fresh JWT — no credentials required.
-//   4. Store the JWT in localStorage so apiClient attaches it to
-//      every subsequent request (Authorization: Bearer <token>).
-//
-// This guarantees that every API call — including fetchAll() in the
-// Zustand store — carries a valid token, so the backend requireAuth
-// middleware lets them through and data persists to PostgreSQL.
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user,      setUser]      = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // On mount: attempt to restore session from the HttpOnly cookie.
+  // GET /auth/me succeeds if the cookie is present and not expired.
   useEffect(() => {
-    void bootstrap();
+    apiClient.get('/auth/me')
+      .then(res => setUser(toAuthUser(res.data.user)))
+      .catch(() => setUser(null))           // 401 = no session, show login
+      .finally(() => setIsLoading(false));
   }, []);
 
-  async function bootstrap() {
-    const existingToken = tokenStorage.get();
-
-    if (existingToken) {
-      try {
-        // Token present — verify it's still accepted by the backend (4 s max)
-        const res = await apiClient.get('/auth/me', { timeout: 4000 });
-        setUser(toAuthUser(res.data.user));
-        setIsLoading(false);
-        return;
-      } catch {
-        // Token invalid or expired — clear it and fall through to setup
-        tokenStorage.clear();
-      }
-    }
-
-    // No valid token — call /auth/setup to get one
-    // This creates the admin user if it doesn't exist yet (idempotent).
-    // Use a short 6 s timeout so the app doesn't hang if the backend is down.
-    try {
-      const res = await apiClient.post('/auth/setup', {}, { timeout: 6000 });
-      tokenStorage.set(res.data.token);
-      setUser(toAuthUser(res.data.user));
-    } catch (err) {
-      // Backend unreachable (DB down, server not started, etc.)
-      // Set a minimal local user so the UI renders; data will be empty
-      // but the app won't crash.
-      console.error('[auth] bootstrap failed — running in offline mode', err);
-      setUser({
-        id:       'local-admin',
-        orgId:    'local',
-        email:    'admin@gktravels.local',
-        name:     'GK Admin (offline)',
-        role:     'ADMIN' as UserRole,
-        avatar:   null,
-        phone:    null,
-        isActive: true,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  // signIn kept for future use / Settings page password change flow
   const signIn = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const res = await apiClient.post('/auth/login', { email, password });
-      tokenStorage.set(res.data.token);
-      setUser(toAuthUser(res.data.user));
-    } finally {
-      setIsLoading(false);
-    }
+    // Server sets the HttpOnly cookie; we only need the user object
+    const res = await apiClient.post('/auth/login', {
+      email:    email.trim().toLowerCase(),
+      password,
+    });
+    setUser(toAuthUser(res.data.user));
   }, []);
-
-  const signUp = useCallback(async (_e: string, _p: string, _n: string) => {}, []);
 
   const signOut = useCallback(async () => {
-    tokenStorage.clear();
-    // Re-bootstrap immediately so a new token is fetched
-    await bootstrap();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      await apiClient.post('/auth/logout');
+    } catch {
+      // Even if the server call fails, clear local state
+    }
+    setUser(null);
+    window.location.href = '/login';
+  }, []);
 
   return (
     <AuthContext.Provider value={{
@@ -127,7 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: user !== null,
       signIn,
-      signUp,
       signOut,
     }}>
       {children}
