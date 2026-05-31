@@ -1,29 +1,13 @@
 // ============================================================
-// GK TRAVELS CRM — Auth Context
+// GK TRAVELS CRM — Auth Context (single-user stub)
 //
-// Session flow:
-//   Mount → GET /auth/me (browser sends HttpOnly cookie automatically)
-//     ↳ 200 → user restored, app renders
-//     ↳ 401 → no valid session, show login page
-//
-// Login:
-//   POST /auth/login { email, password }
-//     ↳ server validates credentials, sets HttpOnly cookie
-//     ↳ returns { user } → stored in React state
-//
-// Logout:
-//   POST /auth/logout
-//     ↳ server clears the cookie
-//     ↳ React state cleared → login page shown
-//
-// The JWT lives ONLY in an HttpOnly cookie — never in localStorage,
-// sessionStorage, or JS-accessible memory.
+// Authentication removed. Always authenticated as local admin.
+// signIn / signOut are no-ops kept for interface compatibility.
 // ============================================================
 
 import {
-  createContext, useContext, useEffect, useState, useCallback, type ReactNode,
+  createContext, useContext, useCallback, type ReactNode,
 } from 'react';
-import apiClient from '@/lib/apiClient';
 import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser } from './types';
 import type { Permission } from './permissions';
@@ -41,72 +25,30 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// ─── Shape helper ──────────────────────────────────────────────
+// ─── Hardcoded local user ──────────────────────────────────────
 
-function toAuthUser(u: {
-  id: string; email: string; name: string; role: string; isActive?: boolean;
-}): AuthUser {
-  return {
-    id:       u.id,
-    orgId:    'gktravel',
-    email:    u.email,
-    name:     u.name,
-    role:     u.role.toUpperCase() as UserRole,
-    avatar:   null,
-    phone:    null,
-    isActive: u.isActive ?? true,
-  };
-}
+const LOCAL_USER: AuthUser = {
+  id:       'local-admin',
+  orgId:    'gktravel',
+  email:    'chinmaykelkara@gmail.com',
+  name:     'Chinmay',
+  role:     'ADMIN',
+  avatar:   null,
+  phone:    null,
+  isActive: true,
+};
 
 // ─── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user,      setUser]      = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // On mount: restore session from the HttpOnly cookie.
-  // In development, the dev-bypass issues a session automatically so the
-  // login screen is never shown.
-  //
-  // DEVELOPMENT BYPASS
-  // REMOVE BEFORE PRODUCTION
-  useEffect(() => {
-    const restore = import.meta.env.DEV
-      // DEVELOPMENT BYPASS — auto-authenticate as admin@gktravels.local
-      // REMOVE BEFORE PRODUCTION
-      ? apiClient.post('/auth/dev-login')
-      : apiClient.get('/auth/me');
-
-    restore
-      .then(res => setUser(toAuthUser(res.data.user)))
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    // Server sets the HttpOnly cookie; we only need the user object
-    const res = await apiClient.post('/auth/login', {
-      email:    email.trim().toLowerCase(),
-      password,
-    });
-    setUser(toAuthUser(res.data.user));
-  }, []);
-
-  const signOut = useCallback(async () => {
-    try {
-      await apiClient.post('/auth/logout');
-    } catch {
-      // Even if the server call fails, clear local state
-    }
-    setUser(null);
-    window.location.href = '/login';
-  }, []);
+  const signIn  = useCallback(async () => {}, []);
+  const signOut = useCallback(async () => {}, []);
 
   return (
     <AuthContext.Provider value={{
-      user,
-      isLoading,
-      isAuthenticated: user !== null,
+      user:            LOCAL_USER,
+      isLoading:       false,
+      isAuthenticated: true,
       signIn,
       signOut,
     }}>

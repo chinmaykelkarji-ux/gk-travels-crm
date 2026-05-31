@@ -41,44 +41,16 @@ export interface AuthRequest extends Request {
 
 // ─── Middleware ───────────────────────────────────────────────
 
-/**
- * requireAuth — reads JWT from the HttpOnly cookie `gkcrm_session`.
- * Attaches userId / userEmail / userRole to req for downstream handlers.
- * Returns 401 if cookie is absent or JWT is expired/invalid.
- */
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
-  const token = (req as Request & { cookies: Record<string, string> }).cookies?.[COOKIE_NAME];
+// Single-user application — authentication disabled.
+// requireAuth and requireRole are no-op passthroughs kept so all
+// route files compile without changes.
 
-  if (!token) {
-    res.status(401).json({ error: 'Not authenticated — please log in' });
-    return;
-  }
-
-  try {
-    const payload  = verifyToken(token);
-    req.userId     = payload.id;
-    req.userEmail  = payload.email;
-    req.userRole   = payload.role;
-    next();
-  } catch {
-    // Clear the invalid or expired cookie so the browser doesn't keep sending it
-    res.clearCookie(COOKIE_NAME, { path: '/' });
-    res.status(401).json({ error: 'Session expired — please log in again' });
-  }
+export function requireAuth(_req: AuthRequest, _res: Response, next: NextFunction): void {
+  next();
 }
 
-/**
- * requireRole(...roles) — role-based guard, must come after requireAuth.
- * Usage: router.delete('/:id', requireAuth, requireRole('ADMIN'), handler)
- */
-export function requireRole(...roles: string[]) {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.userRole || !roles.includes(req.userRole)) {
-      res.status(403).json({
-        error: `Access denied — requires one of: ${roles.join(', ')}`,
-      });
-      return;
-    }
+export function requireRole(..._roles: string[]) {
+  return (_req: AuthRequest, _res: Response, next: NextFunction): void => {
     next();
   };
 }

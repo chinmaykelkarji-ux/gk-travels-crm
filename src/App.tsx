@@ -1,14 +1,8 @@
 // ============================================================
 // GK TRAVELS CRM — Application Root
 //
-// Route hierarchy:
-//   /login          → LoginPage (public — redirect to / if already authed)
-//   / + all CRM     → ProtectedRoute → AppShell → Outlet
-//
-// Auth flow:
-//   AuthContext calls GET /auth/me on mount → restores session from cookie
-//   ProtectedRoute redirects to /login when unauthenticated
-//   AppShell calls fetchAll() after auth resolves → hydrates Zustand store
+// Single-user application — no authentication required.
+// Opens directly to Dashboard on every load.
 // ============================================================
 
 import { useState, useEffect, Suspense, lazy } from 'react';
@@ -17,7 +11,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { AuthProvider, useAuth }   from '@/backend/auth/AuthContext';
-import { ProtectedRoute }          from '@/backend/auth/ProtectedRoute';
 import { shouldRetry, STALE_TIME } from '@/backend/api/apiError';
 
 import { Sidebar }           from '@/shared/components/Sidebar';
@@ -33,7 +26,6 @@ import { TripForm }            from '@/modules/trips/TripForm';
 
 // ─── Lazy page imports ────────────────────────────────────────
 
-const LoginPage      = lazy(() => import('@/modules/auth/LoginPage'));
 const Dashboard      = lazy(() => import('@/modules/dashboard/Dashboard'));
 const Trips          = lazy(() => import('@/modules/trips/Trips'));
 const TripDetail     = lazy(() => import('@/modules/trips/TripDetail'));
@@ -206,50 +198,33 @@ export default function App() {
         <BrowserRouter>
           <Routes>
 
-            {/* ── Public: login page ─────────────────────────── */}
-            <Route
-              path="/login"
-              element={
-                <Suspense fallback={<PageSpinner />}>
-                  <LoginPage />
-                </Suspense>
-              }
-            />
-
-            {/* ── Protected: entire CRM behind auth ──────────── */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<AppShell />}>
-                <Route index                    element={<Dashboard />} />
-                <Route path="/leads"            element={<Leads />} />
-                <Route path="/trips"            element={<Trips />} />
-                <Route path="/trips/:id"        element={<TripDetail />} />
-                <Route path="/bookings"         element={<Bookings />} />
-                <Route path="/customers"        element={<Customers />} />
-                <Route path="/operations"       element={<Operations />} />
-                <Route path="/vendors"          element={<Vendors />} />
-                <Route path="/vendors/:id"      element={<VendorDetail />} />
-                <Route path="/quotations"       element={<Quotations />} />
-                <Route path="/quotations/new"   element={<QuotationBuilder />} />
-                <Route path="/quotations/:id"   element={<QuotationDetail />} />
-                <Route path="/quotations/:id/edit"  element={<QuotationBuilder />} />
-                <Route path="/itineraries"          element={<Itineraries />} />
-                <Route path="/itineraries/new"      element={<ItineraryBuilder />} />
-                <Route path="/itineraries/:id"      element={<ItineraryDetail />} />
-                <Route path="/itineraries/:id/edit" element={<ItineraryBuilder />} />
-                <Route path="/analytics"        element={<Analytics />} />
-                <Route path="/vouchers"         element={<Vouchers />} />
-                <Route path="/vouchers/new"     element={<VoucherFormPage />} />
-                <Route path="/vouchers/:id"     element={<VoucherDetail />} />
-                <Route path="/vouchers/:id/edit" element={<VoucherFormPage />} />
-                <Route path="/settings"         element={<Settings />} />
-
-                {/* Finance — ACCOUNTS role required */}
-                <Route element={<ProtectedRoute permission="finance:view" />}>
-                  <Route path="/finance" element={<Finance />} />
-                </Route>
-
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
+            {/* All routes open directly — no authentication required */}
+            <Route element={<AppShell />}>
+              <Route index                    element={<Dashboard />} />
+              <Route path="/leads"            element={<Leads />} />
+              <Route path="/trips"            element={<Trips />} />
+              <Route path="/trips/:id"        element={<TripDetail />} />
+              <Route path="/bookings"         element={<Bookings />} />
+              <Route path="/customers"        element={<Customers />} />
+              <Route path="/operations"       element={<Operations />} />
+              <Route path="/vendors"          element={<Vendors />} />
+              <Route path="/vendors/:id"      element={<VendorDetail />} />
+              <Route path="/quotations"       element={<Quotations />} />
+              <Route path="/quotations/new"   element={<QuotationBuilder />} />
+              <Route path="/quotations/:id"   element={<QuotationDetail />} />
+              <Route path="/quotations/:id/edit"  element={<QuotationBuilder />} />
+              <Route path="/itineraries"          element={<Itineraries />} />
+              <Route path="/itineraries/new"      element={<ItineraryBuilder />} />
+              <Route path="/itineraries/:id"      element={<ItineraryDetail />} />
+              <Route path="/itineraries/:id/edit" element={<ItineraryBuilder />} />
+              <Route path="/analytics"        element={<Analytics />} />
+              <Route path="/vouchers"         element={<Vouchers />} />
+              <Route path="/vouchers/new"     element={<VoucherFormPage />} />
+              <Route path="/vouchers/:id"     element={<VoucherDetail />} />
+              <Route path="/vouchers/:id/edit" element={<VoucherFormPage />} />
+              <Route path="/finance"          element={<Finance />} />
+              <Route path="/settings"         element={<Settings />} />
+              <Route path="*"                 element={<Navigate to="/" replace />} />
             </Route>
 
           </Routes>
