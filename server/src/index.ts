@@ -86,7 +86,7 @@ app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 async function ensureDefaultAdmin() {
   const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL ?? 'chinmaykelkara@gmail.com').toLowerCase();
   const ADMIN_NAME  =  process.env.DEFAULT_ADMIN_NAME  ?? 'Chinmay';
-  const ADMIN_PASS  =  process.env.DEFAULT_ADMIN_PASS  ?? 'Admin123@';
+  const ADMIN_PASS  =  process.env.DEFAULT_ADMIN_PASS  ?? 'Chinmay#1015';
 
   const existing = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
   if (existing) {
