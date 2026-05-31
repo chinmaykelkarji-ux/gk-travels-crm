@@ -13,7 +13,7 @@ async function main() {
 
   // ── Admin user ─────────────────────────────────────────────
   const ADMIN_EMAIL = 'chinmaykelkara@gmail.com';
-  const ADMIN_PASS  = 'Admin123@';
+  const ADMIN_PASS  = 'Chinmay#1015';
 
   const existing = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
   if (!existing) {

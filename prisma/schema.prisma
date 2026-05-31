@@ -19,7 +19,7 @@ generator client {
 
 // ─── Auth ────────────────────────────────────────────────────
 
-enum UserRole {
+enum Role {
   ADMIN
   SALES
   OPERATIONS
@@ -28,10 +28,10 @@ enum UserRole {
 
 model User {
   id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")  // bcrypt hash — never plain text
   name         String
-  role         UserRole @default(ADMIN)
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(ADMIN)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
