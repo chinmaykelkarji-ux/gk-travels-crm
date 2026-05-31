@@ -1,37 +1,18 @@
-// ============================================================
-// GK TRAVELS CRM — Prisma Schema
-// Local PostgreSQL (no Supabase, no multi-tenant)
-//
-// npx prisma migrate dev --name init   → first migration
-// npx prisma generate                  → regenerate client
-// npx prisma studio                    → visual DB browser
-// npm run db:seed                      → seed admin user
-// ============================================================
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
-}
-
-// ─── Auth ────────────────────────────────────────────────────
-
-enum Role {
-  ADMIN
-  SALES
-  OPERATIONS
-  ACCOUNTS
-}
-
 model User {
   id           String   @id @default(cuid())
-  name         String
   email        String   @unique
   passwordHash String
+  name         String
   role         Role     @default(ADMIN)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -40,158 +21,130 @@ model User {
   @@map("users")
 }
 
-// ─── Customer ────────────────────────────────────────────────
-
 model Customer {
-  id          String   @id
-  name        String
-  phone       String
-  altPhone    String?
-  email       String?
-  address     String?
-  city        String?
-  preferences Json     @default("{}")
-  notes       String?
-  tripIds     Json     @default("[]")
-  documents   Json     @default("[]")
-  createdDate String
+  id           String   @id
+  name         String
+  phone        String
+  altPhone     String?
+  email        String?
+  address      String?
+  city         String?
+  preferences  Json     @default("{}")
+  notes        String?
+  tripIds      Json     @default("[]")
+  documents    Json     @default("[]")
+  createdDate  String
   sourceLeadId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("customers")
 }
 
-// ─── Lead ────────────────────────────────────────────────────
-
 model Lead {
-  id           String   @id
-  name         String
-  phone        String
-  email        String?
-  source       String
-  destination  String   @default("")
-  travelDate   String?
-  pax          Int      @default(1)
-  budget       Float?
-  tripType     String   @default("")
-  status       String   @default("new")
-  priority     String   @default("medium")
-  notes        String   @default("")
-  followUpDate String?
-  assignedTo   String?
-  createdDate  String
-
-  // Conversion audit
+  id                  String   @id
+  name                String
+  phone               String
+  email               String?
+  source              String
+  destination         String   @default("")
+  travelDate          String?
+  pax                 Int      @default(1)
+  budget              Float?
+  tripType            String   @default("")
+  status              String   @default("new")
+  priority            String   @default("medium")
+  notes               String   @default("")
+  followUpDate        String?
+  assignedTo          String?
+  createdDate         String
   convertedTripId     String?
   convertedCustomerId String?
   convertedAt         String?
   convertedBy         String?
-
-  timeline  Json     @default("[]")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  timeline            Json     @default("[]")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@map("leads")
 }
 
-// ─── Trip ────────────────────────────────────────────────────
-
 model Trip {
-  id          String  @id
-  customer    String
-  phone       String  @default("")
-  email       String?
-  customerId  String?
-  destination String
-  type        String  @default("Leisure")
-  pax         Int     @default(1)
-  departure   String?
-  returnDate  String?
-  status      String  @default("draft")
-
-  // Financial
-  totalAmount  Float?
-  gstRate      Float   @default(5)
-  discount     Float   @default(0)
-  gstAmount    Float   @default(0)
-  totalPayable Float?
-  paidAmount   Float   @default(0)
-  balanceDue   Float   @default(0)
-  supplierCost Float   @default(0)
-  grossMargin  Float   @default(0)
-  marginPct    Float   @default(0)
-
-  // Operational
-  visaStatus    String @default("pending")
-  hotelStatus   String @default("pending")
-  flightStatus  String @default("pending")
-  checkInStatus String @default("not_due")
-
-  notes       String  @default("")
-  assignedTo  String?
-  createdDate String
-  createdBy   String?
-
-  // Lead conversion
+  id                  String    @id
+  customer            String
+  phone               String    @default("")
+  email               String?
+  customerId          String?
+  destination         String
+  type                String    @default("Leisure")
+  pax                 Int       @default(1)
+  departure           String?
+  returnDate          String?
+  status              String    @default("draft")
+  totalAmount         Float?
+  gstRate             Float     @default(5)
+  discount            Float     @default(0)
+  gstAmount           Float     @default(0)
+  totalPayable        Float?
+  paidAmount          Float     @default(0)
+  balanceDue          Float     @default(0)
+  supplierCost        Float     @default(0)
+  grossMargin         Float     @default(0)
+  marginPct           Float     @default(0)
+  visaStatus          String    @default("pending")
+  hotelStatus         String    @default("pending")
+  flightStatus        String    @default("pending")
+  checkInStatus       String    @default("not_due")
+  notes               String    @default("")
+  assignedTo          String?
+  createdDate         String
+  createdBy           String?
   sourceLeadId        String?
   convertedFromLeadId String?
   convertedAt         String?
   convertedBy         String?
-
-  timeline  Json     @default("[]")
-  itinerary Json     @default("[]")
-  documents Json     @default("[]")
-
-  payments Payment[]
-  tasks    Task[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  timeline            Json      @default("[]")
+  itinerary           Json      @default("[]")
+  documents           Json      @default("[]")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  payments            Payment[]
+  tasks               Task[]
 
   @@map("trips")
 }
 
-// ─── Booking ─────────────────────────────────────────────────
-
 model Booking {
-  id           String  @id
-  type         String
-  status       String  @default("pending")
-  customerName String
-  customerId   String?
-  refId        String? // linked trip ID
-
-  // Financial
+  id              String   @id
+  type            String
+  status          String   @default("pending")
+  customerName    String
+  customerId      String?
+  refId           String?
   sellingPrice    Float?
-  supplierCost    Float   @default(0)
-  advance         Float   @default(0)
-  supplierPaid    Float   @default(0)
-  gstRate         Float   @default(0)
-  gstAmount       Float   @default(0)
+  supplierCost    Float    @default(0)
+  advance         Float    @default(0)
+  supplierPaid    Float    @default(0)
+  gstRate         Float    @default(0)
+  gstAmount       Float    @default(0)
   totalPayable    Float?
-  balanceDue      Float   @default(0)
-  supplierPending Float   @default(0)
-  grossMargin     Float   @default(0)
-  marginPct       Float   @default(0)
-
-  detail      Json     @default("{}")
-  notes       String   @default("")
-  createdDate String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  balanceDue      Float    @default(0)
+  supplierPending Float    @default(0)
+  grossMargin     Float    @default(0)
+  marginPct       Float    @default(0)
+  detail          Json     @default("{}")
+  notes           String   @default("")
+  createdDate     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("bookings")
 }
 
-// ─── Payment ─────────────────────────────────────────────────
-
 model Payment {
-  id         String  @id
-  type       String  // 'customer' | 'supplier'
+  id         String   @id
+  type       String
   tripId     String?
-  trip       Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
   bookingId  String?
   customer   String?
   customerId String?
@@ -199,43 +152,38 @@ model Payment {
   method     String
   date       String
   paidDate   String?
-  status     String  // 'pending' | 'received' | 'paid'
+  status     String
   reference  String?
   notes      String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  trip       Trip?    @relation(fields: [tripId], references: [id])
 
   @@map("payments")
 }
 
-// ─── Task ────────────────────────────────────────────────────
-
 model Task {
-  id            String  @id
+  id            String   @id
   title         String
   description   String?
-  priority      String  @default("medium")
-  status        String  @default("pending")
+  priority      String   @default("medium")
+  status        String   @default("pending")
   tripId        String?
-  trip          Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
   bookingId     String?
   customerId    String?
   dueDate       String?
   assignedTo    String?
   completedDate String?
   createdDate   String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  trip          Trip?    @relation(fields: [tripId], references: [id])
 
   @@map("tasks")
 }
 
-// ─── Activity Log ────────────────────────────────────────────
-
 model ActivityLog {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   type       String
   message    String
   entityType String
@@ -245,92 +193,78 @@ model ActivityLog {
   date       String
   before     Json?
   after      Json?
-
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([date])
   @@map("activity_logs")
 }
 
-// ─── Reminder ────────────────────────────────────────────────
-
 model Reminder {
-  id       String  @id @default(cuid())
-  tripId   String?
-  type     String
-  priority String
-  message  String
-  dueDate  String
-  sent     Boolean @default(false)
-  sentAt   String?
-
+  id        String   @id @default(cuid())
+  tripId    String?
+  type      String
+  priority  String
+  message   String
+  dueDate   String
+  sent      Boolean  @default(false)
+  sentAt    String?
   createdAt DateTime @default(now())
 
   @@map("reminders")
 }
 
-// ─── Vendor ──────────────────────────────────────────────────
-
 model Vendor {
-  id            String  @id
-  name          String                 // trade / display name
+  id            String          @id
+  name          String
   companyName   String?
-  type          String                 // hotel | transport | activity | guide | visa | miscellaneous
+  type          String
   contactPerson String?
   phone         String
   whatsapp      String?
   email         String?
-  destinations  Json    @default("[]") // string[] — destinations this vendor serves
+  destinations  Json            @default("[]")
   paymentTerms  String?
-  bankDetails   Json    @default("{}") // { accountNo, ifsc, bankName, accountHolder }
+  bankDetails   Json            @default("{}")
   gstNumber     String?
   notes         String?
-  isActive      Boolean @default(true)
+  isActive      Boolean         @default(true)
   createdDate   String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  payments VendorPayment[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  payments      VendorPayment[]
 
   @@index([type])
   @@map("vendors")
 }
 
-// ─── VendorPayment ───────────────────────────────────────────
-// One record per vendor engagement on a trip (or standalone).
-
 model VendorPayment {
-  id          String  @id
+  id          String   @id
   vendorId    String
-  vendor      Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  vendorName  String                   // denormalized for display
+  vendorName  String
   tripId      String?
-  tripName    String?                  // denormalized for display
+  tripName    String?
   description String?
-  totalCost   Float   @default(0)
-  advancePaid Float   @default(0)
-  outstanding Float   @default(0)     // stored = totalCost - advancePaid
-  isPaid      Boolean @default(false)
+  totalCost   Float    @default(0)
+  advancePaid Float    @default(0)
+  outstanding Float    @default(0)
+  isPaid      Boolean  @default(false)
   paidDate    String?
   dueDate     String?
   notes       String?
   createdDate String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
   @@index([vendorId])
   @@index([tripId])
   @@map("vendor_payments")
 }
 
-// ─── Quotation ───────────────────────────────────────────────
-
 model Quotation {
-  id              String  @id                  // Q-2025-0001
-  quotationNumber String  @unique              // same as id — human-readable
+  id              String          @id
+  quotationNumber String          @unique
   customerId      String?
   customerName    String
   customerPhone   String?
@@ -338,32 +272,24 @@ model Quotation {
   destination     String
   startDate       String?
   endDate         String?
-  pax             Int     @default(1)
-  status          String  @default("draft")    // draft | sent | accepted | rejected | expired
-
-  notes          String?
-  termsAndConds  String?
-  validUntil     String?
-
-  // Computed financial summary (recalculated from items every save)
-  totalCost      Float   @default(0)
-  totalSelling   Float   @default(0)
-  grossProfit    Float   @default(0)
-  marginPct      Float   @default(0)
-
-  // Conversion audit
+  pax             Int             @default(1)
+  status          String          @default("draft")
+  notes           String?
+  termsAndConds   String?
+  validUntil      String?
+  totalCost       Float           @default(0)
+  totalSelling    Float           @default(0)
+  grossProfit     Float           @default(0)
+  marginPct       Float           @default(0)
   convertedTripId String?
   convertedAt     String?
-
-  createdDate String
-  sentAt      String?
-  acceptedAt  String?
-  rejectedAt  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  items QuotationItem[]
+  createdDate     String
+  sentAt          String?
+  acceptedAt      String?
+  rejectedAt      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           QuotationItem[]
 
   @@index([status])
   @@index([customerId])
@@ -373,35 +299,28 @@ model Quotation {
 model QuotationItem {
   id           String    @id @default(cuid())
   quotationId  String
-  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  category     String    // hotel | flight | transfer | activity | visa | insurance | misc
+  category     String
   description  String
   quantity     Int       @default(1)
   costPrice    Float     @default(0)
   sellingPrice Float     @default(0)
   vendorId     String?
   vendorName   String?
-
-  // Computed per line (stored for reporting)
-  totalCost    Float     @default(0)   // costPrice    * quantity
-  totalSelling Float     @default(0)   // sellingPrice * quantity
-  grossProfit  Float     @default(0)   // totalSelling - totalCost
-  marginPct    Float     @default(0)   // grossProfit  / totalSelling * 100
-
+  totalCost    Float     @default(0)
+  totalSelling Float     @default(0)
+  grossProfit  Float     @default(0)
+  marginPct    Float     @default(0)
   sortOrder    Int       @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([quotationId])
   @@map("quotation_items")
 }
 
-// ─── Itinerary ───────────────────────────────────────────────
-
 model Itinerary {
-  id               String  @id                  // ITN-YYYY-NNNN
+  id               String         @id
   tripId           String?
   quotationId      String?
   title            String
@@ -411,17 +330,15 @@ model Itinerary {
   customerEmail    String?
   startDate        String?
   endDate          String?
-  pax              Int     @default(1)
-  status           String  @default("draft")    // draft | finalized
+  pax              Int            @default(1)
+  status           String         @default("draft")
   notes            String?
   emergencyContact String?
-  template         String?  // domestic | international | luxury | honeymoon | family
+  template         String?
   createdDate      String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  days ItineraryDay[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  days             ItineraryDay[]
 
   @@index([tripId])
   @@index([quotationId])
@@ -432,118 +349,96 @@ model Itinerary {
 model ItineraryDay {
   id           String    @id @default(cuid())
   itineraryId  String
-  itinerary    Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
-
   dayNumber    Int
-  date         String?   // Computed: startDate + (dayNumber - 1) days
-  title        String    // e.g. "Day 1 — Arrival in Dubai"
-
-  // Time slots
+  date         String?
+  title        String
   morning      String?
   afternoon    String?
   evening      String?
-
-  // Logistics
   hotelName    String?
   hotelAddress String?
-  meals        Json      @default("[]")   // ('breakfast'|'lunch'|'dinner')[]
+  meals        Json      @default("[]")
   transfers    String?
-
-  // Activities
-  activities   Json      @default("[]")   // string[]
-
+  activities   Json      @default("[]")
   notes        String?
   sortOrder    Int       @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  itinerary    Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
 
   @@index([itineraryId])
   @@map("itinerary_days")
 }
 
-// ─── Voucher ─────────────────────────────────────────────────
-
 model Voucher {
-  id            String  @id                 // VCH-YYYY-NNNN
-  voucherNumber String  @unique             // same as id
-  tripId        String?
-  customerId    String?
-  vendorId      String?
-  type          String                      // hotel | transfer | activity | flight | visa | general
-  status        String  @default("draft")   // draft | issued | completed | cancelled
-  issueDate     String?
-
-  // Customer / guest
-  customerName  String
-  customerPhone String?
-  guestNames    String?   // comma-separated list of guest names
-  destination   String?
-
-  // ── Hotel ────────────────────────────────────────────────
-  hotelName      String?
-  hotelAddress   String?
-  hotelPhone     String?
-  checkIn        String?
-  checkOut       String?
-  roomType       String?
-  mealPlan       String?
-  confirmationNo String?
-  nights         Int?
-
-  // ── Transfer ─────────────────────────────────────────────
-  pickupPoint  String?
-  dropPoint    String?
-  pickupDate   String?
-  pickupTime   String?
-  vehicleType  String?
-  driverName   String?
-  driverPhone  String?
-  flightInfo   String?   // flight number for airport transfers
-
-  // ── Activity ─────────────────────────────────────────────
-  activityName  String?
-  activityDate  String?
-  activityTime  String?
-  activityVenue String?
-  activityNotes String?
-
-  // ── Flight ───────────────────────────────────────────────
-  airline       String?
-  flightNumber  String?
-  pnr           String?
-  departure     String?
-  arrival       String?
-  departureDate String?
-  arrivalDate   String?
-  flightClass   String?
-
-  // ── Visa ─────────────────────────────────────────────────
-  visaType    String?
-  country     String?
-  entryType   String?   // single / multiple
-  validity    String?
-  visaFee     Float?
-
-  // ── Vendor info (denormalized for PDF) ───────────────────
-  vendorName  String?
-  vendorPhone String?
-  vendorEmail String?
-
-  // ── Common ───────────────────────────────────────────────
-  pax              Int     @default(1)
+  id               String   @id
+  voucherNumber    String   @unique
+  tripId           String?
+  customerId       String?
+  vendorId         String?
+  type             String
+  status           String   @default("draft")
+  issueDate        String?
+  customerName     String
+  customerPhone    String?
+  guestNames       String?
+  destination      String?
+  hotelName        String?
+  hotelAddress     String?
+  hotelPhone       String?
+  checkIn          String?
+  checkOut         String?
+  roomType         String?
+  mealPlan         String?
+  confirmationNo   String?
+  nights           Int?
+  pickupPoint      String?
+  dropPoint        String?
+  pickupDate       String?
+  pickupTime       String?
+  vehicleType      String?
+  driverName       String?
+  driverPhone      String?
+  flightInfo       String?
+  activityName     String?
+  activityDate     String?
+  activityTime     String?
+  activityVenue    String?
+  activityNotes    String?
+  airline          String?
+  flightNumber     String?
+  pnr              String?
+  departure        String?
+  arrival          String?
+  departureDate    String?
+  arrivalDate      String?
+  flightClass      String?
+  visaType         String?
+  country          String?
+  entryType        String?
+  validity         String?
+  visaFee          Float?
+  vendorName       String?
+  vendorPhone      String?
+  vendorEmail      String?
+  pax              Int      @default(1)
   notes            String?
   emergencyContact String?
   internalNotes    String?
-
-  createdDate String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdDate      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([tripId])
   @@index([vendorId])
   @@index([status])
   @@index([type])
   @@map("vouchers")
+}
+
+enum Role {
+  ADMIN
+  SALES
+  OPERATIONS
+  ACCOUNTS
 }
