@@ -64,12 +64,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user,      setUser]      = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // On mount: attempt to restore session from the HttpOnly cookie.
-  // GET /auth/me succeeds if the cookie is present and not expired.
+  // On mount: restore session from the HttpOnly cookie.
+  // In development, the dev-bypass issues a session automatically so the
+  // login screen is never shown.
+  //
+  // DEVELOPMENT BYPASS
+  // REMOVE BEFORE PRODUCTION
   useEffect(() => {
-    apiClient.get('/auth/me')
+    const restore = import.meta.env.DEV
+      // DEVELOPMENT BYPASS — auto-authenticate as admin@gktravels.local
+      // REMOVE BEFORE PRODUCTION
+      ? apiClient.post('/auth/dev-login')
+      : apiClient.get('/auth/me');
+
+    restore
       .then(res => setUser(toAuthUser(res.data.user)))
-      .catch(() => setUser(null))           // 401 = no session, show login
+      .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
   }, []);
 
