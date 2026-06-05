@@ -137,6 +137,7 @@ interface StoreActions {
   // â”€â”€ Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createTask:     (data: Partial<Task>) => Task;
   updateTask:     (id: string, data: Partial<Task>) => void;
+  deleteTask:     (id: string) => void;
   completeTask:   (id: string) => void;
 
   // â”€â”€ Reminders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -735,6 +736,11 @@ export const useStore = create<GKStore>()(
 
       completeTask(id) {
         get().updateTask(id, { status: 'completed', completedDate: today() });
+      },
+
+      deleteTask(id) {
+        set((s: GKStore) => ({ tasks: s.tasks.filter(t => t.id !== id) }));
+        void apiClient.delete(`/tasks/${id}`).catch(onMutationError('deleteTask'));
       },
 
       // â•â• Reminder Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

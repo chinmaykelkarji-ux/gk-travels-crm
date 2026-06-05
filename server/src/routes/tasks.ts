@@ -31,14 +31,20 @@ router.put('/:id', async (req, res) => {
       data:  sanitize(req.body),
     });
     res.json(t);
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('[tasks PUT]', req.params.id, err);
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
     await prisma.task.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('[tasks DELETE]', req.params.id, err);
+    res.status(500).json({ error: String(err) });
+  }
 });
 
 function sanitize(body: Record<string, unknown>) {

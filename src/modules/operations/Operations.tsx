@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Activity, Bell, CheckSquare, CalendarDays,
+  Bell, CheckSquare, CalendarDays,
   Plus, Clock, AlertTriangle, CheckCircle2,
-  ChevronRight, X, Flag, User, Trash2,
+  ChevronRight, User, Trash2, Pencil,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import type { Task, TaskPriority, TaskStatus } from '@/shared/types';
@@ -41,34 +41,79 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string }> = {
   cancelled:   { label: 'Cancelled',   color: 'text-red-400'     },
 };
 
-// ─── New Task Dialog ──────────────────────────────────────────
+// Defensive fallbacks so null/unknown DB values never crash the UI
+const PRIORITY_FALLBACK = PRIORITY_CONFIG.medium;
+const STATUS_FALLBACK   = STATUS_CONFIG.pending;
+
+function getPriorityCfg(p: string | undefined) {
+  return PRIORITY_CONFIG[p as TaskPriority] ?? PRIORITY_FALLBACK;
+}
+function getStatusCfg(s: string | undefined) {
+  return STATUS_CONFIG[s as TaskStatus] ?? STATUS_FALLBACK;
+}
+
+// ─── Task Dialog (Create + Edit) ─────────────────────────────
 
 interface TaskFormData {
-  title:      string;
+  title:       string;
   description: string;
-  priority:   TaskPriority;
-  dueDate:    string;
-  assignedTo: string;
+  priority:    TaskPriority;
+  status:      TaskStatus;
+  dueDate:     string;
+  assignedTo:  string;
+  tripId:      string;
+  customerId:  string;
 }
 
 const DEFAULT_TASK: TaskFormData = {
   title:       '',
   description: '',
   priority:    'medium',
+  status:      'pending',
   dueDate:     '',
-  assignedTo:  '',
+  assignedTo:  '__none__',
+  tripId:      '__none__',
+  customerId:  '__none__',
 };
+
+function taskToForm(task: Task): TaskFormData {
+  return {
+    title:       task.title,
+    description: task.description ?? '',
+    priority:    (task.priority as TaskPriority) ?? 'medium',
+    status:      (task.status   as TaskStatus)   ?? 'pending',
+    dueDate:     task.dueDate    ?? '',
+    assignedTo:  task.assignedTo ?? '__none__',
+    tripId:      task.tripId     ?? '__none__',
+    customerId:  task.customerId ?? '__none__',
+  };
+}
 
 interface TaskDialogProps {
   open:    boolean;
   onClose: () => void;
+  task?:   Task;  // undefined → create mode, defined → edit mode
 }
 
-function NewTaskDialog({ open, onClose }: TaskDialogProps) {
+function TaskDialog({ open, onClose, task }: TaskDialogProps) {
   const createTask = useStore(s => s.createTask);
+  const updateTask = useStore(s => s.updateTask);
   const staff      = useStore(s => s.staff);
-  const [form, setForm] = useState<TaskFormData>(DEFAULT_TASK);
+  const trips      = useStore(s => s.trips);
+  const customers  = useStore(s => s.customers);
+
+  const isEdit = !!task;
+
+  const [form, setForm] = useState<TaskFormData>(() =>
+    task ? taskToForm(task) : DEFAULT_TASK
+  );
   const [saving, setSaving] = useState(false);
+
+  // Sync form when the dialog opens with a different task
+  useMemo(() => {
+    if (open) setForm(task ? taskToForm(task) : DEFAULT_TASK);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, task?.id]);
 
   function set<K extends keyof TaskFormData>(key: K, val: TaskFormData[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -80,26 +125,36 @@ function NewTaskDialog({ open, onClose }: TaskDialogProps) {
     if (!form.title.trim()) { toast.error('Task title is required'); return; }
     setSaving(true);
     try {
-      createTask({
+      const payload = {
         title:       form.title.trim(),
         description: form.description || undefined,
         priority:    form.priority,
-        dueDate:     form.dueDate || undefined,
-        assignedTo:  form.assignedTo || undefined,
-        status:      'pending',
-      });
-      toast.success('Task created', form.title);
+        status:      form.status,
+        dueDate:     form.dueDate     || undefined,
+        assignedTo:  form.assignedTo  === '__none__' ? undefined : form.assignedTo,
+        tripId:      form.tripId      === '__none__' ? undefined : form.tripId,
+        customerId:  form.customerId  === '__none__' ? undefined : form.customerId,
+      };
+      if (isEdit && task) {
+        updateTask(task.id, payload);
+        toast.success('Task updated', form.title.trim());
+      } else {
+        createTask({ ...payload, status: form.status });
+        toast.success('Task created', form.title.trim());
+      }
       handleClose();
     } finally {
       setSaving(false);
     }
   }
 
+  const activeTrips = trips.filter(t => t.status !== 'cancelled');
+
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>New Task</DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit Task' : 'New Task'}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <div className="space-y-1.5">
@@ -144,6 +199,22 @@ function NewTaskDialog({ open, onClose }: TaskDialogProps) {
               </div>
             </div>
             <div className="space-y-3">
+              {isEdit && (
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={v => set('status', v as TaskStatus)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="tk-due">Due Date</Label>
                 <Input
@@ -160,7 +231,7 @@ function NewTaskDialog({ open, onClose }: TaskDialogProps) {
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Unassigned</SelectItem>
+                    <SelectItem value="__none__">Unassigned</SelectItem>
                     {staff.map(s => (
                       <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
                     ))}
@@ -169,10 +240,44 @@ function NewTaskDialog({ open, onClose }: TaskDialogProps) {
               </div>
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Link to Trip</Label>
+              <Select value={form.tripId} onValueChange={v => set('tripId', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {activeTrips.map(t => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.id} — {t.customer}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Link to Customer</Label>
+              <Select value={form.customerId} onValueChange={v => set('customerId', v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {customers.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
-          <Button size="sm" loading={saving} onClick={handleSave}>Create Task</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>
+            {isEdit ? 'Save Changes' : 'Create Task'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -182,14 +287,15 @@ function NewTaskDialog({ open, onClose }: TaskDialogProps) {
 // ─── Task Card ────────────────────────────────────────────────
 
 interface TaskCardProps {
-  task:     Task;
+  task:       Task;
   onComplete: (id: string) => void;
+  onEdit:     (task: Task) => void;
   onDelete:   (task: Task) => void;
 }
 
-function TaskCard({ task, onComplete, onDelete }: TaskCardProps) {
-  const pcfg  = PRIORITY_CONFIG[task.priority];
-  const scfg  = STATUS_CONFIG[task.status];
+function TaskCard({ task, onComplete, onEdit, onDelete }: TaskCardProps) {
+  const pcfg  = getPriorityCfg(task.priority);
+  const scfg  = getStatusCfg(task.status);
   const isDone = task.status === 'completed' || task.status === 'cancelled';
 
   const daysToGo = task.dueDate ? daysUntil(task.dueDate) : null;
@@ -249,12 +355,24 @@ function TaskCard({ task, onComplete, onDelete }: TaskCardProps) {
       </div>
 
       {/* Actions */}
-      <button
-        onClick={() => onDelete(task)}
-        className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      <div className="flex items-center gap-0.5 flex-shrink-0">
+        {!isDone && (
+          <button
+            onClick={() => onEdit(task)}
+            className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+            title="Edit task"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(task)}
+          className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+          title="Delete task"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -273,15 +391,16 @@ const REMINDER_BORDER: Record<string, string> = {
 export default function Operations() {
   const navigate = useNavigate();
 
-  const reminders     = useStore(selectors.pendingReminders);
-  const tasks         = useStore(s => s.tasks);
-  const markSent      = useStore(s => s.markReminderSent);
-  const completeTask  = useStore(s => s.completeTask);
-  const updateTask    = useStore(s => s.updateTask);
-  const trips         = useStore(s => s.trips);
+  const reminders    = useStore(selectors.pendingReminders);
+  const tasks        = useStore(s => s.tasks);
+  const markSent     = useStore(s => s.markReminderSent);
+  const completeTask = useStore(s => s.completeTask);
+  const deleteTask   = useStore(s => s.deleteTask);
+  const trips        = useStore(s => s.trips);
 
-  const [taskFormOpen, setTaskFormOpen] = useState(false);
-  const [taskFilter,   setTaskFilter]   = useState<TaskStatus | 'all'>('all');
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [editingTask,    setEditingTask]    = useState<Task | undefined>(undefined);
+  const [taskFilter,     setTaskFilter]     = useState<TaskStatus | 'all'>('all');
 
   // ── Computed ─────────────────────────────────────────────
 
@@ -291,7 +410,7 @@ export default function Operations() {
   const filteredTasks = useMemo(() => {
     if (taskFilter === 'all') return [...pendingTasks].sort((a, b) => {
       const pOrder: Record<TaskPriority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-      return (pOrder[a.priority] ?? 3) - (pOrder[b.priority] ?? 3);
+      return (pOrder[a.priority as TaskPriority] ?? 3) - (pOrder[b.priority as TaskPriority] ?? 3);
     });
     return tasks.filter(t => t.status === taskFilter);
   }, [tasks, pendingTasks, taskFilter]);
@@ -309,16 +428,31 @@ export default function Operations() {
 
   const totalPending = reminders.length + pendingTasks.length;
 
+  function openNewTask() {
+    setEditingTask(undefined);
+    setTaskDialogOpen(true);
+  }
+
+  function openEditTask(task: Task) {
+    setEditingTask(task);
+    setTaskDialogOpen(true);
+  }
+
+  function closeTaskDialog() {
+    setTaskDialogOpen(false);
+    setEditingTask(undefined);
+  }
+
   async function handleDeleteTask(task: Task) {
     const ok = await confirm({
       title:        `Delete "${task.title}"?`,
-      description:  'This will permanently remove this task.',
+      description:  'This will permanently remove this task from the database.',
       confirmLabel: 'Delete',
       variant:      'destructive',
     });
     if (ok) {
-      updateTask(task.id, { status: 'cancelled' });
-      toast.success('Task removed');
+      deleteTask(task.id);
+      toast.success('Task deleted');
     }
   }
 
@@ -333,7 +467,7 @@ export default function Operations() {
             <Badge variant="destructive">{totalPending} pending</Badge>
           )}
         </div>
-        <Button size="sm" onClick={() => setTaskFormOpen(true)} className="gap-1.5">
+        <Button size="sm" onClick={openNewTask} className="gap-1.5">
           <Plus className="w-3.5 h-3.5" /> New Task
         </Button>
       </div>
@@ -420,7 +554,6 @@ export default function Operations() {
             </div>
           ) : (
             <div className="space-y-2">
-              {/* Group by priority */}
               {(['urgent', 'high', 'medium', 'low'] as TaskPriority[]).map(priority => {
                 const group = reminders.filter(r => r.priority === priority);
                 if (group.length === 0) return null;
@@ -492,7 +625,7 @@ export default function Operations() {
                 </button>
               ))}
             </div>
-            <Button size="sm" variant="outline" onClick={() => setTaskFormOpen(true)} className="gap-1.5">
+            <Button size="sm" variant="outline" onClick={openNewTask} className="gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Add Task
             </Button>
           </div>
@@ -514,6 +647,7 @@ export default function Operations() {
                   key={task.id}
                   task={task}
                   onComplete={id => { completeTask(id); toast.success('Task completed!'); }}
+                  onEdit={openEditTask}
                   onDelete={handleDeleteTask}
                 />
               ))}
@@ -613,7 +747,11 @@ export default function Operations() {
         </TabsContent>
       </Tabs>
 
-      <NewTaskDialog open={taskFormOpen} onClose={() => setTaskFormOpen(false)} />
+      <TaskDialog
+        open={taskDialogOpen}
+        onClose={closeTaskDialog}
+        task={editingTask}
+      />
     </div>
   );
 }
