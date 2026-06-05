@@ -12,7 +12,7 @@
 //   2. Backend  — requireRole() middleware on sensitive routes
 // ============================================================
 
-import type { UserRole } from '@/backend/supabase/database.types';
+import type { UserRole } from './types';
 
 // ─── Permission Keys ──────────────────────────────────────────
 

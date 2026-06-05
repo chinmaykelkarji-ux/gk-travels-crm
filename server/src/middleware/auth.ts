@@ -3,23 +3,39 @@ import jwt from 'jsonwebtoken';
 
 // ─── Constants ────────────────────────────────────────────────
 
-const JWT_SECRET  = process.env.JWT_SECRET ?? 'gkcrm_dev_secret_change_in_production';
+const JWT_SECRET = process.env.JWT_SECRET ?? 'gkcrm_dev_secret_change_in_production';
+
+if (process.env.NODE_ENV === 'production' && JWT_SECRET === 'gkcrm_dev_secret_change_in_production') {
+  console.error('[auth] FATAL: JWT_SECRET is using the default dev value in production. Set a strong secret in your environment variables.');
+}
+
 export const COOKIE_NAME = 'gkcrm_session';
 
-// 30-day cookie — HttpOnly so JS cannot read it, Secure in production
+// Secure in production (HTTPS); lax in dev so cross-port works.
+// sameSite: lax — frontend and API share the same Vercel origin so
+// cookies are sent on same-origin navigations and safe cross-site GETs.
 export const COOKIE_OPTIONS = {
   httpOnly: true,
   secure:   process.env.NODE_ENV === 'production',
-  sameSite: 'lax'  as const,
+  sameSite: 'lax' as const,
   maxAge:   30 * 24 * 60 * 60 * 1000, // 30 days in ms
   path:     '/',
 } as const;
 
-// ─── Token helpers ────────────────────────────────────────────
+// Options to clear the cookie on logout / invalid token
+export const CLEAR_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure:   process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path:     '/',
+} as const;
+
+// ─── Token payload ────────────────────────────────────────────
 
 export interface TokenPayload {
   id:    string;
   email: string;
+  name:  string;
   role:  string;
 }
 
@@ -36,21 +52,51 @@ export function verifyToken(token: string): TokenPayload {
 export interface AuthRequest extends Request {
   userId?:    string;
   userEmail?: string;
+  userName?:  string;
   userRole?:  string;
 }
 
-// ─── Middleware ───────────────────────────────────────────────
+// ─── requireAuth middleware ───────────────────────────────────
+// Validates the JWT cookie on every protected route.
+// On failure: clears the stale cookie and returns 401.
 
-// Single-user application — authentication disabled.
-// requireAuth and requireRole are no-op passthroughs kept so all
-// route files compile without changes.
+export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+  const token = (req.cookies as Record<string, string | undefined>)[COOKIE_NAME];
 
-export function requireAuth(_req: AuthRequest, _res: Response, next: NextFunction): void {
-  next();
+  if (!token) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  try {
+    const payload  = verifyToken(token);
+    req.userId     = payload.id;
+    req.userEmail  = payload.email;
+    req.userName   = payload.name;
+    req.userRole   = payload.role;
+    next();
+  } catch (err) {
+    // Expired or tampered — remove the invalid cookie immediately
+    console.warn('[auth] Invalid or expired token:', (err as Error).message);
+    res.clearCookie(COOKIE_NAME, CLEAR_COOKIE_OPTIONS);
+    res.status(401).json({ error: 'Session expired. Please sign in again.' });
+  }
 }
 
-export function requireRole(..._roles: string[]) {
-  return (_req: AuthRequest, _res: Response, next: NextFunction): void => {
+// ─── requireRole middleware ───────────────────────────────────
+// Must come AFTER requireAuth in the middleware chain.
+
+export function requireRole(...roles: string[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.userRole) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!roles.includes(req.userRole)) {
+      console.warn(`[auth] Role "${req.userRole}" denied; required one of: ${roles.join(', ')}`);
+      res.status(403).json({ error: 'You do not have permission to perform this action.' });
+      return;
+    }
     next();
   };
 }

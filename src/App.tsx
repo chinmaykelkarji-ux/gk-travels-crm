@@ -1,8 +1,5 @@
 // ============================================================
 // GK TRAVELS CRM — Application Root
-//
-// Single-user application — no authentication required.
-// Opens directly to Dashboard on every load.
 // ============================================================
 
 import { useState, useEffect, Suspense, lazy } from 'react';
@@ -10,8 +7,9 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
-import { AuthProvider, useAuth }   from '@/backend/auth/AuthContext';
-import { shouldRetry, STALE_TIME } from '@/backend/api/apiError';
+import { AuthProvider, useAuth }        from '@/backend/auth/AuthContext';
+import { ProtectedRoute, PublicRoute }  from '@/backend/auth/ProtectedRoute';
+import { shouldRetry, STALE_TIME }      from '@/backend/api/apiError';
 
 import { Sidebar }           from '@/shared/components/Sidebar';
 import { Header }            from '@/shared/components/Header';
@@ -25,6 +23,8 @@ import { toast }               from '@/shared/hooks/useToast';
 import { TripForm }            from '@/modules/trips/TripForm';
 
 // ─── Lazy page imports ────────────────────────────────────────
+
+const LoginPage      = lazy(() => import('@/modules/auth/LoginPage'));
 
 const Dashboard      = lazy(() => import('@/modules/dashboard/Dashboard'));
 const Trips          = lazy(() => import('@/modules/trips/Trips'));
@@ -72,7 +72,7 @@ function PageSpinner() {
 }
 
 // ─── AppShell ─────────────────────────────────────────────────
-// Only rendered when the user IS authenticated (inside ProtectedRoute).
+// Rendered only after ProtectedRoute confirms the user is authenticated.
 
 function AppShell() {
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
@@ -84,12 +84,12 @@ function AppShell() {
   const retryFetch  = useStore(s => s.retryFetch);
   const dataLoading = useStore(s => s.dataLoading);
   const dataError   = useStore(s => s.dataError);
-  const { isLoading: authLoading } = useAuth();
 
-  // Auth resolved → load all CRM data from PostgreSQL
+  // Auth is already confirmed by ProtectedRoute — fetch CRM data immediately.
   useEffect(() => {
-    if (!authLoading) void fetchAll();
-  }, [authLoading, fetchAll]);
+    void fetchAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleCreateTrip(data: TripFormSchema) {
     setCreating(true);
@@ -114,18 +114,6 @@ function AppShell() {
     } finally {
       setCreating(false);
     }
-  }
-
-  // Full-screen spinner ONLY while auth resolves (< 1 s when server is running)
-  if (authLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-500 font-medium">Connecting…</p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -198,33 +186,47 @@ export default function App() {
         <BrowserRouter>
           <Routes>
 
-            {/* All routes open directly — no authentication required */}
-            <Route element={<AppShell />}>
-              <Route index                    element={<Dashboard />} />
-              <Route path="/leads"            element={<Leads />} />
-              <Route path="/trips"            element={<Trips />} />
-              <Route path="/trips/:id"        element={<TripDetail />} />
-              <Route path="/bookings"         element={<Bookings />} />
-              <Route path="/customers"        element={<Customers />} />
-              <Route path="/operations"       element={<Operations />} />
-              <Route path="/vendors"          element={<Vendors />} />
-              <Route path="/vendors/:id"      element={<VendorDetail />} />
-              <Route path="/quotations"       element={<Quotations />} />
-              <Route path="/quotations/new"   element={<QuotationBuilder />} />
-              <Route path="/quotations/:id"   element={<QuotationDetail />} />
-              <Route path="/quotations/:id/edit"  element={<QuotationBuilder />} />
-              <Route path="/itineraries"          element={<Itineraries />} />
-              <Route path="/itineraries/new"      element={<ItineraryBuilder />} />
-              <Route path="/itineraries/:id"      element={<ItineraryDetail />} />
-              <Route path="/itineraries/:id/edit" element={<ItineraryBuilder />} />
-              <Route path="/analytics"        element={<Analytics />} />
-              <Route path="/vouchers"         element={<Vouchers />} />
-              <Route path="/vouchers/new"     element={<VoucherFormPage />} />
-              <Route path="/vouchers/:id"     element={<VoucherDetail />} />
-              <Route path="/vouchers/:id/edit" element={<VoucherFormPage />} />
-              <Route path="/finance"          element={<Finance />} />
-              <Route path="/settings"         element={<Settings />} />
-              <Route path="*"                 element={<Navigate to="/" replace />} />
+            {/* ── Public routes (unauthenticated only) ─────────── */}
+            <Route element={<PublicRoute redirectTo="/" />}>
+              <Route
+                path="/login"
+                element={
+                  <Suspense fallback={<PageSpinner />}>
+                    <LoginPage />
+                  </Suspense>
+                }
+              />
+            </Route>
+
+            {/* ── Protected routes (authenticated only) ────────── */}
+            <Route element={<ProtectedRoute redirectTo="/login" />}>
+              <Route element={<AppShell />}>
+                <Route index                         element={<Dashboard />} />
+                <Route path="/leads"                 element={<Leads />} />
+                <Route path="/trips"                 element={<Trips />} />
+                <Route path="/trips/:id"             element={<TripDetail />} />
+                <Route path="/bookings"              element={<Bookings />} />
+                <Route path="/customers"             element={<Customers />} />
+                <Route path="/operations"            element={<Operations />} />
+                <Route path="/vendors"               element={<Vendors />} />
+                <Route path="/vendors/:id"           element={<VendorDetail />} />
+                <Route path="/quotations"            element={<Quotations />} />
+                <Route path="/quotations/new"        element={<QuotationBuilder />} />
+                <Route path="/quotations/:id"        element={<QuotationDetail />} />
+                <Route path="/quotations/:id/edit"   element={<QuotationBuilder />} />
+                <Route path="/itineraries"           element={<Itineraries />} />
+                <Route path="/itineraries/new"       element={<ItineraryBuilder />} />
+                <Route path="/itineraries/:id"       element={<ItineraryDetail />} />
+                <Route path="/itineraries/:id/edit"  element={<ItineraryBuilder />} />
+                <Route path="/analytics"             element={<Analytics />} />
+                <Route path="/vouchers"              element={<Vouchers />} />
+                <Route path="/vouchers/new"          element={<VoucherFormPage />} />
+                <Route path="/vouchers/:id"          element={<VoucherDetail />} />
+                <Route path="/vouchers/:id/edit"     element={<VoucherFormPage />} />
+                <Route path="/finance"               element={<Finance />} />
+                <Route path="/settings"              element={<Settings />} />
+                <Route path="*"                      element={<Navigate to="/" replace />} />
+              </Route>
             </Route>
 
           </Routes>

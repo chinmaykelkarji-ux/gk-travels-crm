@@ -1,11 +1,12 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
-  FileText, Map, FileCheck, BarChart2,
+  FileText, Map, FileCheck, BarChart2, LogOut,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
+import { useAuth } from '@/backend/auth/AuthContext';
 
 interface NavItem {
   path:     string;
@@ -66,11 +67,22 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pendingReminders = useStore(selectors.pendingReminders).length;
+  const { user, signOut } = useAuth();
+  const navigate          = useNavigate();
 
   function getBadgeCount(key?: 'reminders') {
     if (key === 'reminders') return pendingReminders;
     return 0;
   }
+
+  async function handleSignOut() {
+    await signOut();
+    navigate('/login', { replace: true });
+  }
+
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : 'GK';
 
   return (
     <>
@@ -203,18 +215,24 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             )}
           </NavLink>
 
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 transition-colors cursor-default mt-1">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl mt-1">
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
               style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)' }}
             >
-              GK
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-semibold text-slate-200 truncate">GK Admin</div>
-              <div className="text-[10px] text-slate-500 truncate">gktravels.ops</div>
+              <div className="text-[12px] font-semibold text-slate-200 truncate">{user?.name ?? 'Admin'}</div>
+              <div className="text-[10px] text-slate-500 truncate capitalize">{user?.role?.toLowerCase() ?? 'admin'}</div>
             </div>
-            <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" title="Online" />
+            <button
+              onClick={handleSignOut}
+              title="Sign out"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors flex-shrink-0"
+            >
+              <LogOut style={{ width: 13, height: 13 }} />
+            </button>
           </div>
         </div>
       </aside>

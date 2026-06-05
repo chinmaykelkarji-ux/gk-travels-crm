@@ -1,17 +1,24 @@
 // ============================================================
-// GK TRAVELS CRM — Auth Context (single-user stub)
+// GK TRAVELS CRM — Auth Context
 //
-// Authentication removed. Always authenticated as local admin.
-// signIn / signOut are no-ops kept for interface compatibility.
+// Uses the Express JWT + HttpOnly cookie backend.
+// No Supabase. No localStorage. Cookies only.
+//
+// Flow:
+//   1. On mount — GET /api/auth/me to restore session from cookie
+//   2. signIn   — POST /api/auth/login  → backend sets HttpOnly cookie
+//   3. signOut  — POST /api/auth/logout → backend clears cookie
 // ============================================================
 
 import {
-  createContext, useContext, useCallback, type ReactNode,
+  createContext, useContext, useCallback,
+  useState, useEffect, type ReactNode,
 } from 'react';
+import apiClient                  from '@/lib/apiClient';
 import { hasPermission, isAtLeast } from './permissions';
-import type { AuthUser } from './types';
-import type { Permission } from './permissions';
-import type { UserRole } from '@/backend/supabase/database.types';
+import type { AuthUser }           from './types';
+import type { UserRole }           from './types';
+import type { Permission }         from './permissions';
 
 // ─── Context shape ─────────────────────────────────────────────
 
@@ -25,30 +32,86 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// ─── Hardcoded local user ──────────────────────────────────────
+// ─── API response → AuthUser ───────────────────────────────────
 
-const LOCAL_USER: AuthUser = {
-  id:       'local-admin',
-  orgId:    'gktravel',
-  email:    'chinmaykelkara@gmail.com',
-  name:     'Chinmay',
-  role:     'ADMIN',
-  avatar:   null,
-  phone:    null,
-  isActive: true,
-};
+interface ApiUser {
+  id:       string;
+  email:    string;
+  name:     string;
+  role:     string;
+  isActive: boolean;
+}
+
+function apiUserToAuthUser(u: ApiUser): AuthUser {
+  return {
+    id:       u.id,
+    orgId:    'gktravel',
+    email:    u.email,
+    name:     u.name,
+    role:     u.role.toUpperCase() as UserRole,
+    avatar:   null,
+    phone:    null,
+    isActive: u.isActive,
+  };
+}
 
 // ─── Provider ──────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const signIn  = useCallback(async () => {}, []);
-  const signOut = useCallback(async () => {}, []);
+  const [user,      setUser]      = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // ── Session restore on mount ──────────────────────────────────
+  // Call /api/auth/me to check if a valid JWT cookie already exists.
+  // Uses the apiClient but note the 401 interceptor does NOT redirect
+  // for /auth/* endpoints, so a missing session is handled gracefully here.
+  useEffect(() => {
+    let cancelled = false;
+
+    apiClient
+      .get<{ user: ApiUser }>('/auth/me')
+      .then(res => {
+        if (cancelled) return;
+        setUser(apiUserToAuthUser(res.data.user));
+      })
+      .catch(() => {
+        // No valid session — user must sign in
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── signIn ────────────────────────────────────────────────────
+  // Throws on failure so LoginPage can display the error message.
+  const signIn = useCallback(async (email: string, password: string) => {
+    const res = await apiClient.post<{ user: ApiUser }>('/auth/login', {
+      email:    email.trim().toLowerCase(),
+      password,
+    });
+    setUser(apiUserToAuthUser(res.data.user));
+  }, []);
+
+  // ── signOut ───────────────────────────────────────────────────
+  // Clears local state regardless of whether the API call succeeds.
+  const signOut = useCallback(async () => {
+    try {
+      await apiClient.post('/auth/logout');
+    } catch (err) {
+      console.warn('[auth] Logout API call failed (clearing state anyway):', err);
+    } finally {
+      setUser(null);
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{
-      user:            LOCAL_USER,
-      isLoading:       false,
-      isAuthenticated: true,
+      user,
+      isLoading,
+      isAuthenticated: !isLoading && user !== null,
       signIn,
       signOut,
     }}>
