@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Printer, CheckCircle,
-  MapPin, Calendar, Users, Phone, Mail, AlertTriangle,
+  MapPin, Calendar, Users, Phone, Mail, AlertTriangle, MessageCircle,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
 import { fmtDate } from '@/shared/utils/date';
+import { whatsapp, gmail } from '@/shared/utils/email';
 import { cn } from '@/shared/utils/cn';
 import type { ItineraryStatus } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
@@ -32,6 +33,34 @@ export default function ItineraryDetail() {
   const linkedQuotation   = useStore(s => itinerary?.quotationId ? s.quotations.find(q => q.id === itinerary.quotationId) : undefined);
 
   const [deleting, setDeleting] = useState(false);
+
+  function handleWhatsApp() {
+    if (!itinerary?.customerPhone) { toast.error('No phone number on this itinerary'); return; }
+    whatsapp.itinerary({
+      phone:        itinerary.customerPhone,
+      customerName: itinerary.customerName,
+      destination:  itinerary.destination,
+      itineraryId:  itinerary.id,
+      days:         itinerary.days.length,
+      startDate:    itinerary.startDate,
+      endDate:      itinerary.endDate,
+      pax:          itinerary.pax,
+    });
+  }
+
+  function handleEmail() {
+    if (!itinerary?.customerEmail) { toast.error('No email address on this itinerary'); return; }
+    gmail.itinerary({
+      email:        itinerary.customerEmail,
+      customerName: itinerary.customerName,
+      destination:  itinerary.destination,
+      itineraryId:  itinerary.id,
+      days:         itinerary.days.length,
+      startDate:    itinerary.startDate,
+      endDate:      itinerary.endDate,
+      pax:          itinerary.pax,
+    });
+  }
 
   if (!itinerary) {
     return (
@@ -83,6 +112,16 @@ export default function ItineraryDetail() {
             <ArrowLeft className="w-4 h-4" /> Back to Itineraries
           </button>
           <div className="flex items-center gap-2 flex-wrap">
+            {itinerary.customerPhone && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={handleWhatsApp}>
+                <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+              </Button>
+            )}
+            {itinerary.customerEmail && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-[#EA4335] hover:bg-red-50" onClick={handleEmail}>
+                <Mail className="w-3.5 h-3.5" /> Email
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.print()}>
               <Printer className="w-3.5 h-3.5" /> Print / PDF
             </Button>

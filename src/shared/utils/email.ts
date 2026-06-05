@@ -1,5 +1,72 @@
 const FROM = 'gktravels8249@gmail.com';
 
+// ─── WhatsApp ─────────────────────────────────────────────────
+
+export function openWhatsApp(opts: { phone: string; message: string }) {
+  const clean = opts.phone.replace(/\D/g, '');
+  const withCode = clean.startsWith('91') ? clean : `91${clean}`;
+  window.open(`https://wa.me/${withCode}?text=${encodeURIComponent(opts.message)}`, '_blank');
+}
+
+export const whatsapp = {
+  quotation(opts: {
+    phone: string; customerName: string; destination: string;
+    quotationNumber: string; totalSelling: number;
+    startDate?: string; endDate?: string; pax: number; validUntil?: string;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `Your travel quotation from GK Travels is ready!\n\n` +
+        `📍 Destination: ${opts.destination}\n` +
+        (opts.startDate ? `📅 Travel Dates: ${opts.startDate}${opts.endDate ? ` to ${opts.endDate}` : ''}\n` : '') +
+        `👥 Passengers: ${opts.pax}\n` +
+        `💰 Package Value: ₹${opts.totalSelling.toLocaleString('en-IN')}\n` +
+        `📄 Ref: ${opts.quotationNumber}\n` +
+        (opts.validUntil ? `⏳ Valid Until: ${opts.validUntil}\n` : '') +
+        `\nPlease review and confirm at your earliest convenience. Feel free to reply here for any queries.\n\n` +
+        `Best regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
+
+  itinerary(opts: {
+    phone: string; customerName: string; destination: string;
+    itineraryId: string; days: number;
+    startDate?: string; endDate?: string; pax: number;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `Your travel itinerary for *${opts.destination}* is ready!\n\n` +
+        `📍 Destination: ${opts.destination}\n` +
+        (opts.startDate ? `📅 Dates: ${opts.startDate}${opts.endDate ? ` to ${opts.endDate}` : ''}\n` : '') +
+        `🗓 Duration: ${opts.days} Day${opts.days !== 1 ? 's' : ''}\n` +
+        `👥 Passengers: ${opts.pax}\n` +
+        `📄 Ref: ${opts.itineraryId}\n\n` +
+        `Your personalised day-by-day itinerary is attached. Please review and let us know if you'd like any changes.\n\n` +
+        `Have a wonderful journey! ✈️\n\nBest regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
+
+  voucher(opts: {
+    phone: string; customerName: string; voucherNumber: string;
+    voucherType: string; destination?: string;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `Your *${opts.voucherType} Voucher* from GK Travels has been issued.\n\n` +
+        (opts.destination ? `📍 Destination: ${opts.destination}\n` : '') +
+        `🎫 Voucher No: ${opts.voucherNumber}\n\n` +
+        `Please keep this voucher ready at the time of service. Contact us immediately for any changes or queries.\n\n` +
+        `Best regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
+};
+
 /**
  * Opens Gmail compose window for the given recipient.
  * Uses the web-based Gmail compose URL so it always opens the user's Gmail account
@@ -48,14 +115,69 @@ export const gmail = {
     });
   },
 
-  quotation(email: string, customerName: string, destination: string) {
+  quotation(opts: {
+    email: string; customerName: string; destination: string;
+    quotationNumber: string; totalSelling: number;
+    startDate?: string; endDate?: string; pax: number;
+  }) {
     openGmail({
-      to:      email,
-      subject: `Trip Quotation — ${destination} — GK Travels`,
+      to:      opts.email,
+      subject: `Travel Quotation — ${opts.destination} — GK Travels`,
       body:
-        `Dear ${customerName},\n\nPlease find your personalised trip quotation for ${destination} below.\n\n` +
-        `[Attach quotation PDF here]\n\n` +
-        `For any queries, feel free to reply to this email.\n\n` +
+        `Dear ${opts.customerName},\n\n` +
+        `Thank you for choosing GK Travels. Please find your personalised travel quotation below.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📄 Quotation Ref : ${opts.quotationNumber}\n` +
+        `📍 Destination   : ${opts.destination}\n` +
+        (opts.startDate ? `📅 Travel Dates  : ${opts.startDate}${opts.endDate ? ` to ${opts.endDate}` : ''}\n` : '') +
+        `👥 Passengers    : ${opts.pax}\n` +
+        `💰 Package Value : ₹${opts.totalSelling.toLocaleString('en-IN')}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Please print or save the quotation for your records. To confirm your booking, kindly pay the advance amount and reply to this email.\n\n` +
+        `For any queries, please reply to this email or call us directly.\n\n` +
+        `Best regards,\nGK Travels Team\n📧 ${FROM}`,
+    });
+  },
+
+  itinerary(opts: {
+    email: string; customerName: string; destination: string;
+    itineraryId: string; days: number;
+    startDate?: string; endDate?: string; pax: number;
+  }) {
+    openGmail({
+      to:      opts.email,
+      subject: `Travel Itinerary — ${opts.destination} (${opts.days} Days) — GK Travels`,
+      body:
+        `Dear ${opts.customerName},\n\n` +
+        `We are delighted to share your personalised travel itinerary for ${opts.destination}.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📄 Itinerary Ref : ${opts.itineraryId}\n` +
+        `📍 Destination   : ${opts.destination}\n` +
+        (opts.startDate ? `📅 Travel Dates  : ${opts.startDate}${opts.endDate ? ` to ${opts.endDate}` : ''}\n` : '') +
+        `🗓 Duration      : ${opts.days} Day${opts.days !== 1 ? 's' : ''}\n` +
+        `👥 Passengers    : ${opts.pax}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Please find the day-by-day itinerary attached. Review it carefully and let us know if you would like any changes.\n\n` +
+        `Wishing you a wonderful journey! ✈️\n\nBest regards,\nGK Travels Team\n📧 ${FROM}`,
+    });
+  },
+
+  voucher(opts: {
+    email: string; customerName: string; voucherNumber: string;
+    voucherType: string; destination?: string;
+  }) {
+    openGmail({
+      to:      opts.email,
+      subject: `${opts.voucherType} Voucher — ${opts.voucherNumber} — GK Travels`,
+      body:
+        `Dear ${opts.customerName},\n\n` +
+        `Your ${opts.voucherType} voucher from GK Travels has been issued. Please find the details below.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🎫 Voucher No  : ${opts.voucherNumber}\n` +
+        `📋 Type        : ${opts.voucherType}\n` +
+        (opts.destination ? `📍 Destination : ${opts.destination}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Please keep this voucher accessible at the time of service. Contact us immediately for any changes or queries.\n\n` +
         `Best regards,\nGK Travels Team\n📧 ${FROM}`,
     });
   },

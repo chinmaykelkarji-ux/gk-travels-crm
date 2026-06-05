@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Copy, Send, CheckCircle, XCircle, Printer,
-  MapPin, Phone, Mail, Calendar, Users, Building2,
+  MapPin, Phone, Mail, Calendar, Users, Building2, MessageCircle,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
 import { fmtDate } from '@/shared/utils/date';
+import { whatsapp, gmail } from '@/shared/utils/email';
 import { cn } from '@/shared/utils/cn';
 import type { VoucherStatus } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
@@ -29,8 +30,33 @@ export default function VoucherDetail() {
   const setVoucherStatus  = useStore(s => s.setVoucherStatus);
   const duplicateVoucher  = useStore(s => s.duplicateVoucher);
   const linkedTrip        = useStore(s => voucher?.tripId ? s.trips.find(t => t.id === voucher.tripId) : undefined);
+  const linkedCustomer    = useStore(s => voucher?.customerId ? s.customers.find(c => c.id === voucher.customerId) : undefined);
 
   const [deleting, setDeleting] = useState(false);
+
+  function handleWhatsApp() {
+    if (!voucher?.customerPhone) { toast.error('No phone number on this voucher'); return; }
+    whatsapp.voucher({
+      phone:       voucher.customerPhone,
+      customerName: voucher.customerName,
+      voucherNumber: voucher.voucherNumber,
+      voucherType: typeMeta?.label ?? voucher.type,
+      destination: voucher.destination,
+    });
+  }
+
+  function handleEmail() {
+    if (!voucher) return;
+    const email = linkedCustomer?.email ?? linkedTrip?.email ?? '';
+    if (!email) { toast.error('No email address found — link this voucher to a customer or trip with an email'); return; }
+    gmail.voucher({
+      email,
+      customerName:  voucher.customerName,
+      voucherNumber: voucher.voucherNumber,
+      voucherType:   typeMeta?.label ?? voucher.type,
+      destination:   voucher.destination,
+    });
+  }
 
   if (!voucher) {
     return (
@@ -88,6 +114,16 @@ export default function VoucherDetail() {
             <ArrowLeft className="w-4 h-4" /> Back to Vouchers
           </button>
           <div className="flex items-center gap-2 flex-wrap">
+            {voucher.customerPhone && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50" onClick={handleWhatsApp}>
+                <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+              </Button>
+            )}
+            {(linkedCustomer?.email || linkedTrip?.email) && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-[#EA4335] hover:bg-red-50" onClick={handleEmail}>
+                <Mail className="w-3.5 h-3.5" /> Email
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.print()}>
               <Printer className="w-3.5 h-3.5" /> Print / PDF
             </Button>

@@ -98,6 +98,19 @@ export default function QuotationBuilder() {
     existing?.termsAndConds ??
     '• Prices are subject to availability at the time of confirmation.\n• 50% advance required to confirm the booking.\n• Balance to be paid 7 days before departure.\n• Cancellation charges apply as per supplier policy.'
   );
+  const [inclusions, setInclusions] = useState(
+    existing?.inclusions ??
+    '• Accommodation as per itinerary (twin/double sharing)\n• All airport and hotel transfers\n• Daily breakfast\n• Guided sightseeing as per programme\n• All toll taxes, parking fees and driver allowances'
+  );
+  const [exclusions, setExclusions] = useState(
+    existing?.exclusions ??
+    '• International / domestic airfare\n• Visa fees and travel insurance\n• Personal expenses (laundry, telephone, tips)\n• Meals not mentioned in the itinerary\n• Any activities not mentioned in the package'
+  );
+  const [paymentPolicy, setPaymentPolicy] = useState(
+    existing?.paymentPolicy ??
+    '• 50% advance required at the time of booking confirmation\n• Balance payment due 7 days prior to departure\n• Payments accepted via NEFT/RTGS, UPI, or credit card\n• Receipts will be provided for all payments'
+  );
+  const [gstRate, setGstRate] = useState<number>(existing?.gstRate ?? 0);
 
   // ── Link to customer ──────────────────────────────────────
   const [customerId, setCustomerId] = useState(existing?.customerId ?? '');
@@ -127,6 +140,10 @@ export default function QuotationBuilder() {
       setNotes(existing.notes                ?? '');
       setValidUntil(existing.validUntil      ?? '');
       setTermsAndConds(existing.termsAndConds ?? '');
+      setInclusions(existing.inclusions      ?? '');
+      setExclusions(existing.exclusions      ?? '');
+      setPaymentPolicy(existing.paymentPolicy ?? '');
+      setGstRate(existing.gstRate            ?? 0);
       setCustomerId(existing.customerId      ?? '');
       if (existing.items.length) {
         setItems(existing.items.map(it => ({ ...it, _tempId: it.id || uid() } as BuilderItem)));
@@ -140,10 +157,11 @@ export default function QuotationBuilder() {
     const calcs = items.map(calcItemTotals);
     const totalCost    = calcs.reduce((s, c) => s + c.totalCost,    0);
     const totalSelling = calcs.reduce((s, c) => s + c.totalSelling, 0);
+    const gstAmount    = Math.round(totalSelling * (gstRate / 100) * 100) / 100;
     const grossProfit  = totalSelling - totalCost;
     const marginPct    = totalSelling > 0 ? (grossProfit / totalSelling) * 100 : 0;
-    return { totalCost, totalSelling, grossProfit, marginPct };
-  }, [items]);
+    return { totalCost, totalSelling, gstAmount, grossProfit, marginPct };
+  }, [items, gstRate]);
 
   // Per-category breakdown
   const categoryBreakdown = useMemo(() => {
@@ -197,6 +215,11 @@ export default function QuotationBuilder() {
       pax,          notes:     notes || undefined,
       validUntil:   validUntil || undefined,
       termsAndConds: termsAndConds || undefined,
+      inclusions:   inclusions || undefined,
+      exclusions:   exclusions || undefined,
+      paymentPolicy: paymentPolicy || undefined,
+      gstRate,
+      gstAmount:    summary.gstAmount,
       status,
       createdDate:  existing?.createdDate ?? today(),
       items: items.map((it, idx) => ({
@@ -533,7 +556,42 @@ export default function QuotationBuilder() {
             </div>
           </div>
 
-          {/* Notes */}
+          {/* Inclusions & Exclusions */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-gray-800">Inclusions & Exclusions</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="qb-inc" className="text-emerald-700">✅ Inclusions</Label>
+                <textarea
+                  id="qb-inc" rows={5} value={inclusions} onChange={e => setInclusions(e.target.value)}
+                  placeholder="What's included in the package…"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-400/30 resize-none"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="qb-exc" className="text-red-600">❌ Exclusions</Label>
+                <textarea
+                  id="qb-exc" rows={5} value={exclusions} onChange={e => setExclusions(e.target.value)}
+                  placeholder="What's NOT included in the package…"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-400/30 resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Policy */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-gray-800">Payment Policy</h3>
+            <div className="space-y-1.5">
+              <textarea
+                id="qb-pay" rows={4} value={paymentPolicy} onChange={e => setPaymentPolicy(e.target.value)}
+                placeholder="Payment terms and schedule…"
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Notes & Terms */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-800">Notes & Terms</h3>
             <div className="space-y-1.5">
@@ -575,6 +633,31 @@ export default function QuotationBuilder() {
                 <span className="text-gray-500">Selling Price</span>
                 <span className="font-bold text-gray-900 text-base">{formatCurrency(summary.totalSelling)}</span>
               </div>
+              {/* GST selector */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">GST Rate</span>
+                <select
+                  value={gstRate}
+                  onChange={e => setGstRate(Number(e.target.value))}
+                  className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+                >
+                  {[0, 5, 12, 18].map(r => (
+                    <option key={r} value={r}>{r === 0 ? 'No GST' : `GST ${r}%`}</option>
+                  ))}
+                </select>
+              </div>
+              {gstRate > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">GST Amount</span>
+                  <span className="font-medium text-amber-600">{formatCurrency(summary.gstAmount)}</span>
+                </div>
+              )}
+              {gstRate > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 font-medium">Total Payable</span>
+                  <span className="font-bold text-indigo-700 text-base">{formatCurrency(summary.totalSelling + summary.gstAmount)}</span>
+                </div>
+              )}
               <div className="h-px bg-gray-100" />
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">Gross Profit</span>

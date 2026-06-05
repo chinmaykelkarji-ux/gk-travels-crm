@@ -99,22 +99,40 @@
 }
 
 /* ── Print / PDF ────────────────────────────────────────────── */
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+}
+
 @media print {
   /* Hide all navigation chrome */
-  nav, aside, header, .print\:hidden { display: none !important; }
+  nav, aside, header, footer,
+  .sidebar, [class*="sidebar"],
+  .print\:hidden { display: none !important; }
 
-  /* Full-page quotation print layout */
-  body { background: white !important; }
+  /* Reset page to white */
+  html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+
+  /* Show print-only content */
   .print\:block { display: block !important; }
 
-  /* Preserve colours when printing */
+  /* Preserve exact colours and backgrounds */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  /* Page breaks */
-  table { page-break-inside: auto; }
+  /* Table pagination */
+  table { page-break-inside: auto; border-collapse: collapse; }
   tr    { page-break-inside: avoid; page-break-after: auto; }
   thead { display: table-header-group; }
   tfoot { display: table-footer-group; }
+
+  /* Keep section headings with their content */
+  h1, h2, h3, h4 { page-break-after: avoid; }
+
+  /* Avoid breaking inside key content blocks */
+  .print-avoid-break { page-break-inside: avoid; }
+
+  /* Reset any box shadows for clean print */
+  * { box-shadow: none !important; text-shadow: none !important; }
 }
 
 /* ── Focus visible ──────────────────────────────────────────── */

@@ -436,8 +436,13 @@ export interface Quotation {
   notes?:          string;
   termsAndConds?:  string;
   validUntil?:     string;
+  inclusions?:     string;
+  exclusions?:     string;
+  paymentPolicy?:  string;
 
   // Financial summary
+  gstRate:      number;
+  gstAmount:    number;
   totalCost:    number;
   totalSelling: number;
   grossProfit:  number;

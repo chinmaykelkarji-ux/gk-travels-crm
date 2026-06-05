@@ -277,6 +277,11 @@ model Quotation {
   notes           String?
   termsAndConds   String?
   validUntil      String?
+  inclusions      String?
+  exclusions      String?
+  paymentPolicy   String?
+  gstRate         Float           @default(0)
+  gstAmount       Float           @default(0)
   totalCost       Float           @default(0)
   totalSelling    Float           @default(0)
   grossProfit     Float           @default(0)
