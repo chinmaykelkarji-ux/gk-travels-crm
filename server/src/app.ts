@@ -54,6 +54,13 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 
+// ── Request logging ────────────────────────────────────────────
+
+app.use((req, _res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
 // ── Health check ───────────────────────────────────────────────
 
 app.get('/api/health', (_req, res) => {
@@ -81,5 +88,16 @@ app.use('/api/analytics',   analyticsRouter);
 // ── 404 ────────────────────────────────────────────────────────
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+
+// ── Global error handler ───────────────────────────────────────
+
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('GLOBAL SERVER ERROR:', err);
+
+  res.status(500).json({
+    error: 'Internal Server Error',
+    details: err?.message || String(err),
+  });
+});
 
 export default app;

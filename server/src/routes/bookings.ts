@@ -6,8 +6,19 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', async (_req, res) => {
-  try { res.json(await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } })); }
-  catch (err) { res.status(500).json({ error: String(err) }); }
+  try {
+    res.json(await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } }));
+  } catch (err) {
+    console.error('BOOKING API ERROR:', err);
+    if (err instanceof Error) {
+      console.error('MESSAGE:', err.message);
+      console.error('STACK:', err.stack);
+    }
+    res.status(500).json({
+      error: 'Booking API failed',
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 router.post('/', async (req, res) => {
@@ -19,8 +30,15 @@ router.post('/', async (req, res) => {
     });
     res.status(201).json(b);
   } catch (err) {
-    console.error('[bookings POST]', err);
-    res.status(500).json({ error: String(err) });
+    console.error('BOOKING API ERROR:', err);
+    if (err instanceof Error) {
+      console.error('MESSAGE:', err.message);
+      console.error('STACK:', err.stack);
+    }
+    res.status(500).json({
+      error: 'Booking API failed',
+      details: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 
@@ -31,14 +49,34 @@ router.put('/:id', async (req, res) => {
       data:  sanitize(req.body),
     });
     res.json(b);
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('BOOKING API ERROR:', err);
+    if (err instanceof Error) {
+      console.error('MESSAGE:', err.message);
+      console.error('STACK:', err.stack);
+    }
+    res.status(500).json({
+      error: 'Booking API failed',
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 router.delete('/:id', async (req, res) => {
   try {
     await prisma.booking.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('BOOKING API ERROR:', err);
+    if (err instanceof Error) {
+      console.error('MESSAGE:', err.message);
+      console.error('STACK:', err.stack);
+    }
+    res.status(500).json({
+      error: 'Booking API failed',
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 function sanitize(body: Record<string, unknown>) {
