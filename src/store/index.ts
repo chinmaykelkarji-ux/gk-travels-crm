@@ -238,6 +238,8 @@ export const useStore = create<GKStore>()(
           status:        data.status        ?? 'draft',
           totalAmount:   data.totalAmount   ?? null,
           gstRate:       data.gstRate       ?? 5,
+          gstMode:       data.gstMode       ?? 'EXCLUDED',
+          taxableAmount: 0,
           discount:      data.discount      ?? 0,
           gstAmount:     0,
           totalPayable:  null,
@@ -272,7 +274,8 @@ export const useStore = create<GKStore>()(
         const totals = supplierTotalsForTrip({ ...state, trips: [...state.trips, trip] }, id);
         const fin    = calcTripFinance({ ...trip, ...totals });
         Object.assign(trip, {
-          gstAmount:   fin.gstAmount,
+          gstAmount:    fin.gstAmount,
+          taxableAmount: fin.taxableAmount,
           totalPayable: fin.totalPayable,
           paidAmount:  fin.paidAmount,
           balanceDue:  fin.balanceDue,
@@ -308,6 +311,7 @@ export const useStore = create<GKStore>()(
             return {
               ...updated,
               gstAmount:   fin.gstAmount,
+              taxableAmount: fin.taxableAmount,
               totalPayable: fin.totalPayable,
               paidAmount:  fin.paidAmount,
               balanceDue:  fin.balanceDue,
@@ -361,6 +365,7 @@ export const useStore = create<GKStore>()(
             return {
               ...t,
               gstAmount:   fin.gstAmount,
+              taxableAmount: fin.taxableAmount,
               totalPayable: fin.totalPayable,
               paidAmount:  fin.paidAmount,
               balanceDue:  fin.balanceDue,
@@ -380,6 +385,7 @@ export const useStore = create<GKStore>()(
             return {
               ...t,
               gstAmount:   fin.gstAmount,
+              taxableAmount: fin.taxableAmount,
               totalPayable: fin.totalPayable,
               paidAmount:  fin.paidAmount,
               balanceDue:  fin.balanceDue,
@@ -568,6 +574,7 @@ export const useStore = create<GKStore>()(
         const fin   = calcBookingFinance({
           sellingPrice: data.sellingPrice ?? null,
           gstRate:      data.gstRate      ?? 0,
+          gstMode:      data.gstMode      ?? 'EXCLUDED',
           advance:      data.advance      ?? 0,
           supplierCost: data.supplierCost ?? 0,
           supplierPaid: data.supplierPaid ?? 0,
@@ -953,7 +960,9 @@ export const useStore = create<GKStore>()(
           exclusions:      data.exclusions,
           paymentPolicy:   data.paymentPolicy,
           gstRate:         data.gstRate   ?? 0,
+          gstMode:         data.gstMode   ?? 'EXCLUDED',
           gstAmount:       data.gstAmount ?? 0,
+          taxableAmount:   data.taxableAmount ?? 0,
           totalCost:       0, totalSelling: 0, grossProfit: 0, marginPct: 0,
           createdDate:     today(),
           items:           [],

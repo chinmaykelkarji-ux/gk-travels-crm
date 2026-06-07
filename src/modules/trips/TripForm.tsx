@@ -44,6 +44,7 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
       returnDate:  '',
       type:        'Leisure',
       gstRate:     5,
+      gstMode:     'EXCLUDED',
       notes:       '',
     },
   });
@@ -62,6 +63,7 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
       type:        defaultValues?.type        ?? 'Leisure',
       totalAmount: defaultValues?.totalAmount ?? undefined,
       gstRate:     defaultValues?.gstRate     ?? 5,
+      gstMode:     defaultValues?.gstMode     ?? 'EXCLUDED',
       notes:       defaultValues?.notes       ?? '',
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,6 +220,23 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* GST Mode */}
+            <div className="space-y-1.5">
+              <Label htmlFor="gstMode">GST Mode</Label>
+              <Select
+                value={watch('gstMode') ?? 'EXCLUDED'}
+                onValueChange={v => setValue('gstMode', v as 'INCLUDED' | 'EXCLUDED')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EXCLUDED">GST Excluded — add GST on top of price</SelectItem>
+                  <SelectItem value="INCLUDED">GST Included — price already includes GST</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Notes */}

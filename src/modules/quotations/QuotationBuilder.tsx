@@ -7,6 +7,8 @@ import {
 import { useStore } from '@/store';
 import type { QuotationCategory, QuotationItem, QuotationStatus } from '@/shared/types';
 import { formatCurrency } from '@/shared/utils/format';
+import { calcGst } from '@/shared/utils/finance';
+import type { GstMode } from '@/shared/types';
 import { today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { uid } from '@/shared/utils/id';
@@ -111,6 +113,7 @@ export default function QuotationBuilder() {
     '• 50% advance required at the time of booking confirmation\n• Balance payment due 7 days prior to departure\n• Payments accepted via NEFT/RTGS, UPI, or credit card\n• Receipts will be provided for all payments'
   );
   const [gstRate, setGstRate] = useState<number>(existing?.gstRate ?? 0);
+  const [gstMode, setGstMode] = useState<GstMode>(existing?.gstMode ?? 'EXCLUDED');
 
   // ── Link to customer ──────────────────────────────────────
   const [customerId, setCustomerId] = useState(existing?.customerId ?? '');
@@ -144,6 +147,7 @@ export default function QuotationBuilder() {
       setExclusions(existing.exclusions      ?? '');
       setPaymentPolicy(existing.paymentPolicy ?? '');
       setGstRate(existing.gstRate            ?? 0);
+      setGstMode(existing.gstMode            ?? 'EXCLUDED');
       setCustomerId(existing.customerId      ?? '');
       if (existing.items.length) {
         setItems(existing.items.map(it => ({ ...it, _tempId: it.id || uid() } as BuilderItem)));
@@ -157,11 +161,16 @@ export default function QuotationBuilder() {
     const calcs = items.map(calcItemTotals);
     const totalCost    = calcs.reduce((s, c) => s + c.totalCost,    0);
     const totalSelling = calcs.reduce((s, c) => s + c.totalSelling, 0);
-    const gstAmount    = Math.round(totalSelling * (gstRate / 100) * 100) / 100;
+    const gst          = calcGst(totalSelling, gstRate, gstMode);
     const grossProfit  = totalSelling - totalCost;
     const marginPct    = totalSelling > 0 ? (grossProfit / totalSelling) * 100 : 0;
-    return { totalCost, totalSelling, gstAmount, grossProfit, marginPct };
-  }, [items, gstRate]);
+    return {
+      totalCost, totalSelling, grossProfit, marginPct,
+      taxableAmount: gst.taxableAmount,
+      gstAmount:     gst.gstAmount,
+      totalPayable:  gst.totalPayable,
+    };
+  }, [items, gstRate, gstMode]);
 
   // Per-category breakdown
   const categoryBreakdown = useMemo(() => {
@@ -219,7 +228,9 @@ export default function QuotationBuilder() {
       exclusions:   exclusions || undefined,
       paymentPolicy: paymentPolicy || undefined,
       gstRate,
-      gstAmount:    summary.gstAmount,
+      gstMode,
+      gstAmount:     summary.gstAmount,
+      taxableAmount: summary.taxableAmount,
       status,
       createdDate:  existing?.createdDate ?? today(),
       items: items.map((it, idx) => ({
@@ -633,7 +644,18 @@ export default function QuotationBuilder() {
                 <span className="text-gray-500">Selling Price</span>
                 <span className="font-bold text-gray-900 text-base">{formatCurrency(summary.totalSelling)}</span>
               </div>
-              {/* GST selector */}
+              {/* GST selectors */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500">GST Mode</span>
+                <select
+                  value={gstMode}
+                  onChange={e => setGstMode(e.target.value as GstMode)}
+                  className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+                >
+                  <option value="EXCLUDED">GST Excluded (add on top)</option>
+                  <option value="INCLUDED">GST Included (in price)</option>
+                </select>
+              </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">GST Rate</span>
                 <select
@@ -646,6 +668,12 @@ export default function QuotationBuilder() {
                   ))}
                 </select>
               </div>
+              {gstRate > 0 && gstMode === 'INCLUDED' && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Taxable Amount</span>
+                  <span className="font-medium text-gray-700">{formatCurrency(summary.taxableAmount)}</span>
+                </div>
+              )}
               {gstRate > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">GST Amount</span>
@@ -655,7 +683,7 @@ export default function QuotationBuilder() {
               {gstRate > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600 font-medium">Total Payable</span>
-                  <span className="font-bold text-indigo-700 text-base">{formatCurrency(summary.totalSelling + summary.gstAmount)}</span>
+                  <span className="font-bold text-indigo-700 text-base">{formatCurrency(summary.totalPayable)}</span>
                 </div>
               )}
               <div className="h-px bg-gray-100" />

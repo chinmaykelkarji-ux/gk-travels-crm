@@ -19,7 +19,37 @@
 //   - Finance results use `financialStatus`, never `status`.
 // ============================================================
 
-import type { FinancialStatus } from '@/shared/types';
+import type { FinancialStatus, GstMode } from '@/shared/types';
+
+// ─── GST Calculation ─────────────────────────────────────────
+//
+// EXCLUDED (default): `amount` is the taxable base — GST is added on top.
+//   taxableAmount = amount
+//   gstAmount     = round(amount * rate / 100)
+//   totalPayable  = amount + gstAmount
+//
+// INCLUDED: `amount` already contains GST — the taxable base is back-calculated.
+//   taxableAmount = round(amount / (1 + rate/100))
+//   gstAmount     = amount - taxableAmount
+//   totalPayable  = amount   (the entered/customer-facing price never changes)
+
+export interface GstBreakdown {
+  gstMode:       GstMode;
+  taxableAmount: number;
+  gstAmount:     number;
+  totalPayable:  number;
+}
+
+export function calcGst(amount: number, gstRate: number, gstMode: GstMode): GstBreakdown {
+  if (gstMode === 'INCLUDED') {
+    const taxableAmount = Math.round((amount / (1 + gstRate / 100)) * 100) / 100;
+    const gstAmount     = Math.round((amount - taxableAmount) * 100) / 100;
+    return { gstMode, taxableAmount, gstAmount, totalPayable: amount };
+  }
+
+  const gstAmount = Math.round(amount * gstRate / 100);
+  return { gstMode, taxableAmount: amount, gstAmount, totalPayable: amount + gstAmount };
+}
 
 // ─── Status Resolution ───────────────────────────────────────
 
@@ -67,7 +97,9 @@ export const FINANCIAL_STATUS_CLASS: Record<FinancialStatus, string> = {
 export interface TripFinanceResult {
   totalAmount:      number;
   gstRate:          number;
+  gstMode:          GstMode;
   gstAmount:        number;
+  taxableAmount:    number;
   totalPayable:     number | null;
   paidAmount:       number;
   balanceDue:       number;
@@ -81,6 +113,7 @@ export interface TripFinanceResult {
 export function calcTripFinance(opts: {
   totalAmount:            number | null | undefined;
   gstRate?:               number;
+  gstMode?:               GstMode;
   paidAmount?:            number;
   customerPaymentsTotal:  number;
   supplierPaymentsTotal:  number;
@@ -88,6 +121,7 @@ export function calcTripFinance(opts: {
 }): TripFinanceResult {
   const base    = opts.totalAmount ?? null;
   const gstRate = opts.gstRate    ?? 5;
+  const gstMode = opts.gstMode    ?? 'EXCLUDED';
 
   // Supplier cost = max(supplier payment records, booking supplier costs)
   // Avoids double-counting when bookings are later paid via supplier payments.
@@ -98,7 +132,9 @@ export function calcTripFinance(opts: {
     return {
       totalAmount:     0,
       gstRate,
+      gstMode,
       gstAmount:       0,
+      taxableAmount:   0,
       totalPayable:    null,
       paidAmount,
       balanceDue:      0,
@@ -109,21 +145,23 @@ export function calcTripFinance(opts: {
     };
   }
 
-  const gstAmount    = Math.round(base * gstRate / 100);
-  const totalPayable = base + gstAmount;
-  const paidAmount   = Math.max(opts.paidAmount ?? 0, opts.customerPaymentsTotal);
-  const balanceDue   = Math.max(0, totalPayable - paidAmount);
+  const { taxableAmount, gstAmount, totalPayable } = calcGst(base, gstRate, gstMode);
+  const paidAmount = Math.max(opts.paidAmount ?? 0, opts.customerPaymentsTotal);
+  const balanceDue = Math.max(0, totalPayable - paidAmount);
 
   // GST is NOT deducted from gross margin — it is collected from the customer
   // and remitted to government. Deducting it would understate profitability.
-  const grossMargin     = base - supplierCost;
-  const marginPct       = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
+  // Margin is based on the taxable amount (actual revenue, net of tax) in both modes.
+  const grossMargin     = taxableAmount - supplierCost;
+  const marginPct       = taxableAmount > 0 ? Math.round((grossMargin / taxableAmount) * 1000) / 10 : 0;
   const financialStatus = getFinancialStatus(totalPayable, paidAmount);
 
   return {
     totalAmount: base,
     gstRate,
+    gstMode,
     gstAmount,
+    taxableAmount,
     totalPayable,
     paidAmount,
     balanceDue,
@@ -137,7 +175,9 @@ export function calcTripFinance(opts: {
 // ─── Booking Finance Calculation ─────────────────────────────
 
 export interface BookingFinanceResult {
+  gstMode:          GstMode;
   gstAmount:        number;
+  taxableAmount:    number;
   totalPayable:     number | null;
   balanceDue:       number;
   supplierPending:  number;
@@ -150,12 +190,14 @@ export interface BookingFinanceResult {
 export function calcBookingFinance(opts: {
   sellingPrice:  number | null | undefined;
   gstRate?:      number;
+  gstMode?:      GstMode;
   advance?:      number;
   supplierCost?: number;
   supplierPaid?: number;
 }): BookingFinanceResult {
   const base         = opts.sellingPrice ?? null;
   const gstRate      = opts.gstRate      ?? 0;
+  const gstMode      = opts.gstMode      ?? 'EXCLUDED';
   const advance      = opts.advance      ?? 0;
   const supplierCost = opts.supplierCost ?? 0;
   const supplierPaid = opts.supplierPaid ?? 0;
@@ -163,7 +205,9 @@ export function calcBookingFinance(opts: {
 
   if (base === null || base === 0) {
     return {
+      gstMode,
       gstAmount:       0,
+      taxableAmount:   0,
       totalPayable:    null,
       balanceDue:      0,
       supplierPending,
@@ -173,15 +217,17 @@ export function calcBookingFinance(opts: {
     };
   }
 
-  const gstAmount       = Math.round(base * gstRate / 100);
-  const totalPayable    = base + gstAmount;
+  const { taxableAmount, gstAmount, totalPayable } = calcGst(base, gstRate, gstMode);
   const balanceDue      = Math.max(0, totalPayable - advance);
-  const grossMargin     = base - supplierCost;
-  const marginPct       = base > 0 ? Math.round((grossMargin / base) * 1000) / 10 : 0;
+  // Margin is based on the taxable amount (actual revenue, net of tax) in both modes.
+  const grossMargin     = taxableAmount - supplierCost;
+  const marginPct       = taxableAmount > 0 ? Math.round((grossMargin / taxableAmount) * 1000) / 10 : 0;
   const financialStatus = getFinancialStatus(totalPayable, advance);
 
   return {
+    gstMode,
     gstAmount,
+    taxableAmount,
     totalPayable,
     balanceDue,
     supplierPending,

@@ -78,6 +78,7 @@ interface BookingFormData {
   supplierCost:  string;
   advance:       string;
   gstRate:       string;
+  gstMode:       'INCLUDED' | 'EXCLUDED';
   status:        BookingStatus;
   notes:         string;
 }
@@ -90,6 +91,7 @@ const DEFAULT_FORM: BookingFormData = {
   supplierCost: '',
   advance:      '',
   gstRate:      '5',
+  gstMode:      'EXCLUDED',
   status:       'pending',
   notes:        '',
 };
@@ -132,6 +134,7 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
         advance:      adv,
         supplierPaid: 0,
         gstRate:      gst,
+        gstMode:      form.gstMode,
         status:       form.status,
         notes:        form.notes,
         detail:       {},
@@ -248,6 +251,18 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
                   {['0', '5', '12', '18', '28'].map(r => (
                     <SelectItem key={r} value={r}>{r}%</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bk-gst-mode">GST Mode</Label>
+              <Select value={form.gstMode} onValueChange={v => set('gstMode', v as 'INCLUDED' | 'EXCLUDED')}>
+                <SelectTrigger id="bk-gst-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EXCLUDED">Excluded — add GST on top</SelectItem>
+                  <SelectItem value="INCLUDED">Included — price includes GST</SelectItem>
                 </SelectContent>
               </Select>
             </div>

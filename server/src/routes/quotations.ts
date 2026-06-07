@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { calcGst }                        from '../../../src/shared/utils/finance.js';
+import { generateTasksFromCategories }    from '../../../src/shared/utils/taskEngine.js';
+import { nextTaskId }                      from '../../../src/shared/utils/id.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -226,42 +229,66 @@ router.post('/:id/convert-trip', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Create trip
-    const trip = await prisma.trip.create({
-      data: {
-        id:          tripId,
-        customer:    q.customerName,
-        phone:       q.customerPhone ?? '',
-        email:       q.customerEmail ?? undefined,
-        customerId:  q.customerId    ?? undefined,
-        destination: q.destination,
-        type:        'Leisure',
-        pax:         q.pax,
-        departure:   q.startDate     ?? undefined,
-        returnDate:  q.endDate       ?? undefined,
-        status:      'confirmed',
-        totalAmount: q.totalSelling  > 0 ? q.totalSelling : undefined,
-        gstRate:     5,
-        notes:       q.notes         ?? '',
-        createdDate: today,
-        sourceLeadId: undefined,
-        timeline:    [{
-          id:    `tl-${Date.now()}`,
-          date:  today,
-          event: `Trip created from Quotation ${q.id}`,
-          type:  'system',
-        }],
-      },
+    const totalAmount = q.totalSelling > 0 ? q.totalSelling : null;
+    const gst = totalAmount !== null
+      ? calcGst(totalAmount, q.gstRate, q.gstMode)
+      : { taxableAmount: 0, gstAmount: 0, totalPayable: null as number | null };
+
+    // Auto-generate operational tasks from the quotation's item categories
+    // (e.g. flight → "Book flight tickets", visa → "Collect visa documents")
+    const categories   = [...new Set(q.items.map(i => i.category))];
+    const generated    = generateTasksFromCategories({
+      categories,
+      tripId:     tripId,
+      customerId: q.customerId,
+      departure:  q.startDate,
+    });
+    const idPool   = (await prisma.task.findMany({ select: { id: true } })).map(t => t.id);
+    const taskRows = generated.map(t => {
+      const id = nextTaskId(idPool);
+      idPool.push(id);
+      return { id, ...t };
     });
 
-    // Mark quotation converted
-    const updated = await prisma.quotation.update({
-      where:   { id: q.id },
-      data:    { convertedTripId: tripId, convertedAt: today },
-      include: { items: { orderBy: { sortOrder: 'asc' } } },
-    });
+    // Create trip + tasks + mark quotation converted atomically
+    const [trip, , updated] = await prisma.$transaction([
+      prisma.trip.create({
+        data: {
+          id:            tripId,
+          customer:      q.customerName,
+          phone:         q.customerPhone ?? '',
+          email:         q.customerEmail ?? undefined,
+          customerId:    q.customerId    ?? undefined,
+          destination:   q.destination,
+          type:          'Leisure',
+          pax:           q.pax,
+          departure:     q.startDate     ?? undefined,
+          returnDate:    q.endDate       ?? undefined,
+          status:        'confirmed',
+          totalAmount:   totalAmount     ?? undefined,
+          gstRate:       q.gstRate,
+          gstMode:       q.gstMode,
+          taxableAmount: gst.taxableAmount,
+          notes:         q.notes         ?? '',
+          createdDate:   today,
+          sourceLeadId:  undefined,
+          timeline:      [{
+            id:    `tl-${Date.now()}`,
+            date:  today,
+            event: `Trip created from Quotation ${q.id}`,
+            type:  'system',
+          }],
+        },
+      }),
+      prisma.task.createMany({ data: taskRows }),
+      prisma.quotation.update({
+        where:   { id: q.id },
+        data:    { convertedTripId: tripId, convertedAt: today },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      }),
+    ]);
 
-    res.json({ quotation: updated, trip });
+    res.json({ quotation: updated, trip, tasksCreated: taskRows.length });
   } catch (err) {
     console.error('[quotations convert-trip]', err);
     res.status(500).json({ error: String(err) });

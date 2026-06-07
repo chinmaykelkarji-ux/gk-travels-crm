@@ -345,6 +345,7 @@ export default function TripDetail() {
               <div className="space-y-3">
                 {[
                   { label: 'Selling Price',   val: trip.totalAmount  !== null ? formatCurrency(trip.totalAmount)  : '⚠ Not Set', warn: trip.totalAmount === null },
+                  ...(trip.gstRate > 0 ? [{ label: 'Taxable Amount', val: formatCurrency(trip.taxableAmount) }] : []),
                   { label: `GST (${trip.gstRate}%)`, val: formatCurrency(trip.gstAmount) },
                   { label: 'Total Payable',   val: trip.totalPayable !== null ? formatCurrency(trip.totalPayable) : '—' },
                   { label: 'Amount Received', val: formatCurrency(trip.paidAmount), green: true },

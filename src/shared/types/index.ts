@@ -67,6 +67,12 @@ export type UserRole = 'super_admin' | 'admin' | 'finance' | 'operations' | 'sal
 //       They must NEVER share a field name on the same entity.
 export type FinancialStatus = 'unpriced' | 'unpaid' | 'partial' | 'paid';
 
+// ─── GST Mode ───────────────────────────────────────────────
+// EXCLUDED: entered amount is the taxable base — GST is added on top.
+// INCLUDED: entered amount already contains GST — taxable base is back-calculated.
+// Always compute via calcGst() from utils/finance.ts.
+export type GstMode = 'INCLUDED' | 'EXCLUDED';
+
 // ─── Activity Entity Type ────────────────────────────────────
 // Named type for ActivityLog.entityType — prevents generic string inference
 // inside Zustand set() closures where contextual typing may not flow through.
@@ -201,10 +207,12 @@ export interface Trip {
   // Financial (null = price not set — NEVER default to 0 to avoid false "paid")
   totalAmount: number | null;
   gstRate: number;
+  gstMode: GstMode;
   discount?: number;
 
   // Computed financial fields (set by calcTripFinance in store)
   gstAmount: number;
+  taxableAmount: number;
   totalPayable: number | null;
   paidAmount: number;
   balanceDue: number;
@@ -337,9 +345,11 @@ export interface Booking {
   advance: number;
   supplierPaid: number;
   gstRate: number;
+  gstMode: GstMode;
 
   // Computed financial (set by calcBookingFinance — stored as a cache on the entity)
   gstAmount: number;
+  taxableAmount: number;
   totalPayable: number | null;
   balanceDue: number;
   supplierPending: number;
@@ -441,8 +451,10 @@ export interface Quotation {
   paymentPolicy?:  string;
 
   // Financial summary
-  gstRate:      number;
-  gstAmount:    number;
+  gstRate:       number;
+  gstMode:       GstMode;
+  gstAmount:     number;
+  taxableAmount: number;
   totalCost:    number;
   totalSelling: number;
   grossProfit:  number;
@@ -636,6 +648,13 @@ export interface Voucher {
   vendorName?:  string;
   vendorPhone?: string;
   vendorEmail?: string;
+
+  // GST
+  gstRate?:        number;
+  gstMode?:        GstMode;
+  gstAmount?:      number;
+  taxableAmount?:  number;
+  totalPayable?:   number | null;
 
   // Common
   pax:              number;

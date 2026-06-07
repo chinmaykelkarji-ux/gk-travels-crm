@@ -48,6 +48,11 @@ export const tripFormSchema = z.object({
     .optional()
     .default(5),
 
+  gstMode: z
+    .enum(['INCLUDED', 'EXCLUDED'])
+    .optional()
+    .default('EXCLUDED'),
+
   notes: z.string().max(2000, 'Notes too long').optional().default(''),
 });
 

@@ -83,6 +83,8 @@ model Trip {
   status              String    @default("draft")
   totalAmount         Float?
   gstRate             Float     @default(5)
+  gstMode             GstMode   @default(EXCLUDED)
+  taxableAmount       Float     @default(0)
   discount            Float     @default(0)
   gstAmount           Float     @default(0)
   totalPayable        Float?
@@ -132,7 +134,9 @@ advance         Float    @default(0)
 supplierPaid    Float    @default(0)
 
 gstRate         Float    @default(0)
+gstMode         GstMode  @default(EXCLUDED)
 gstAmount       Float    @default(0)
+taxableAmount   Float    @default(0)
 
 totalPayable    Float?
 balanceDue      Float    @default(0)
@@ -293,7 +297,9 @@ model Quotation {
   exclusions      String?
   paymentPolicy   String?
   gstRate         Float           @default(0)
+  gstMode         GstMode         @default(EXCLUDED)
   gstAmount       Float           @default(0)
+  taxableAmount   Float           @default(0)
   totalCost       Float           @default(0)
   totalSelling    Float           @default(0)
   grossProfit     Float           @default(0)
@@ -439,6 +445,11 @@ model Voucher {
   vendorPhone      String?
   vendorEmail      String?
   pax              Int      @default(1)
+  gstRate          Float    @default(0)
+  gstMode          GstMode  @default(EXCLUDED)
+  gstAmount        Float    @default(0)
+  taxableAmount    Float    @default(0)
+  totalPayable     Float?
   notes            String?
   emergencyContact String?
   internalNotes    String?
@@ -458,4 +469,9 @@ enum Role {
   SALES
   OPERATIONS
   ACCOUNTS
+}
+
+enum GstMode {
+  INCLUDED
+  EXCLUDED
 }

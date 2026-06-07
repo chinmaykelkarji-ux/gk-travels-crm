@@ -11,6 +11,7 @@ import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import type { QuotationStatus } from '@/shared/types';
+import { calcGst } from '@/shared/utils/finance';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { whatsapp, gmail } from '@/shared/utils/email';
@@ -66,9 +67,12 @@ export default function QuotationDetail() {
   }
 
   const catMap = Object.fromEntries(QUOTE_CATEGORIES.map(c => [c.value, c]));
-  const gstAmount   = quotation.gstAmount   ?? 0;
-  const gstRate     = quotation.gstRate     ?? 0;
-  const totalPayable = quotation.totalSelling + gstAmount;
+  const gstRate      = quotation.gstRate ?? 0;
+  const gstMode      = quotation.gstMode ?? 'EXCLUDED';
+  const gst          = calcGst(quotation.totalSelling, gstRate, gstMode);
+  const gstAmount    = gst.gstAmount;
+  const taxableAmount = gst.taxableAmount;
+  const totalPayable = gst.totalPayable;
 
   async function handleDelete() {
     const ok = await confirm({
@@ -262,7 +266,11 @@ export default function QuotationDetail() {
         )}
 
         {/* Summary row */}
-        <div className={cn('grid gap-4', gstRate > 0 ? 'grid-cols-4' : 'grid-cols-3')}>
+        <div className={cn('grid gap-4',
+          gstRate > 0 && gstMode === 'INCLUDED' ? 'grid-cols-5' :
+          gstRate > 0                           ? 'grid-cols-4' :
+                                                    'grid-cols-3'
+        )}>
           <div className="bg-white rounded-2xl border border-gray-200 p-4 text-center">
             <div className="text-2xl font-bold text-gray-900 font-display">{formatCurrency(quotation.totalCost)}</div>
             <div className="text-xs text-gray-500 mt-1">Total Cost</div>
@@ -271,6 +279,12 @@ export default function QuotationDetail() {
             <div className="text-2xl font-bold text-indigo-700 font-display">{formatCurrency(quotation.totalSelling)}</div>
             <div className="text-xs text-gray-500 mt-1">Selling Price</div>
           </div>
+          {gstRate > 0 && gstMode === 'INCLUDED' && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-4 text-center">
+              <div className="text-2xl font-bold text-gray-700 font-display">{formatCurrency(taxableAmount)}</div>
+              <div className="text-xs text-gray-500 mt-1">Taxable Amount</div>
+            </div>
+          )}
           {gstRate > 0 && (
             <div className="bg-white rounded-2xl border border-amber-200 p-4 text-center">
               <div className="text-2xl font-bold text-amber-600 font-display">{formatCurrency(gstAmount)}</div>
@@ -385,6 +399,13 @@ export default function QuotationDetail() {
                   <td className="py-2 text-right text-sm text-gray-500">Subtotal</td>
                   <td className="py-2 text-right text-sm font-semibold text-gray-800">{formatCurrency(quotation.totalSelling)}</td>
                 </tr>
+                {gstRate > 0 && gstMode === 'INCLUDED' && (
+                  <tr>
+                    <td colSpan={3} />
+                    <td className="py-1.5 text-right text-sm text-gray-500">Taxable Amount</td>
+                    <td className="py-1.5 text-right text-sm font-medium text-gray-700">{formatCurrency(taxableAmount)}</td>
+                  </tr>
+                )}
                 {gstRate > 0 && (
                   <tr>
                     <td colSpan={3} />
@@ -551,6 +572,13 @@ export default function QuotationDetail() {
               <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 11, color: '#6B7280' }}>Subtotal</td>
               <td style={{ padding: '7px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600 }}>₹{quotation.totalSelling.toLocaleString('en-IN')}</td>
             </tr>
+            {gstRate > 0 && gstMode === 'INCLUDED' && (
+              <tr>
+                <td colSpan={3} />
+                <td style={{ padding: '5px 10px', textAlign: 'right', fontSize: 11, color: '#6B7280' }}>Taxable Amount</td>
+                <td style={{ padding: '5px 10px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#374151' }}>₹{taxableAmount.toLocaleString('en-IN')}</td>
+              </tr>
+            )}
             {gstRate > 0 && (
               <tr>
                 <td colSpan={3} />
