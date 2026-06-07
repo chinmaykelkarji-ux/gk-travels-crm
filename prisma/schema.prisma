@@ -115,28 +115,40 @@ model Trip {
 }
 
 model Booking {
-  id              String   @id
-  type            String
-  status          String   @default("pending")
-  customerName    String
-  customerId      String?
-  refId           String?
-  sellingPrice    Float?
-  supplierCost    Float    @default(0)
-  advance         Float    @default(0)
-  supplierPaid    Float    @default(0)
-  gstRate         Float    @default(0)
-  gstAmount       Float    @default(0)
-  totalPayable    Float?
-  balanceDue      Float    @default(0)
-  supplierPending Float    @default(0)
-  grossMargin     Float    @default(0)
-  marginPct       Float    @default(0)
-  detail          Json     @default("{}")
-  notes           String   @default("")
-  createdDate     String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+id              String   @id
+type            String
+status          String   @default("pending")
+
+financialStatus String   @default("unpaid")
+
+customerName    String
+customerId      String?
+refId           String?
+
+sellingPrice    Float?
+supplierCost    Float    @default(0)
+
+advance         Float    @default(0)
+supplierPaid    Float    @default(0)
+
+gstRate         Float    @default(0)
+gstAmount       Float    @default(0)
+
+totalPayable    Float?
+balanceDue      Float    @default(0)
+
+supplierPending Float    @default(0)
+
+grossMargin     Float    @default(0)
+marginPct       Float    @default(0)
+
+detail          Json     @default("{}")
+notes           String   @default("")
+
+createdDate     String
+
+createdAt       DateTime @default(now())
+updatedAt       DateTime @updatedAt
 
   @@map("bookings")
 }
