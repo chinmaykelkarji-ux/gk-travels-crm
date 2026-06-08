@@ -92,6 +92,13 @@ export type ActivityEntityType =
   | 'payment'
   | 'receivable'
   | 'task'
+  | 'reminder'
+  | 'quotation'
+  | 'voucher'
+  | 'itinerary'
+  | 'vendor'
+  | 'vendor_payment'
+  | 'financial_transaction'
   | 'system';
 
 // ─── Timeline & Audit ───────────────────────────────────────
@@ -106,16 +113,53 @@ export interface TimelineEvent {
 
 export interface ActivityLog {
   id: string;
-  type: string;
-  message: string;
+  action: string;
+  title?: string;
+  description: string;
   entityType: ActivityEntityType;
   entityId: string;
   userId?: string;
+  metadata?: Record<string, unknown> | null;
   timestamp: string;
   date: string;
   before?: unknown;
   after?: unknown;
 }
+
+// ─── Communication History (Phase 4) ─────────────────────────
+
+export type CommunicationType = 'whatsapp' | 'email';
+
+export interface Communication {
+  id: string;
+  type: CommunicationType;
+  recipient: string;
+  subject?: string | null;
+  entityType: ActivityEntityType;
+  entityId: string;
+  userId?: string | null;
+  createdAt: string;
+}
+
+// ─── Quotation Approval Workflow (Phase 3) ───────────────────
+
+export type ApprovalStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+
+export const APPROVAL_STATUS_LABEL: Record<ApprovalStatus, string> = {
+  DRAFT:            'Draft',
+  PENDING_APPROVAL: 'Pending Approval',
+  APPROVED:         'Approved',
+  REJECTED:         'Rejected',
+  EXPIRED:          'Expired',
+};
+
+export const APPROVAL_STATUS_CLASS: Record<ApprovalStatus, string> = {
+  DRAFT:            'bg-gray-100 text-gray-600 border border-gray-200',
+  PENDING_APPROVAL: 'bg-amber-50 text-amber-700 border border-amber-200',
+  APPROVED:         'bg-green-50 text-green-700 border border-green-200',
+  REJECTED:         'bg-red-50 text-red-700 border border-red-200',
+  EXPIRED:          'bg-gray-100 text-gray-500 border border-gray-200',
+};
 
 // ─── Document ───────────────────────────────────────────────
 
@@ -528,6 +572,16 @@ export interface Quotation {
   acceptedAt?: string;
   rejectedAt?: string;
 
+  // Internal approval workflow (Phase 3) — distinct from the customer-facing
+  // `status` pipeline (draft/sent/accepted/rejected). Gates whether a
+  // quotation has been reviewed by an admin before it goes out.
+  approvalStatus:   ApprovalStatus;
+  approvalComment?: string;
+  submittedBy?:     string;
+  submittedAt?:     string;
+  approvedBy?:      string;
+  approvedAt?:      string;
+
   items: QuotationItem[];
 }
 
@@ -733,6 +787,7 @@ export interface GKStoreState {
   tasks:           Task[];
   reminders:       Reminder[];
   activityLog:     ActivityLog[];
+  communications:  Communication[];
   payments: {
     customerPayments: Payment[];
     supplierPayments: Payment[];

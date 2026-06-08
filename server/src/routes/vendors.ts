@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 import { today } from '../../../src/shared/utils/date.js';
 
 const router = Router();
@@ -122,14 +122,14 @@ router.post('/payments', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          payment.totalCost,
-          description:     payment.description ?? `Payable to ${payment.vendorName}`,
+          description: payment.description ?? `Payable to ${payment.vendorName}`,
           transactionDate: today(),
           createdBy:       req.userId,
         },
       });
       await logActivity(prisma, {
-        type:       'payable_created',
-        message:    `Payable of ₹${payment.totalCost.toLocaleString('en-IN')} recorded for vendor ${payment.vendorName}`,
+        action:      'payable_created',
+        description: `Payable of ₹${payment.totalCost.toLocaleString('en-IN')} recorded for vendor ${payment.vendorName}`,
         entityType: 'vendor_payment',
         entityId:   payment.id,
         userId:     req.userId,
@@ -145,14 +145,14 @@ router.post('/payments', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          delta,
-          description:     `Payment of ₹${delta.toLocaleString('en-IN')} recorded toward ${payment.vendorName}`,
+          description: `Payment of ₹${delta.toLocaleString('en-IN')} recorded toward ${payment.vendorName}`,
           transactionDate: today(),
           createdBy:       req.userId,
         },
       });
       await logActivity(prisma, {
-        type:       'vendor_payment_sent',
-        message:    `Payment of ₹${delta.toLocaleString('en-IN')} sent to vendor ${payment.vendorName}`,
+        action:      'vendor_payment_sent',
+        description: `Payment of ₹${delta.toLocaleString('en-IN')} sent to vendor ${payment.vendorName}`,
         entityType: 'vendor_payment',
         entityId:   payment.id,
         userId:     req.userId,
@@ -220,15 +220,15 @@ router.put('/payments/:id/mark-paid', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          remaining,
-          description:     `Final payment of ₹${remaining.toLocaleString('en-IN')} settled to ${payment.vendorName}`,
+          description: `Final payment of ₹${remaining.toLocaleString('en-IN')} settled to ${payment.vendorName}`,
           transactionDate: date,
           createdBy:       req.userId,
         },
       });
     }
     await logActivity(prisma, {
-      type:       'vendor_payment_settled',
-      message:    `Vendor payment to ${payment.vendorName} marked fully paid`,
+      action:      'vendor_payment_settled',
+      description: `Vendor payment to ${payment.vendorName} marked fully paid`,
       entityType: 'vendor_payment',
       entityId:   payment.id,
       userId:     req.userId,

@@ -29,6 +29,7 @@ export default function ItineraryDetail() {
   const itinerary         = useStore(selectors.itineraryById(id ?? ''));
   const deleteItinerary   = useStore(s => s.deleteItinerary);
   const setItineraryStatus = useStore(s => s.setItineraryStatus);
+  const logCommunication  = useStore(s => s.logCommunication);
   const linkedTrip        = useStore(s => itinerary?.tripId ? s.trips.find(t => t.id === itinerary.tripId) : undefined);
   const linkedQuotation   = useStore(s => itinerary?.quotationId ? s.quotations.find(q => q.id === itinerary.quotationId) : undefined);
 
@@ -46,6 +47,13 @@ export default function ItineraryDetail() {
       endDate:      itinerary.endDate,
       pax:          itinerary.pax,
     });
+    logCommunication({
+      type:       'whatsapp',
+      recipient:  itinerary.customerPhone,
+      subject:    `Itinerary ${itinerary.id} — ${itinerary.destination}`,
+      entityType: 'itinerary',
+      entityId:   itinerary.id,
+    });
   }
 
   function handleEmail() {
@@ -59,6 +67,13 @@ export default function ItineraryDetail() {
       startDate:    itinerary.startDate,
       endDate:      itinerary.endDate,
       pax:          itinerary.pax,
+    });
+    logCommunication({
+      type:       'email',
+      recipient:  itinerary.customerEmail,
+      subject:    `Itinerary ${itinerary.id} — ${itinerary.destination}`,
+      entityType: 'itinerary',
+      entityId:   itinerary.id,
     });
   }
 

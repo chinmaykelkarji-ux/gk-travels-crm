@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -56,12 +57,23 @@ router.post('/reminders/bulk', async (req, res) => {
 });
 
 // PUT /api/activity/reminders/:id/sent
-router.put('/reminders/:id/sent', async (req, res) => {
+router.put('/reminders/:id/sent', async (req: AuthRequest, res) => {
   try {
     const r = await prisma.reminder.update({
       where: { id: req.params.id },
       data:  { sent: true, sentAt: new Date().toISOString() },
     });
+
+    await logActivity(prisma, {
+      action:      'reminder_completed',
+      description: `Reminder completed: "${r.message}"`,
+      entityType:  r.tripId ? 'trip' : 'reminder',
+      entityId:    r.tripId ?? r.id,
+      userId:      req.userId,
+      metadata:    { type: r.type, priority: r.priority, reminderId: r.id, dueDate: r.dueDate },
+      after:       { sent: true, sentAt: r.sentAt },
+    });
+
     res.json(r);
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });

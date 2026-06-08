@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, IndianRupee, Edit2, Trash2, Plus, CheckCircle, Receipt, HelpCircle,
+  ArrowLeft, IndianRupee, Edit2, Trash2, Plus, CheckCircle, Receipt, HelpCircle, Activity,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
@@ -18,6 +18,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { Separator } from '@/shared/components/ui/separator';
 import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG } from './bookingMeta';
 
 export default function BookingDetail() {
@@ -28,6 +29,8 @@ export default function BookingDetail() {
   const trips         = useStore(s => s.trips);
   const deleteBooking = useStore(s => s.deleteBooking);
 
+  const activityLog      = useStore(s => s.activityLog);
+  const communications   = useStore(s => s.communications);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
   const addReceivableEntry = useStore(s => s.addReceivableEntry);
@@ -296,6 +299,18 @@ export default function BookingDetail() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Activity */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-gray-500" /> Activity
+        </h3>
+        <ActivityTimeline
+          activity={activityLog.filter(a => a.entityType === 'booking' && a.entityId === booking.id)}
+          communications={communications.filter(c => c.entityType === 'booking' && c.entityId === booking.id)}
+          emptyLabel="No activity recorded for this booking yet"
+        />
       </div>
 
       {/* Record Payment Form */}

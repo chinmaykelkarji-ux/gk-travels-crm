@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -45,8 +45,8 @@ router.post('/', async (req: AuthRequest, res) => {
 
     if (!existed) {
       await logActivity(prisma, {
-        type:       'voucher_issued',
-        message:    `Voucher ${v.id} issued (${v.type})`,
+        action:      'voucher_issued',
+        description: `Voucher ${v.id} issued (${v.type})`,
         entityType: 'voucher',
         entityId:   v.id,
         userId:     req.userId,

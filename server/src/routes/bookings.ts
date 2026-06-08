@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { createReceivable } from '../services/financeService.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -45,13 +45,13 @@ router.post('/', async (req: AuthRequest, res) => {
           amount:        b.totalPayable,
           gstAmount:     b.gstAmount,
           taxableAmount: b.taxableAmount,
-          description:   `Booking ${b.id} (${b.type})`,
+          description: `Booking ${b.id} (${b.type})`,
           createdBy:     req.userId,
         });
       }
       await logActivity(prisma, {
-        type:       'booking_created',
-        message:    `Booking ${b.id} (${b.type}) created for ${b.customerName}`,
+        action:      'booking_created',
+        description: `Booking ${b.id} (${b.type}) created for ${b.customerName}`,
         entityType: 'booking',
         entityId:   b.id,
         userId:     req.userId,
@@ -73,12 +73,26 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
   try {
+    const before = await prisma.booking.findUnique({ where: { id: req.params.id } });
     const b = await prisma.booking.update({
       where: { id: req.params.id },
       data:  sanitize(req.body) as Parameters<typeof prisma.booking.update>[0]['data'],
     });
+
+    if (before && before.status !== 'cancelled' && b.status === 'cancelled') {
+      await logActivity(prisma, {
+        action:      'booking_cancelled',
+        description: `Booking ${b.id} (${b.type}) cancelled for ${b.customerName}`,
+        entityType:  'booking',
+        entityId:    b.id,
+        userId:      req.userId,
+        before:      { status: before.status },
+        after:       { status: b.status },
+      });
+    }
+
     res.json(b);
   } catch (err) {
     console.error('BOOKING API ERROR:', err);

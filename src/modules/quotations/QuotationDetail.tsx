@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Copy, Send, CheckCircle,
   XCircle, Printer, FolderPlus, MapPin, Calendar,
-  Users, Phone, Mail, IndianRupee, MessageCircle, Receipt, Plus,
+  Users, Phone, Mail, IndianRupee, MessageCircle, Receipt, Plus, ClipboardList,
+  FileClock, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import apiClient from '@/lib/apiClient';
@@ -21,6 +22,13 @@ import { whatsapp, gmail } from '@/shared/utils/email';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
+import { useAuth } from '@/backend/auth/AuthContext';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter,
+} from '@/shared/components/ui/dialog';
+import { Textarea } from '@/shared/components/ui/textarea';
+import { APPROVAL_STATUS_LABEL, APPROVAL_STATUS_CLASS } from '@/shared/types';
 import { QUOTE_CATEGORIES } from './QuotationBuilder';
 
 // ─── Status helpers ───────────────────────────────────────────
@@ -55,7 +63,14 @@ export default function QuotationDetail() {
   const setQuotationStatus  = useStore(s => s.setQuotationStatus);
   const duplicateQuotation  = useStore(s => s.duplicateQuotation);
   const convertQuotationToTrip = useStore(s => s.convertQuotationToTrip);
+  const submitQuotationForApproval = useStore(s => s.submitQuotationForApproval);
+  const approveQuotation    = useStore(s => s.approveQuotation);
+  const rejectQuotation     = useStore(s => s.rejectQuotation);
+  const logCommunication    = useStore(s => s.logCommunication);
+  const { user } = useAuth();
 
+  const activityLog        = useStore(s => s.activityLog);
+  const communications     = useStore(s => s.communications);
   const allReceivables     = useStore(s => s.receivables);
   const addReceivableEntry = useStore(s => s.addReceivableEntry);
 
@@ -63,6 +78,10 @@ export default function QuotationDetail() {
   const [deletingId,  setDeletingId] = useState(false);
   const [recEntryOpen, setRecEntryOpen] = useState(false);
   const [activeReceivable, setActiveReceivable] = useState<Receivable | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [approvalDialog, setApprovalDialog] = useState<'approve' | 'reject' | null>(null);
+  const [approvalComment, setApprovalComment] = useState('');
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
   if (!quotation) {
     return (
@@ -160,6 +179,46 @@ export default function QuotationDetail() {
     }
   }
 
+  async function handleSubmitForApproval() {
+    const ok = await confirm({
+      title:        'Submit for approval?',
+      description:  `${quotation!.id} will be sent to an admin for review before it can move forward.`,
+      confirmLabel: 'Submit',
+    });
+    if (!ok) return;
+    setSubmitting(true);
+    try {
+      const result = await submitQuotationForApproval(quotation!.id);
+      if (result.ok) toast.success('Submitted for approval');
+      else toast.error('Submission failed', result.reason);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleApprovalDecision() {
+    if (!approvalDialog) return;
+    if (approvalDialog === 'reject' && !approvalComment.trim()) {
+      toast.error('A reason is required to reject a quotation');
+      return;
+    }
+    setApprovalSubmitting(true);
+    try {
+      const result = approvalDialog === 'approve'
+        ? await approveQuotation(quotation!.id, approvalComment.trim() || undefined)
+        : await rejectQuotation(quotation!.id, approvalComment.trim());
+      if (result.ok) {
+        toast.success(approvalDialog === 'approve' ? 'Quotation approved' : 'Quotation rejected');
+        setApprovalDialog(null);
+        setApprovalComment('');
+      } else {
+        toast.error(approvalDialog === 'approve' ? 'Approval failed' : 'Rejection failed', result.reason);
+      }
+    } finally {
+      setApprovalSubmitting(false);
+    }
+  }
+
   function handleWhatsApp() {
     if (!quotation!.customerPhone) {
       toast.error('No phone number on this quotation');
@@ -175,6 +234,13 @@ export default function QuotationDetail() {
       endDate:        quotation!.endDate,
       pax:            quotation!.pax,
       validUntil:     quotation!.validUntil,
+    });
+    logCommunication({
+      type:       'whatsapp',
+      recipient:  quotation!.customerPhone,
+      subject:    `Quotation ${quotation!.quotationNumber}`,
+      entityType: 'quotation',
+      entityId:   quotation!.id,
     });
   }
 
@@ -193,11 +259,22 @@ export default function QuotationDetail() {
       endDate:        quotation!.endDate,
       pax:            quotation!.pax,
     });
+    logCommunication({
+      type:       'email',
+      recipient:  quotation!.customerEmail,
+      subject:    `Quotation ${quotation!.quotationNumber}`,
+      entityType: 'quotation',
+      entityId:   quotation!.id,
+    });
   }
 
   const isDraft    = quotation.status === 'draft';
   const isSent     = quotation.status === 'sent';
   const isAccepted = quotation.status === 'accepted';
+
+  const canSubmitForApproval  = quotation.approvalStatus === 'DRAFT' || quotation.approvalStatus === 'REJECTED';
+  const isPendingApproval     = quotation.approvalStatus === 'PENDING_APPROVAL';
+  const isAdmin               = user?.role === 'ADMIN';
 
   const incLines = (quotation.inclusions ?? '').split('\n').filter(Boolean);
   const excLines = (quotation.exclusions ?? '').split('\n').filter(Boolean);
@@ -242,6 +319,29 @@ export default function QuotationDetail() {
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleStatusChange('sent')}>
                 <Send className="w-3.5 h-3.5" /> Mark Sent
               </Button>
+            )}
+            {canSubmitForApproval && (
+              <Button variant="outline" size="sm" className="gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
+                loading={submitting} onClick={handleSubmitForApproval}>
+                <FileClock className="w-3.5 h-3.5" /> Submit for Approval
+              </Button>
+            )}
+            {isPendingApproval && isAdmin && (
+              <>
+                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => { setApprovalDialog('approve'); setApprovalComment(''); }}>
+                  <ThumbsUp className="w-3.5 h-3.5" /> Approve
+                </Button>
+                <Button variant="destructive" size="sm" className="gap-1.5"
+                  onClick={() => { setApprovalDialog('reject'); setApprovalComment(''); }}>
+                  <ThumbsDown className="w-3.5 h-3.5" /> Reject
+                </Button>
+              </>
+            )}
+            {isPendingApproval && !isAdmin && (
+              <Badge variant="warning" className="gap-1">
+                <FileClock className="w-3 h-3" /> Awaiting admin approval
+              </Badge>
             )}
             {isSent && (
               <>
@@ -412,7 +512,20 @@ export default function QuotationDetail() {
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-xl font-bold text-gray-900 font-display">QUOTATION</h1>
                 <Badge variant={STATUS_BADGE[quotation.status]}>{quotation.status.toUpperCase()}</Badge>
+                <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold', APPROVAL_STATUS_CLASS[quotation.approvalStatus])}>
+                  {APPROVAL_STATUS_LABEL[quotation.approvalStatus]}
+                </span>
               </div>
+              {quotation.approvalStatus === 'REJECTED' && quotation.approvalComment && (
+                <p className="text-xs text-red-600 mt-1 max-w-md">
+                  <span className="font-semibold">Rejection reason:</span> {quotation.approvalComment}
+                </p>
+              )}
+              {quotation.approvalStatus === 'APPROVED' && quotation.approvalComment && (
+                <p className="text-xs text-emerald-600 mt-1 max-w-md">
+                  <span className="font-semibold">Approval note:</span> {quotation.approvalComment}
+                </p>
+              )}
               <p className="text-sm text-indigo-600 font-mono font-semibold">{quotation.quotationNumber}</p>
               <p className="text-xs text-gray-400 mt-1">Created: {fmtDate(quotation.createdDate)}</p>
               {quotation.validUntil && (
@@ -597,7 +710,53 @@ export default function QuotationDetail() {
             </div>
           )}
         </div>
+
+        {/* Activity */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <ClipboardList className="w-4 h-4 text-gray-500" /> Activity
+          </h3>
+          <ActivityTimeline
+            activity={activityLog.filter(a => a.entityType === 'quotation' && a.entityId === quotation.id)}
+            communications={communications.filter(c => c.entityType === 'quotation' && c.entityId === quotation.id)}
+            emptyLabel="No activity recorded for this quotation yet"
+          />
+        </div>
       </div>
+
+      {/* Approve / Reject Dialog */}
+      <Dialog open={approvalDialog !== null} onOpenChange={o => { if (!o) { setApprovalDialog(null); setApprovalComment(''); } }}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>
+              {approvalDialog === 'approve' ? 'Approve quotation?' : 'Reject quotation?'}
+            </DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-2">
+            <p className="text-sm text-gray-600">
+              {approvalDialog === 'approve'
+                ? `${quotation.id} will be marked as approved and ready to move forward.`
+                : `${quotation.id} will be sent back to the creator. Please provide a reason.`}
+            </p>
+            <Textarea
+              placeholder={approvalDialog === 'approve' ? 'Optional approval note…' : 'Reason for rejection (required)…'}
+              value={approvalComment}
+              onChange={e => setApprovalComment(e.target.value)}
+              rows={3}
+            />
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setApprovalDialog(null); setApprovalComment(''); }}>Cancel</Button>
+            <Button
+              variant={approvalDialog === 'reject' ? 'destructive' : 'default'}
+              loading={approvalSubmitting}
+              onClick={handleApprovalDecision}
+            >
+              {approvalDialog === 'approve' ? 'Approve' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Record Payment Form */}
       <ReceivableEntryForm

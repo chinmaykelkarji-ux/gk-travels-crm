@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin,
-  Building2, CreditCard, CheckCircle, AlertCircle, IndianRupee,
+  Building2, CreditCard, CheckCircle, AlertCircle, IndianRupee, Activity,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
@@ -17,6 +17,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { VendorForm } from './VendorForm';
 import { VendorPaymentForm } from './VendorPaymentForm';
 import { VENDOR_TYPES } from './VendorForm';
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 
 export default function VendorDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -30,6 +31,8 @@ export default function VendorDetail() {
   const updateVendorPayment = useStore(s => s.updateVendorPayment);
   const deleteVendorPayment = useStore(s => s.deleteVendorPayment);
   const markVendorPaid      = useStore(s => s.markVendorPaid);
+  const activityLog         = useStore(s => s.activityLog);
+  const communications      = useStore(s => s.communications);
 
   const [editOpen,    setEditOpen]    = useState(false);
   const [payOpen,     setPayOpen]     = useState(false);
@@ -318,6 +321,18 @@ export default function VendorDetail() {
           <p className="text-sm text-gray-700 leading-relaxed">{vendor.notes}</p>
         </div>
       )}
+
+      {/* Activity */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-gray-500" /> Activity
+        </h3>
+        <ActivityTimeline
+          activity={activityLog.filter(a => a.entityType === 'vendor' && a.entityId === vendor.id)}
+          communications={communications.filter(c => c.entityType === 'vendor' && c.entityId === vendor.id)}
+          emptyLabel="No activity recorded for this vendor yet"
+        />
+      </div>
 
       {/* Edit Vendor */}
       <VendorForm

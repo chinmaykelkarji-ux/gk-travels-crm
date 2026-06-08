@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -10,13 +11,26 @@ router.get('/', async (_req, res) => {
   catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
+    const existed = await prisma.customer.findUnique({ where: { id: req.body.id }, select: { id: true } });
     const c = await prisma.customer.upsert({
       where:  { id: req.body.id },
       update: sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
       create: sanitize(req.body) as Parameters<typeof prisma.customer.create>[0]['data'],
     });
+
+    if (!existed) {
+      await logActivity(prisma, {
+        action:      'customer_created',
+        description: `Customer ${c.name} added${c.phone ? ` (${c.phone})` : ''}`,
+        entityType:  'customer',
+        entityId:    c.id,
+        userId:      req.userId,
+        after:       { name: c.name, phone: c.phone, email: c.email },
+      });
+    }
+
     res.status(201).json(c);
   } catch (err) {
     console.error('[customers POST]', err);

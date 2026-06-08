@@ -17,7 +17,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getFinancialStatus } from '../../../src/shared/utils/finance.js';
 import { today } from '../../../src/shared/utils/date.js';
-import { logActivity, type DbClient } from './activityService.js';
+import { logActivity, type DbClient } from '../lib/activity.js';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -62,7 +62,7 @@ export async function createReceivable(input: CreateReceivableInput, db: DbClien
       bookingId:     input.bookingId ?? undefined,
       tripId:        input.tripId ?? undefined,
       invoiceAmount: input.amount,
-      description:   input.description ?? `Receivable for ${input.sourceType} ${input.sourceId}`,
+      description: input.description ?? `Receivable for ${input.sourceType} ${input.sourceId}`,
       dueDate:       input.dueDate ?? undefined,
       totalReceived: 0,
       balanceDue:    input.amount,
@@ -81,15 +81,15 @@ export async function createReceivable(input: CreateReceivableInput, db: DbClien
       amount:          input.amount,
       gstAmount:       input.gstAmount ?? 0,
       taxableAmount:   input.taxableAmount ?? input.amount,
-      description:     receivable.description,
+      description: receivable.description,
       transactionDate: today(),
       createdBy:       input.createdBy ?? undefined,
     },
   });
 
   await logActivity(db, {
-    type:       'receivable_created',
-    message:    `Receivable of ₹${input.amount.toLocaleString('en-IN')} raised for ${input.customerName} (${input.sourceType} ${input.sourceId})`,
+    action:      'receivable_created',
+    description: `Receivable of ₹${input.amount.toLocaleString('en-IN')} raised for ${input.customerName} (${input.sourceType} ${input.sourceId})`,
     entityType: 'receivable',
     entityId:   receivable.id,
     userId:     input.createdBy,
@@ -209,7 +209,7 @@ export async function recordPayment(input: RecordPaymentInput) {
         tripId:          input.tripId ?? undefined,
         bookingId:       input.bookingId ?? undefined,
         amount:          input.amount,
-        description:     `Payment received via ${input.paymentMode}${input.reference ? ` (Ref: ${input.reference})` : ''}`,
+        description: `Payment received via ${input.paymentMode}${input.reference ? ` (Ref: ${input.reference})` : ''}`,
         transactionDate: date,
         paymentMode:     input.paymentMode,
         reference:       input.reference ?? undefined,
@@ -218,8 +218,8 @@ export async function recordPayment(input: RecordPaymentInput) {
     });
 
     await logActivity(tx, {
-      type:       'payment_received',
-      message:    `Payment of ₹${input.amount.toLocaleString('en-IN')} received from ${input.customerName ?? 'customer'} via ${input.paymentMode}`,
+      action:      'payment_received',
+      description: `Payment of ₹${input.amount.toLocaleString('en-IN')} received from ${input.customerName ?? 'customer'} via ${input.paymentMode}`,
       entityType: 'payment',
       entityId:   payment.id,
       userId:     input.createdBy,
@@ -287,15 +287,15 @@ export async function createPayable(input: CreatePayableInput) {
         vendorId:        input.vendorId,
         tripId:          input.tripId ?? undefined,
         amount:          input.totalCost,
-        description:     input.description ?? `Payable to ${input.vendorName}`,
+        description: input.description ?? `Payable to ${input.vendorName}`,
         transactionDate: today(),
         createdBy:       input.createdBy ?? undefined,
       },
     });
 
     await logActivity(tx, {
-      type:       'payable_created',
-      message:    `Payable of ₹${input.totalCost.toLocaleString('en-IN')} recorded for vendor ${input.vendorName}`,
+      action:      'payable_created',
+      description: `Payable of ₹${input.totalCost.toLocaleString('en-IN')} recorded for vendor ${input.vendorName}`,
       entityType: 'vendor_payment',
       entityId:   vendorPayment.id,
       userId:     input.createdBy,
@@ -344,7 +344,7 @@ export async function recordVendorPayment(input: RecordVendorPaymentInput) {
         vendorId:        vendorPayment.vendorId,
         tripId:          vendorPayment.tripId ?? undefined,
         amount:          input.amount,
-        description:     `Payment sent to ${vendorPayment.vendorName} via ${input.paymentMode ?? 'unspecified mode'}${input.reference ? ` (Ref: ${input.reference})` : ''}`,
+        description: `Payment sent to ${vendorPayment.vendorName} via ${input.paymentMode ?? 'unspecified mode'}${input.reference ? ` (Ref: ${input.reference})` : ''}`,
         transactionDate: date,
         paymentMode:     input.paymentMode ?? undefined,
         reference:       input.reference ?? undefined,
@@ -353,8 +353,8 @@ export async function recordVendorPayment(input: RecordVendorPaymentInput) {
     });
 
     await logActivity(tx, {
-      type:       'vendor_payment_sent',
-      message:    `Payment of ₹${input.amount.toLocaleString('en-IN')} sent to vendor ${vendorPayment.vendorName}`,
+      action:      'vendor_payment_sent',
+      description: `Payment of ₹${input.amount.toLocaleString('en-IN')} sent to vendor ${vendorPayment.vendorName}`,
       entityType: 'vendor_payment',
       entityId:   vendorPayment.id,
       userId:     input.createdBy,
@@ -390,7 +390,7 @@ export async function recordRefund(input: RefundInput, db: DbClient = prisma) {
       tripId:          input.tripId ?? undefined,
       bookingId:       input.bookingId ?? undefined,
       amount:          input.amount,
-      description:     input.description ?? 'Refund issued',
+      description: input.description ?? 'Refund issued',
       transactionDate: today(),
       paymentMode:     input.paymentMode ?? undefined,
       reference:       input.reference ?? undefined,
@@ -399,8 +399,8 @@ export async function recordRefund(input: RefundInput, db: DbClient = prisma) {
   });
 
   await logActivity(db, {
-    type:       'refund_issued',
-    message:    `Refund of ₹${input.amount.toLocaleString('en-IN')} issued (${input.sourceType} ${input.sourceId})`,
+    action:      'refund_issued',
+    description: `Refund of ₹${input.amount.toLocaleString('en-IN')} issued (${input.sourceType} ${input.sourceId})`,
     entityType: 'financial_transaction',
     entityId:   txn.id,
     userId:     input.createdBy,
@@ -418,7 +418,7 @@ export interface AdjustmentInput {
   tripId?:         string | null;
   bookingId?:      string | null;
   amount:          number;
-  description:     string;
+  description: string;
   createdBy?:      string | null;
 }
 
@@ -433,15 +433,15 @@ export async function recordAdjustment(input: AdjustmentInput, db: DbClient = pr
       tripId:          input.tripId ?? undefined,
       bookingId:       input.bookingId ?? undefined,
       amount:          input.amount,
-      description:     input.description,
+      description: input.description,
       transactionDate: today(),
       createdBy:       input.createdBy ?? undefined,
     },
   });
 
   await logActivity(db, {
-    type:       'adjustment_recorded',
-    message:    `Adjustment recorded: ${input.description} (₹${input.amount.toLocaleString('en-IN')})`,
+    action:      'adjustment_recorded',
+    description: `Adjustment recorded: ${input.description} (₹${input.amount.toLocaleString('en-IN')})`,
     entityType: 'financial_transaction',
     entityId:   txn.id,
     userId:     input.createdBy,

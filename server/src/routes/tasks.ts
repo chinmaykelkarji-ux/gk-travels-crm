@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -35,8 +35,8 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
     if (before && before.status !== 'completed' && t.status === 'completed') {
       await logActivity(prisma, {
-        type:       'task_completed',
-        message:    `Task "${t.title}" marked completed`,
+        action:      'task_completed',
+        description: `Task "${t.title}" marked completed`,
         entityType: 'task',
         entityId:   t.id,
         userId:     req.userId,

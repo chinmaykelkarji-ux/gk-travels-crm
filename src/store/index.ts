@@ -18,6 +18,7 @@ import type {
   Itinerary, ItineraryStatus,
   Voucher, VoucherStatus,
   Receivable, ReceivableEntry,
+  Communication,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
 import { getApiErrorMessage } from '@/shared/utils/error';
@@ -61,16 +62,16 @@ function onMutationError(label: string) {
 // propagate through the complex generic signature.
 
 function makeActivityEntry(
-  type:       string,
-  message:    string,
-  entityType: ActivityEntityType,
-  entityId:   string,
-  now:        string,
+  action:      string,
+  description: string,
+  entityType:  ActivityEntityType,
+  entityId:    string,
+  now:         string,
 ): ActivityLog {
   return {
     id:         activityUid(),
-    type,
-    message,
+    action,
+    description,
     entityType,
     entityId,
     timestamp:  new Date().toISOString(),
@@ -94,6 +95,7 @@ const defaultState: GKStoreState = {
   tasks:          [],
   reminders:      [],
   activityLog:    [],
+  communications: [],
   payments:       { customerPayments: [], supplierPayments: [] },
   vendors:        [],
   vendorPayments: [],
@@ -150,13 +152,28 @@ interface StoreActions {
   markReminderSent:    (id: string) => void;
 
   // â”€â”€ Activity Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Client-side optimistic entries for instant UI feedback only — the
+  // server is the single source of truth (server/src/lib/activity.ts
+  // writes the authoritative row); fetchAll() replaces this array wholesale.
   logActivity: (
-    type: string,
-    message: string,
+    action: string,
+    description: string,
     entityType: ActivityLog['entityType'],
     entityId: string,
     meta?: { before?: unknown; after?: unknown },
   ) => void;
+
+  // â”€â”€ Communications (Phase 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Records an outbound WhatsApp/email send. The server is the single
+  // writer of both the Communication row and its ActivityLog entry —
+  // this just notifies it; no client-side logActivity call (no duplicates).
+  logCommunication: (input: {
+    type: 'whatsapp' | 'email';
+    recipient: string;
+    subject?: string;
+    entityType: ActivityLog['entityType'];
+    entityId: string;
+  }) => void;
 
   // â”€â”€ Vendors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createVendor:        (data: Partial<Vendor>) => Vendor;
@@ -176,6 +193,12 @@ interface StoreActions {
   setQuotationStatus:     (id: string, status: QuotationStatus) => void;
   duplicateQuotation:     (sourceId: string) => Quotation | null;
   convertQuotationToTrip: (id: string) => Promise<{ ok: boolean; trip?: Trip; reason?: string }>;
+
+  // Approval workflow (Phase 3) — server is authoritative; these call the
+  // dedicated endpoints (which log activity centrally) and sync local state.
+  submitQuotationForApproval: (id: string) => Promise<{ ok: boolean; reason?: string }>;
+  approveQuotation:           (id: string, comment?: string) => Promise<{ ok: boolean; reason?: string }>;
+  rejectQuotation:            (id: string, comment: string)  => Promise<{ ok: boolean; reason?: string }>;
 
   // â”€â”€ Itineraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createItinerary:     (data: Partial<Itinerary>) => Itinerary;
@@ -861,18 +884,42 @@ export const useStore = create<GKStore>()(
 
       // â•â• Activity Log â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-      logActivity(type, message, entityType, entityId, meta) {
+      logActivity(action, description, entityType, entityId, meta) {
         const entry: ActivityLog = {
-          id:         activityUid(),
-          type,       message, entityType, entityId,
-          timestamp:  new Date().toISOString(),
-          date:       today(),
-          before:     meta?.before,
-          after:      meta?.after,
+          id:          activityUid(),
+          action,      description, entityType, entityId,
+          timestamp:   new Date().toISOString(),
+          date:        today(),
+          before:      meta?.before,
+          after:       meta?.after,
         };
         set((s: GKStore) => ({
           activityLog: [entry, ...s.activityLog].slice(0, 500),
         }));
+      },
+
+      logCommunication(input) {
+        const id  = `comm-${activityUid()}`;
+        const now = new Date().toISOString();
+        const entry: Communication = {
+          id,
+          type:       input.type,
+          recipient:  input.recipient,
+          subject:    input.subject,
+          entityType: input.entityType,
+          entityId:   input.entityId,
+          createdAt:  now,
+        };
+        set((s: GKStore) => ({
+          communications: [entry, ...s.communications].slice(0, 500),
+        }));
+        void apiClient.post('/communications', {
+          type:       input.type,
+          recipient:  input.recipient,
+          subject:    input.subject,
+          entityType: input.entityType,
+          entityId:   input.entityId,
+        }).catch(onMutationError(''));
       },
 
       // â•â• Vendor Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -993,6 +1040,7 @@ export const useStore = create<GKStore>()(
           endDate:         data.endDate,
           pax:             data.pax            ?? 1,
           status:          'draft',
+          approvalStatus:  'DRAFT',
           notes:           data.notes,
           termsAndConds:   data.termsAndConds,
           validUntil:      data.validUntil,
@@ -1065,6 +1113,9 @@ export const useStore = create<GKStore>()(
           ...src,
           id, quotationNumber: id,
           status: 'draft',
+          approvalStatus: 'DRAFT',
+          approvalComment: undefined, submittedBy: undefined, submittedAt: undefined,
+          approvedBy: undefined, approvedAt: undefined,
           sentAt: undefined, acceptedAt: undefined, rejectedAt: undefined,
           convertedTripId: undefined, convertedAt: undefined,
           createdDate: today(),
@@ -1090,6 +1141,41 @@ export const useStore = create<GKStore>()(
           return { ok: true, trip };
         } catch (err: unknown) {
           return { ok: false, reason: getApiErrorMessage(err, 'Conversion failed') };
+        }
+      },
+
+      // Approval workflow — server validates, persists, and writes the
+      // ActivityLog entry atomically; we just sync the returned record.
+      async submitQuotationForApproval(id) {
+        try {
+          const res = await apiClient.post(`/quotations/${id}/submit`);
+          const q   = res.data as Quotation;
+          set((s: GKStore) => ({ quotations: s.quotations.map(x => x.id === id ? q : x) }));
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Submit for approval failed') };
+        }
+      },
+
+      async approveQuotation(id, comment) {
+        try {
+          const res = await apiClient.post(`/quotations/${id}/approve`, { comment });
+          const q   = res.data as Quotation;
+          set((s: GKStore) => ({ quotations: s.quotations.map(x => x.id === id ? q : x) }));
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Approval failed') };
+        }
+      },
+
+      async rejectQuotation(id, comment) {
+        try {
+          const res = await apiClient.post(`/quotations/${id}/reject`, { comment });
+          const q   = res.data as Quotation;
+          set((s: GKStore) => ({ quotations: s.quotations.map(x => x.id === id ? q : x) }));
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Rejection failed') };
         }
       },
 
@@ -1430,6 +1516,7 @@ export const useStore = create<GKStore>()(
               itineraries:    Itinerary[];
               vouchers:       Voucher[];
               receivables:    Receivable[];
+              communications: Communication[];
             };
 
             set({
@@ -1447,6 +1534,7 @@ export const useStore = create<GKStore>()(
               itineraries:    Array.isArray(d.itineraries)    ? d.itineraries    : [],
               vouchers:       Array.isArray(d.vouchers)       ? d.vouchers       : [],
               receivables:    Array.isArray(d.receivables)    ? d.receivables    : [],
+              communications: Array.isArray(d.communications) ? d.communications : [],
               dataLoading:    false,
               dataError:      null,
             });

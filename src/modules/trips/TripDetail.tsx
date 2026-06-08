@@ -28,6 +28,7 @@ import { ReceivableForm } from '@/shared/components/ReceivableForm';
 import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 
 const TRIP_STATUS_FLOW: TripStatus[] = [
   'draft', 'quotation', 'confirmed', 'in_progress', 'completed',
@@ -49,6 +50,8 @@ export default function TripDetail() {
   const updatePayment = useStore(s => s.updatePayment);
   const deletePayment = useStore(s => s.deletePayment);
 
+  const activityLog      = useStore(s => s.activityLog);
+  const communications   = useStore(s => s.communications);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
   const deleteReceivable = useStore(s => s.deleteReceivable);
@@ -773,27 +776,11 @@ export default function TripDetail() {
         {/* Timeline Tab */}
         <TabsContent value="timeline">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            {(!trip.timeline || trip.timeline.length === 0) ? (
-              <p className="text-sm text-gray-400 text-center py-8">No timeline events yet</p>
-            ) : (
-              <div className="space-y-3">
-                {[...trip.timeline].reverse().map((event, i) => (
-                  <div key={event.id || i} className="flex items-start gap-3">
-                    <div className={cn(
-                      'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                      event.type === 'payment' ? 'bg-emerald-400' :
-                      event.type === 'warning' ? 'bg-yellow-400' :
-                      event.type === 'done'    ? 'bg-blue-400'   :
-                      'bg-gray-300'
-                    )} />
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-700">{event.event}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(event.date)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ActivityTimeline
+              activity={activityLog.filter(a => a.entityType === 'trip' && a.entityId === trip.id)}
+              communications={communications.filter(c => c.entityType === 'trip' && c.entityId === trip.id)}
+              emptyLabel="No activity recorded for this trip yet"
+            />
           </div>
         </TabsContent>
       </Tabs>

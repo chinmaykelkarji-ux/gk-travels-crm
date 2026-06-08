@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
   AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
+  ClipboardCheck, ListChecks,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
@@ -15,6 +16,7 @@ import {
   RECEIVABLE_STATUS_LABEL,
   calcReceivableFinance,
 } from '@/shared/utils/finance';
+import { APPROVAL_STATUS_LABEL, APPROVAL_STATUS_CLASS } from '@/shared/types';
 import type { ReceivableStatus } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, daysUntil, isThisMonth, isLastMonth, today } from '@/shared/utils/date';
@@ -94,6 +96,7 @@ export default function Dashboard() {
   const itineraries       = useStore(s => s.itineraries);
   const vouchers          = useStore(s => s.vouchers);
   const receivables       = useStore(s => s.receivables);
+  const tasks             = useStore(s => s.tasks);
 
   // Quotation KPIs
   const quotationKpis = useMemo(() => {
@@ -195,6 +198,26 @@ export default function Dashboard() {
       recentPayments: recentPayments.slice(0, 8),
     };
   }, [receivables]);
+
+  // Operations widgets — pending approvals, today's activity, tasks due today
+  const opsStats = useMemo(() => {
+    const todayStr = today();
+
+    const pendingApprovals = quotations
+      .filter(q => q.approvalStatus === 'PENDING_APPROVAL')
+      .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
+
+    const todaysActivity = activityLog.filter(a => a.date === todayStr);
+
+    const tasksDueToday = tasks
+      .filter(t => t.dueDate === todayStr && t.status !== 'completed' && t.status !== 'cancelled')
+      .sort((a, b) => {
+        const order: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+        return order[a.priority] - order[b.priority];
+      });
+
+    return { pendingApprovals, todaysActivity, tasksDueToday };
+  }, [quotations, activityLog, tasks]);
 
   // Activity feed
   const recentActivity = useMemo(
@@ -464,6 +487,155 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* ── Operations Overview ────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* Pending Approvals */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-purple-600" />
+                Pending Approvals
+                {opsStats.pendingApprovals.length > 0 && (
+                  <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {opsStats.pendingApprovals.length}
+                  </span>
+                )}
+              </CardTitle>
+              <button
+                onClick={() => navigate('/quotations')}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+              >
+                View all <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </CardHeader>
+          <Separator />
+          <CardContent className="pt-0 pb-3">
+            {opsStats.pendingApprovals.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">
+                No quotations awaiting approval
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {opsStats.pendingApprovals.slice(0, 6).map(q => (
+                  <div
+                    key={q.id}
+                    className="flex items-center justify-between gap-3 py-2.5 cursor-pointer hover:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
+                    onClick={() => navigate(`/quotations/${q.id}`)}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{q.customerName}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">
+                        {q.id} · Submitted by {q.submittedBy ?? '—'}
+                      </p>
+                    </div>
+                    <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px] flex-shrink-0', APPROVAL_STATUS_CLASS[q.approvalStatus])}>
+                      {APPROVAL_STATUS_LABEL[q.approvalStatus]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Tasks Due Today */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <ListChecks className="w-4 h-4 text-blue-600" />
+                Tasks Due Today
+                {opsStats.tasksDueToday.length > 0 && (
+                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {opsStats.tasksDueToday.length}
+                  </span>
+                )}
+              </CardTitle>
+              <button
+                onClick={() => navigate('/operations')}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+              >
+                View all <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </CardHeader>
+          <Separator />
+          <CardContent className="pt-0 pb-3">
+            {opsStats.tasksDueToday.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">
+                No tasks due today
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {opsStats.tasksDueToday.slice(0, 6).map(t => (
+                  <div key={t.id} className="py-2.5">
+                    <div className="flex items-start gap-2">
+                      <span className={cn(
+                        'mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0',
+                        t.priority === 'urgent' ? 'bg-red-500' :
+                        t.priority === 'high'   ? 'bg-orange-400' :
+                        t.priority === 'medium' ? 'bg-yellow-400' : 'bg-gray-300'
+                      )} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700 truncate">{t.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{t.assignedTo ?? 'Unassigned'}</p>
+                      </div>
+                      <Badge
+                        variant={t.priority === 'urgent' ? 'destructive' : 'warning'}
+                        className="text-[10px] flex-shrink-0"
+                      >
+                        {t.priority}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Today's Activity */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-600" />
+                Today's Activity
+                {opsStats.todaysActivity.length > 0 && (
+                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {opsStats.todaysActivity.length}
+                  </span>
+                )}
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <Separator />
+          <CardContent className="pt-0 pb-3">
+            {opsStats.todaysActivity.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">
+                No activity recorded today
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {opsStats.todaysActivity.slice(0, 6).map(a => (
+                  <div key={a.id} className="py-2">
+                    <p className="text-xs text-gray-700 leading-snug">{a.description}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {new Date(a.timestamp).toLocaleTimeString('en-IN', {
+                        hour: '2-digit', minute: '2-digit', hour12: true,
+                      })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* ── Bottom Row ─────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
@@ -548,7 +720,7 @@ export default function Dashboard() {
               <div className="divide-y divide-gray-50">
                 {recentActivity.slice(0, 8).map(a => (
                   <div key={a.id} className="py-2">
-                    <p className="text-xs text-gray-700 leading-snug">{a.message}</p>
+                    <p className="text-xs text-gray-700 leading-snug">{a.description}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">
                       {new Date(a.timestamp).toLocaleTimeString('en-IN', {
                         hour: '2-digit', minute: '2-digit', hour12: true,

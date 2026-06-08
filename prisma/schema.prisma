@@ -299,21 +299,39 @@ model Task {
 }
 
 model ActivityLog {
-  id         String   @id @default(cuid())
-  type       String
-  message    String
-  entityType String
-  entityId   String
-  userId     String?
-  timestamp  String
-  date       String
-  before     Json?
-  after      Json?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  action      String
+  title       String?
+  description String
+  entityType  String
+  entityId    String
+  userId      String?
+  metadata    Json?
+  timestamp   String
+  date        String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
 
   @@index([entityType, entityId])
   @@index([date])
+  @@index([action])
   @@map("activity_logs")
+}
+
+model Communication {
+  id         String   @id @default(cuid())
+  type       String   // 'whatsapp' | 'email'
+  recipient  String
+  subject    String?
+  entityType String
+  entityId   String
+  userId     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([type])
+  @@map("communications")
 }
 
 model Reminder {
@@ -390,6 +408,12 @@ model Quotation {
   endDate         String?
   pax             Int             @default(1)
   status          String          @default("draft")
+  approvalStatus  String          @default("DRAFT")
+  approvalComment String?
+  submittedBy     String?
+  submittedAt     String?
+  approvedBy      String?
+  approvedAt      String?
   notes           String?
   termsAndConds   String?
   validUntil      String?
@@ -415,6 +439,7 @@ model Quotation {
   items           QuotationItem[]
 
   @@index([status])
+  @@index([approvalStatus])
   @@index([customerId])
   @@map("quotations")
 }

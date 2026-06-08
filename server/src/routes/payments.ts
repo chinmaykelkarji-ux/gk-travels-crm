@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -38,7 +38,7 @@ router.post('/', async (req: AuthRequest, res) => {
           tripId:          p.tripId ?? undefined,
           bookingId:       p.bookingId ?? undefined,
           amount:          p.amount,
-          description:     `${p.type === 'customer' ? 'Payment received' : 'Payment sent'} via ${p.method}${p.reference ? ` (Ref: ${p.reference})` : ''}`,
+          description: `${p.type === 'customer' ? 'Payment received' : 'Payment sent'} via ${p.method}${p.reference ? ` (Ref: ${p.reference})` : ''}`,
           transactionDate: p.date,
           paymentMode:     p.method,
           reference:       p.reference ?? undefined,
@@ -46,8 +46,8 @@ router.post('/', async (req: AuthRequest, res) => {
         },
       });
       await logActivity(prisma, {
-        type:       p.type === 'customer' ? 'payment_received' : 'payment_sent',
-        message:    `${p.type === 'customer' ? 'Payment of' : 'Supplier payment of'} ₹${p.amount.toLocaleString('en-IN')} ${p.type === 'customer' ? 'received from' : 'sent to'} ${p.customer ?? 'party'} via ${p.method}`,
+        action:      p.type === 'customer' ? 'payment_received' : 'payment_sent',
+        description: `${p.type === 'customer' ? 'Payment of' : 'Supplier payment of'} ₹${p.amount.toLocaleString('en-IN')} ${p.type === 'customer' ? 'received from' : 'sent to'} ${p.customer ?? 'party'} via ${p.method}`,
         entityType: 'payment',
         entityId:   p.id,
         userId:     req.userId,

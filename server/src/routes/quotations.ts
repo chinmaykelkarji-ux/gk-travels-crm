@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 import { calcGst }                        from '../../../src/shared/utils/finance.js';
 import { generateTasksFromCategories }    from '../../../src/shared/utils/taskEngine.js';
 import { nextTaskId }                      from '../../../src/shared/utils/id.js';
 import { createReceivable }                from '../services/financeService.js';
-import { logActivity }                     from '../services/activityService.js';
+import { logActivity }                     from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -86,8 +86,8 @@ router.post('/', async (req: AuthRequest, res) => {
     });
 
     await logActivity(prisma, {
-      type:       'quotation_created',
-      message:    `Quotation ${q.id} created for ${q.customerName} (₹${q.totalSelling.toLocaleString('en-IN')})`,
+      action:      'quotation_created',
+      description: `Quotation ${q.id} created for ${q.customerName} (₹${q.totalSelling.toLocaleString('en-IN')})`,
       entityType: 'quotation',
       entityId:   q.id,
       userId:     req.userId,
@@ -167,8 +167,8 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
     });
 
     await logActivity(prisma, {
-      type:       'quotation_status_changed',
-      message:    `Quotation ${q.id} marked ${status} (${q.customerName})`,
+      action:      'quotation_status_changed',
+      description: `Quotation ${q.id} marked ${status} (${q.customerName})`,
       entityType: 'quotation',
       entityId:   q.id,
       userId:     req.userId,
@@ -178,6 +178,147 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
     res.json(q);
   } catch (err) {
     console.error('[quotations status]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── Approval workflow ─────────────────────────────────────────
+// Internal review gate, distinct from the customer-facing `status`
+// pipeline (draft/sent/accepted/rejected): a creator submits a quotation
+// for review, an admin approves or rejects it with an optional comment.
+// States: DRAFT → PENDING_APPROVAL → APPROVED | REJECTED | EXPIRED
+
+router.post('/:id/submit', async (req: AuthRequest, res) => {
+  try {
+    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    if (!q) { res.status(404).json({ error: 'Not found' }); return; }
+    if (q.approvalStatus !== 'DRAFT' && q.approvalStatus !== 'REJECTED') {
+      res.status(400).json({ error: `Cannot submit a quotation in "${q.approvalStatus}" state` });
+      return;
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.quotation.update({
+        where:   { id: q.id },
+        data:    {
+          approvalStatus:  'PENDING_APPROVAL',
+          submittedBy:     req.userId,
+          submittedAt:     now,
+          approvalComment: null,
+        },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      });
+
+      await logActivity(tx, {
+        action:      'quotation_submitted',
+        description: `Quotation ${q.id} submitted for approval by ${req.userName ?? 'a team member'} (${q.customerName})`,
+        entityType:  'quotation',
+        entityId:    q.id,
+        userId:      req.userId,
+        metadata:    { customerName: q.customerName, totalSelling: q.totalSelling },
+        before:      { approvalStatus: q.approvalStatus },
+        after:       { approvalStatus: 'PENDING_APPROVAL' },
+      });
+
+      return u;
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error('[quotations submit]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const { comment } = req.body as { comment?: string };
+    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    if (!q) { res.status(404).json({ error: 'Not found' }); return; }
+    if (q.approvalStatus !== 'PENDING_APPROVAL') {
+      res.status(400).json({ error: `Cannot approve a quotation in "${q.approvalStatus}" state` });
+      return;
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.quotation.update({
+        where:   { id: q.id },
+        data:    {
+          approvalStatus:  'APPROVED',
+          approvedBy:      req.userId,
+          approvedAt:      now,
+          approvalComment: comment ?? null,
+        },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      });
+
+      await logActivity(tx, {
+        action:      'quotation_approved',
+        description: `Quotation ${q.id} approved by ${req.userName ?? 'admin'}${comment ? ` — "${comment}"` : ''} (${q.customerName})`,
+        entityType:  'quotation',
+        entityId:    q.id,
+        userId:      req.userId,
+        metadata:    { customerName: q.customerName, totalSelling: q.totalSelling, comment: comment ?? null },
+        before:      { approvalStatus: q.approvalStatus },
+        after:       { approvalStatus: 'APPROVED' },
+      });
+
+      return u;
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error('[quotations approve]', err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post('/:id/reject', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const { comment } = req.body as { comment?: string };
+    if (!comment || !comment.trim()) {
+      res.status(400).json({ error: 'A reason is required to reject a quotation' });
+      return;
+    }
+    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    if (!q) { res.status(404).json({ error: 'Not found' }); return; }
+    if (q.approvalStatus !== 'PENDING_APPROVAL') {
+      res.status(400).json({ error: `Cannot reject a quotation in "${q.approvalStatus}" state` });
+      return;
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.quotation.update({
+        where:   { id: q.id },
+        data:    {
+          approvalStatus:  'REJECTED',
+          approvedBy:      req.userId,
+          approvedAt:      now,
+          approvalComment: comment.trim(),
+        },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      });
+
+      await logActivity(tx, {
+        action:      'quotation_rejected',
+        description: `Quotation ${q.id} rejected by ${req.userName ?? 'admin'} — "${comment.trim()}" (${q.customerName})`,
+        entityType:  'quotation',
+        entityId:    q.id,
+        userId:      req.userId,
+        metadata:    { customerName: q.customerName, totalSelling: q.totalSelling, comment: comment.trim() },
+        before:      { approvalStatus: q.approvalStatus },
+        after:       { approvalStatus: 'REJECTED' },
+      });
+
+      return u;
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error('[quotations reject]', err);
     res.status(500).json({ error: String(err) });
   }
 });
@@ -331,7 +472,7 @@ router.post('/:id/convert-trip', async (req, res) => {
           gstAmount:     gst.gstAmount,
           taxableAmount: gst.taxableAmount,
           dueDate:       trip.departure ?? undefined,
-          description:   `Trip ${trip.id} — converted from Quotation ${q.id}`,
+          description: `Trip ${trip.id} — converted from Quotation ${q.id}`,
           createdBy:     req.userId,
         }, tx);
       }
@@ -364,8 +505,8 @@ router.post('/:id/convert-trip', async (req, res) => {
       }
 
       await logActivity(tx, {
-        type:       'quotation_converted',
-        message:    `Quotation ${q.id} converted to Trip ${trip.id} for ${trip.customer}`,
+        action:      'quotation_converted',
+        description: `Quotation ${q.id} converted to Trip ${trip.id} for ${trip.customer}`,
         entityType: 'quotation',
         entityId:   q.id,
         userId:     req.userId,

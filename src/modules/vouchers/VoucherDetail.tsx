@@ -29,6 +29,7 @@ export default function VoucherDetail() {
   const deleteVoucher     = useStore(s => s.deleteVoucher);
   const setVoucherStatus  = useStore(s => s.setVoucherStatus);
   const duplicateVoucher  = useStore(s => s.duplicateVoucher);
+  const logCommunication  = useStore(s => s.logCommunication);
   const linkedTrip        = useStore(s => voucher?.tripId ? s.trips.find(t => t.id === voucher.tripId) : undefined);
   const linkedCustomer    = useStore(s => voucher?.customerId ? s.customers.find(c => c.id === voucher.customerId) : undefined);
 
@@ -43,6 +44,13 @@ export default function VoucherDetail() {
       voucherType: typeMeta?.label ?? voucher.type,
       destination: voucher.destination,
     });
+    logCommunication({
+      type:       'whatsapp',
+      recipient:  voucher.customerPhone,
+      subject:    `Voucher ${voucher.voucherNumber}`,
+      entityType: 'voucher',
+      entityId:   voucher.id,
+    });
   }
 
   function handleEmail() {
@@ -55,6 +63,13 @@ export default function VoucherDetail() {
       voucherNumber: voucher.voucherNumber,
       voucherType:   typeMeta?.label ?? voucher.type,
       destination:   voucher.destination,
+    });
+    logCommunication({
+      type:       'email',
+      recipient:  email,
+      subject:    `Voucher ${voucher.voucherNumber}`,
+      entityType: 'voucher',
+      entityId:   voucher.id,
     });
   }
 

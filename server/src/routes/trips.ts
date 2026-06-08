@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { createReceivable } from '../services/financeService.js';
-import { logActivity } from '../services/activityService.js';
+import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -48,13 +48,13 @@ router.post('/', async (req: AuthRequest, res) => {
           gstAmount:     trip.gstAmount,
           taxableAmount: trip.taxableAmount,
           dueDate:       trip.departure ?? undefined,
-          description:   `Trip ${trip.id} — ${trip.destination}`,
+          description: `Trip ${trip.id} — ${trip.destination}`,
           createdBy:     req.userId,
         });
       }
       await logActivity(prisma, {
-        type:       'trip_created',
-        message:    `Trip ${trip.id} created for ${trip.customer} (${trip.destination})`,
+        action:      'trip_created',
+        description: `Trip ${trip.id} created for ${trip.customer} (${trip.destination})`,
         entityType: 'trip',
         entityId:   trip.id,
         userId:     req.userId,

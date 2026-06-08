@@ -22,6 +22,7 @@ import {
   RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL, calcReceivableFinance,
 } from '@/shared/utils/finance';
 import { ReceivableForm } from '@/shared/components/ReceivableForm';
+import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogFooter, DialogBody,
@@ -388,6 +389,8 @@ interface DrawerProps {
 function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
   const trips    = useStore(s => s.trips);
   const payments = useStore(s => s.payments);
+  const activityLog    = useStore(s => s.activityLog);
+  const communications = useStore(s => s.communications);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
   const [recFormOpen, setRecFormOpen] = useState(false);
@@ -694,6 +697,19 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
                 })}
               </div>
             )}
+          </div>
+
+          {/* Activity */}
+          <div>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Activity</h4>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <ActivityTimeline
+                activity={activityLog.filter(a => a.entityType === 'customer' && a.entityId === customer.id)}
+                communications={communications.filter(c => c.entityType === 'customer' && c.entityId === customer.id)}
+                emptyLabel="No activity recorded for this customer yet"
+                limit={20}
+              />
+            </div>
           </div>
 
           {/* Notes */}
