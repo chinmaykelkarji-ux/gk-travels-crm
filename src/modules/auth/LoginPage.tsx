@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Plane, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/backend/auth/AuthContext';
 import { cn } from '@/shared/utils/cn';
+import { getApiErrorMessage } from '@/shared/utils/error';
 
 export default function LoginPage() {
   const navigate  = useNavigate();
@@ -34,10 +35,7 @@ export default function LoginPage() {
       await signIn(email.trim(), password);
       navigate(from, { replace: true });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-        ?? 'Login failed. Check your credentials and try again.';
-      setError(msg);
+      setError(getApiErrorMessage(err, 'Login failed. Check your credentials and try again.'));
     } finally {
       setLoading(false);
     }

@@ -18,6 +18,7 @@ import {
 import { confirm } from '@/shared/hooks/useConfirm';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/utils/cn';
+import { getApiErrorMessage } from '@/shared/utils/error';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -88,9 +89,7 @@ function UserFormDialog({ open, onClose, onSaved, editing }: UserFormProps) {
       onSaved(user);
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })
-        ?.response?.data?.error ?? 'Failed to save user';
-      setError(msg);
+      setError(getApiErrorMessage(err, 'Failed to save user'));
     } finally {
       setSaving(false);
     }
@@ -179,8 +178,7 @@ function ResetPasswordDialog({ open, onClose, userId, userName }: ResetPasswordP
       toast.success('Password reset', `Password for ${userName} has been updated.`);
       onClose();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to reset password';
-      toast.error('Reset failed', msg);
+      toast.error('Reset failed', getApiErrorMessage(err, 'Failed to reset password'));
     } finally {
       setSaving(false);
     }
@@ -286,8 +284,7 @@ function UsersTab() {
       setUsers(prev => prev.filter(x => x.id !== u.id));
       toast.success('User deleted');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to delete user';
-      toast.error('Delete failed', msg);
+      toast.error('Delete failed', getApiErrorMessage(err, 'Failed to delete user'));
     } finally {
       setDeletingId(null);
     }

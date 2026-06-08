@@ -14,6 +14,7 @@ import { confirm } from '@/shared/hooks/useConfirm';
 import { fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
+import { getApiErrorMessage } from '@/shared/utils/error';
 import { LeadForm } from './LeadForm';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
@@ -177,9 +178,7 @@ export default function Leads() {
       logActivity('lead_deleted', `Lead deleted: ${name}`, 'lead', id);
       toast.success('Lead deleted', `"${name}" has been removed.`);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { error?: string } } })
-        ?.response?.data?.error ?? 'Failed to delete lead. Please try again.';
-      toast.error('Delete failed', message);
+      toast.error('Delete failed', getApiErrorMessage(err, 'Failed to delete lead. Please try again.'));
     } finally {
       setDeletingId(null);
     }

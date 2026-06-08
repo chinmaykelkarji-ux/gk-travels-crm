@@ -6,6 +6,7 @@ import { useStore } from '@/store';
 import type { TripFormSchema } from '@/shared/schemas/trip';
 import type { TripStatus } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
+import { getApiErrorMessage } from '@/shared/utils/error';
 import { TripCard } from './TripCard';
 import { TripForm } from './TripForm';
 import { Button } from '@/shared/components/ui/button';
@@ -74,7 +75,7 @@ export default function Trips() {
       setFormOpen(false);
       navigate(`/trips/${trip.id}`);
     } catch (err) {
-      toast.error('Failed to create trip', String(err));
+      toast.error('Failed to create trip', getApiErrorMessage(err, 'Please try again.'));
     } finally {
       setCreating(false);
     }

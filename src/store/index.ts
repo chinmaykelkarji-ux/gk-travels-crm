@@ -20,6 +20,7 @@ import type {
   Receivable, ReceivableEntry,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
+import { getApiErrorMessage } from '@/shared/utils/error';
 import {
   nextTripId, nextLeadId, nextCustomerId, nextBookingId,
   nextTaskId, nextPayId, nextVendorId, nextVendorPaymentId,
@@ -1088,9 +1089,7 @@ export const useStore = create<GKStore>()(
           }));
           return { ok: true, trip };
         } catch (err: unknown) {
-          const msg = (err as { response?: { data?: { error?: string } } })
-            ?.response?.data?.error ?? 'Conversion failed';
-          return { ok: false, reason: msg };
+          return { ok: false, reason: getApiErrorMessage(err, 'Conversion failed') };
         }
       },
 
@@ -1476,9 +1475,7 @@ export const useStore = create<GKStore>()(
         }
 
         // All attempts exhausted
-        const msg = (lastError as { response?: { data?: { error?: string }; status?: number } })
-          ?.response?.data?.error
-          ?? (lastError instanceof Error ? lastError.message : 'Could not connect to server');
+        const msg = getApiErrorMessage(lastError, 'Could not connect to server');
 
         console.error('[store] fetchAll failed after all retries:', lastError);
         set({ dataLoading: false, dataError: msg });
