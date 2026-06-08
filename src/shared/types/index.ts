@@ -354,11 +354,17 @@ export interface Booking {
   gstRate: number;
   gstMode: GstMode;
 
-  // Ticket Booking Mode (flight/train/bus): when enabled, GST is charged
-  // ONLY on the convenience fee (sellingPrice - supplierCost), not the
-  // full ticket amount — matches real-world ticketing agency operations.
+  // Ticket Booking Mode (flight/train/bus): a fundamentally different
+  // workflow from standard package/hotel bookings. Convenience Fee is a
+  // manually entered service charge (NOT derived from selling price); GST
+  // applies ONLY on it — never on the full ticket value. Standard
+  // selling-price logic is hidden while this mode is active.
+  //   Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee)
+  //   taxableFee / gstOnFee = GST breakdown of the convenience fee
   ticketBookingMode?: boolean;
   convenienceFee?: number;
+  taxableFee?: number;
+  gstOnFee?: number;
 
   // Computed financial (set by calcBookingFinance — stored as a cache on the entity)
   gstAmount: number;

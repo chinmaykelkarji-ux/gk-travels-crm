@@ -183,9 +183,16 @@ export interface BookingFinanceResult {
   supplierPending:   number;
   grossMargin:       number;
   marginPct:         number;
-  // Ticket Booking Mode — GST is charged only on the convenience fee.
+  // Ticket Booking Mode — Convenience Fee is a manually entered service
+  // charge; GST applies ONLY on it (never on the full ticket value).
+  // taxableFee/gstOnFee are the GST breakdown of that fee — they mirror
+  // taxableAmount/gstAmount but are kept distinct so standard bookings
+  // (which tax the full selling price) are never confused with ticket
+  // bookings (which tax only the fee).
   ticketBookingMode: boolean;
   convenienceFee:    number;
+  taxableFee:        number;
+  gstOnFee:          number;
   // Renamed from `status` to avoid colliding with Booking.status: BookingStatus
   financialStatus:  FinancialStatus;
 }
@@ -198,8 +205,8 @@ export function calcBookingFinance(opts: {
   supplierCost?:      number;
   supplierPaid?:      number;
   ticketBookingMode?: boolean;
+  convenienceFee?:    number | null;
 }): BookingFinanceResult {
-  const base         = opts.sellingPrice ?? null;
   const gstRate      = opts.gstRate      ?? 0;
   const gstMode      = opts.gstMode      ?? 'EXCLUDED';
   const advance      = opts.advance      ?? 0;
@@ -207,6 +214,74 @@ export function calcBookingFinance(opts: {
   const supplierPaid = opts.supplierPaid ?? 0;
   const supplierPending   = Math.max(0, supplierCost - supplierPaid);
   const ticketBookingMode = opts.ticketBookingMode ?? false;
+
+  // ─── Ticket Booking Mode ───────────────────────────────────
+  // Operationally distinct from standard package/hotel bookings: the
+  // Convenience Fee is a manually entered service charge (NOT derived
+  // from a selling price), and GST is levied ONLY on that fee — the
+  // supplier cost (the airline/vendor's ticket value) passes through
+  // untaxed by us. Standard selling-price logic does not apply here.
+  //
+  //   Taxable Fee / GST on Fee = calcGst(convenienceFee, rate, mode)
+  //   Invoice Total            = Supplier Cost + (fee + GST on fee)
+  //
+  // EXCLUDED: convenienceFee is the taxable base — GST is added on top.
+  //   e.g. cost 10,000 + fee 500 + GST 90  = invoice 10,590
+  // INCLUDED: convenienceFee already contains GST — it is back-calculated.
+  //   e.g. cost 10,000 + fee 590 (taxable 500 + GST 90) = invoice 10,590
+  if (ticketBookingMode) {
+    const convenienceFee = opts.convenienceFee ?? 0;
+
+    if (supplierCost === 0 && convenienceFee === 0) {
+      return {
+        gstMode,
+        gstAmount:       0,
+        taxableAmount:   0,
+        totalPayable:    null,
+        balanceDue:      0,
+        supplierPending,
+        grossMargin:     0,
+        marginPct:       0,
+        ticketBookingMode,
+        convenienceFee:  0,
+        taxableFee:      0,
+        gstOnFee:        0,
+        financialStatus: 'unpriced',
+      };
+    }
+
+    const feeGst       = calcGst(convenienceFee, gstRate, gstMode);
+    const taxableFee   = feeGst.taxableAmount;
+    const gstOnFee     = feeGst.gstAmount;
+    const totalPayable = supplierCost + feeGst.totalPayable;
+    const balanceDue   = Math.max(0, totalPayable - advance);
+    // Actual earnings = the fee revenue net of GST (GST is collected and
+    // remitted, not kept). Margin % is expressed against the fee charged —
+    // the figure the agency actually controls — not the full invoice.
+    const grossMargin = taxableFee;
+    const marginPct   = convenienceFee > 0 ? Math.round((grossMargin / convenienceFee) * 1000) / 10 : 0;
+    const financialStatus = getFinancialStatus(totalPayable, advance);
+
+    return {
+      gstMode,
+      gstAmount:     gstOnFee,
+      taxableAmount: taxableFee,
+      totalPayable,
+      balanceDue,
+      supplierPending,
+      grossMargin,
+      marginPct,
+      ticketBookingMode,
+      convenienceFee,
+      taxableFee,
+      gstOnFee,
+      financialStatus,
+    };
+  }
+
+  // ─── Standard Booking Mode ─────────────────────────────────
+  // GST applies on the full selling price, exactly as before.
+  const base = opts.sellingPrice ?? null;
 
   if (base === null || base === 0) {
     return {
@@ -220,40 +295,19 @@ export function calcBookingFinance(opts: {
       marginPct:       0,
       ticketBookingMode,
       convenienceFee:  0,
+      taxableFee:      0,
+      gstOnFee:        0,
       financialStatus: 'unpriced',
     };
   }
 
-  let taxableAmount: number;
-  let gstAmount:     number;
-  let totalPayable:  number;
-  let convenienceFee = 0;
-
-  if (ticketBookingMode) {
-    // Real-world ticketing rule: GST applies ONLY on the convenience/service
-    // fee (selling price − supplier cost), never on the full ticket amount.
-    convenienceFee = Math.max(0, base - supplierCost);
-    const feeGst   = calcGst(convenienceFee, gstRate, gstMode);
-    taxableAmount  = feeGst.taxableAmount;
-    gstAmount      = feeGst.gstAmount;
-    // EXCLUDED: GST on the fee is added on top of the ticket price the customer pays.
-    // INCLUDED: the fee (and its GST) is already baked into the selling price.
-    totalPayable   = gstMode === 'INCLUDED' ? base : base + gstAmount;
-  } else {
-    const fullGst  = calcGst(base, gstRate, gstMode);
-    taxableAmount  = fullGst.taxableAmount;
-    gstAmount      = fullGst.gstAmount;
-    totalPayable   = fullGst.totalPayable;
-  }
-
-  const balanceDue = Math.max(0, totalPayable - advance);
-  // Ticket mode: margin = convenience fee net of GST (the agency's actual earnings).
-  // Normal mode: margin = taxable revenue minus supplier cost.
-  const grossMargin = ticketBookingMode ? taxableAmount : taxableAmount - supplierCost;
-  // Ticket mode: margin % is expressed against the ticket's selling price (the
-  // figure the customer recognizes). Normal mode: against taxable revenue, as before.
-  const marginBase  = ticketBookingMode ? base : taxableAmount;
-  const marginPct   = marginBase > 0 ? Math.round((grossMargin / marginBase) * 1000) / 10 : 0;
+  const fullGst        = calcGst(base, gstRate, gstMode);
+  const taxableAmount  = fullGst.taxableAmount;
+  const gstAmount      = fullGst.gstAmount;
+  const totalPayable   = fullGst.totalPayable;
+  const balanceDue     = Math.max(0, totalPayable - advance);
+  const grossMargin    = taxableAmount - supplierCost;
+  const marginPct      = taxableAmount > 0 ? Math.round((grossMargin / taxableAmount) * 1000) / 10 : 0;
   const financialStatus = getFinancialStatus(totalPayable, advance);
 
   return {
@@ -266,7 +320,9 @@ export function calcBookingFinance(opts: {
     grossMargin,
     marginPct,
     ticketBookingMode,
-    convenienceFee,
+    convenienceFee: 0,
+    taxableFee:     0,
+    gstOnFee:       0,
     financialStatus,
   };
 }

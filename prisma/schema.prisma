@@ -146,10 +146,14 @@ gstMode         GstMode  @default(EXCLUDED)
 gstAmount       Float    @default(0)
 taxableAmount   Float    @default(0)
 
-// Ticket booking GST mode (flight/train/bus): GST applies only on the
-// convenience fee (sellingPrice - supplierCost), not the full ticket amount.
+// Ticket Booking Mode (flight/train/bus): Convenience Fee is a manually
+// entered service charge; GST applies ONLY on it — never on the full ticket
+// value. Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee when
+// EXCLUDED). taxableFee/gstOnFee are the GST breakdown of the convenience fee.
 ticketBookingMode Boolean @default(false)
 convenienceFee    Float   @default(0)
+taxableFee        Float   @default(0)
+gstOnFee          Float   @default(0)
 
 totalPayable    Float?
 balanceDue      Float    @default(0)

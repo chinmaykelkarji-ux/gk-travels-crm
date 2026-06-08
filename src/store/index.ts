@@ -606,6 +606,7 @@ export const useStore = create<GKStore>()(
           supplierCost:      data.supplierCost      ?? 0,
           supplierPaid:      data.supplierPaid      ?? 0,
           ticketBookingMode: data.ticketBookingMode ?? false,
+          convenienceFee:    data.convenienceFee    ?? 0,
         });
         const booking: Booking = {
           id,
