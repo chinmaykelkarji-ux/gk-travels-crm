@@ -19,8 +19,8 @@
 //   - Finance results use `financialStatus`, never `status`.
 // ============================================================
 
-import type { FinancialStatus, GstMode, ReceivableStatus } from '../types';
-import { today } from './date';
+import type { FinancialStatus, GstMode, ReceivableStatus } from '../types/index.js';
+import { today } from './date.js';
 
 // ─── GST Calculation ─────────────────────────────────────────
 //

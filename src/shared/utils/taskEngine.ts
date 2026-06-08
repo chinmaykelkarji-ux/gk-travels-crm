@@ -10,7 +10,7 @@
 // (tsx, no path-alias resolution) as well as the client.
 // ============================================================
 
-import type { TaskPriority, TaskStatus } from '../types';
+import type { TaskPriority, TaskStatus } from '../types/index.js';
 
 export interface TaskTemplate {
   title:               string;
