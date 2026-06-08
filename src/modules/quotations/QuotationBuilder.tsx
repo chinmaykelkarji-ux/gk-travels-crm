@@ -7,7 +7,7 @@ import {
 import { useStore } from '@/store';
 import type { QuotationCategory, QuotationItem, QuotationStatus } from '@/shared/types';
 import { formatCurrency } from '@/shared/utils/format';
-import { calcGst } from '@/shared/utils/finance';
+import { calcGst, calcQuotationItemTotals, calcQuotationTotals } from '@/shared/utils/finance';
 import type { GstMode } from '@/shared/types';
 import { today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
@@ -57,15 +57,11 @@ function makeEmptyItem(): BuilderItem {
 }
 
 function calcItemTotals(item: BuilderItem) {
-  const qty     = item.quantity     || 0;
   const cost    = item.costPrice    || 0;
   const selling = item.sellingPrice || 0;
-  const totalCost    = cost    * qty;
-  const totalSelling = selling * qty;
-  const grossProfit  = totalSelling - totalCost;
-  const marginPct    = totalSelling > 0 ? (grossProfit / totalSelling) * 100 : 0;
-  const markup       = cost       > 0 ? ((selling - cost) / cost) * 100 : 0;
-  return { totalCost, totalSelling, grossProfit, marginPct, markup };
+  const totals  = calcQuotationItemTotals(item);
+  const markup  = cost > 0 ? Math.round(((selling - cost) / cost) * 10000) / 100 : 0;
+  return { ...totals, markup };
 }
 
 // ─── Component ───────────────────────────────────────────────
@@ -158,14 +154,11 @@ export default function QuotationBuilder() {
   // ── Live financial summary ────────────────────────────────
 
   const summary = useMemo(() => {
-    const calcs = items.map(calcItemTotals);
-    const totalCost    = calcs.reduce((s, c) => s + c.totalCost,    0);
-    const totalSelling = calcs.reduce((s, c) => s + c.totalSelling, 0);
-    const gst          = calcGst(totalSelling, gstRate, gstMode);
-    const grossProfit  = totalSelling - totalCost;
-    const marginPct    = totalSelling > 0 ? (grossProfit / totalSelling) * 100 : 0;
+    const calcs  = items.map(calcItemTotals);
+    const totals = calcQuotationTotals(calcs);
+    const gst    = calcGst(totals.totalSelling, gstRate, gstMode);
     return {
-      totalCost, totalSelling, grossProfit, marginPct,
+      ...totals,
       taxableAmount: gst.taxableAmount,
       gstAmount:     gst.gstAmount,
       totalPayable:  gst.totalPayable,

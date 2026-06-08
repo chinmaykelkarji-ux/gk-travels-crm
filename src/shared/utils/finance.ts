@@ -524,3 +524,56 @@ export function calcReceivableFinance(opts: {
 
 /** @deprecated Use normalizeTripFinance() */
 export const tripToPortfolioItem = normalizeTripFinance;
+
+// ─── Vendor Outstanding ──────────────────────────────────────
+//
+// Mirrors server/src/services/financeService.ts `calcOutstanding()` —
+// kept here so client-side forms (e.g. VendorPaymentForm) compute the
+// same rounded value instead of re-deriving it inline.
+
+export function calcOutstandingAmount(totalCost: number, advancePaid: number): number {
+  return Math.max(0, Math.round((totalCost - advancePaid) * 100) / 100);
+}
+
+// ─── Quotation Item / Totals ─────────────────────────────────
+//
+// Mirrors server/src/routes/quotations.ts `calcItem()`/`calcTotals()`
+// (rounded to 2dp) so the builder/detail preview matches what the
+// server persists on save — single rounding contract, no drift.
+
+export interface QuotationItemTotals {
+  totalCost:    number;
+  totalSelling: number;
+  grossProfit:  number;
+  marginPct:    number;
+}
+
+export function calcQuotationItemTotals(item: {
+  quantity:     number;
+  costPrice:    number;
+  sellingPrice: number;
+}): QuotationItemTotals {
+  const qty     = item.quantity     || 0;
+  const cost    = item.costPrice    || 0;
+  const selling = item.sellingPrice || 0;
+
+  const totalCost    = Math.round(cost    * qty * 100) / 100;
+  const totalSelling = Math.round(selling * qty * 100) / 100;
+  const grossProfit  = Math.round((totalSelling - totalCost) * 100) / 100;
+  const marginPct    = totalSelling > 0
+    ? Math.round((grossProfit / totalSelling) * 10000) / 100
+    : 0;
+
+  return { totalCost, totalSelling, grossProfit, marginPct };
+}
+
+export function calcQuotationTotals(items: QuotationItemTotals[]): QuotationItemTotals {
+  const totalCost    = items.reduce((s, i) => s + i.totalCost,    0);
+  const totalSelling = items.reduce((s, i) => s + i.totalSelling, 0);
+  const grossProfit  = Math.round((totalSelling - totalCost) * 100) / 100;
+  const marginPct    = totalSelling > 0
+    ? Math.round((grossProfit / totalSelling) * 10000) / 100
+    : 0;
+
+  return { totalCost, totalSelling, grossProfit, marginPct };
+}

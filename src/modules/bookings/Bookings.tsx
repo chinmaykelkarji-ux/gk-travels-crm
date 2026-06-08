@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Ticket, Search, Plus, Plane, Hotel, Car, Train, Bus,
-  Shield, Activity, Package, HelpCircle, IndianRupee,
-  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt,
+  Ticket, Search, Plus, HelpCircle, IndianRupee, Package,
+  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt, Eye,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Booking, BookingType, BookingStatus } from '@/shared/types';
@@ -29,49 +28,11 @@ import {
 } from '@/shared/components/ui/select';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
-
-// ─── Type icon map ────────────────────────────────────────────
-
-const TYPE_ICON: Record<BookingType, React.ElementType> = {
-  flight:    Plane,
-  hotel:     Hotel,
-  cab:       Car,
-  train:     Train,
-  bus:       Bus,
-  visa:      Shield,
-  insurance: Shield,
-  activity:  Activity,
-  other:     Package,
-};
-
-const TYPE_COLOR: Record<BookingType, string> = {
-  flight:    'bg-blue-50 text-blue-600',
-  hotel:     'bg-emerald-50 text-emerald-600',
-  cab:       'bg-amber-50 text-amber-600',
-  train:     'bg-violet-50 text-violet-600',
-  bus:       'bg-indigo-50 text-indigo-600',
-  visa:      'bg-orange-50 text-orange-600',
-  insurance: 'bg-teal-50 text-teal-600',
-  activity:  'bg-pink-50 text-pink-600',
-  other:     'bg-gray-50 text-gray-500',
-};
+import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG } from './bookingMeta';
 
 const BOOKING_TYPES: BookingType[] = [
   'flight', 'hotel', 'cab', 'train', 'bus', 'visa', 'insurance', 'activity', 'other',
 ];
-
-const STATUS_CONFIG: Record<BookingStatus, { label: string; class: string }> = {
-  pending:    { label: 'Pending',    class: 'bg-gray-100 text-gray-600'     },
-  confirmed:  { label: 'Confirmed',  class: 'bg-blue-100 text-blue-700'     },
-  issued:     { label: 'Issued',     class: 'bg-indigo-100 text-indigo-700' },
-  submitted:  { label: 'Submitted',  class: 'bg-amber-100 text-amber-700'   },
-  approved:   { label: 'Approved',   class: 'bg-emerald-100 text-emerald-700' },
-  rejected:   { label: 'Rejected',   class: 'bg-red-100 text-red-600'       },
-  checked_in: { label: 'Checked In', class: 'bg-teal-100 text-teal-700'     },
-  departed:   { label: 'Departed',   class: 'bg-violet-100 text-violet-700' },
-  completed:  { label: 'Completed',  class: 'bg-emerald-100 text-emerald-800' },
-  cancelled:  { label: 'Cancelled',  class: 'bg-red-50 text-red-400'        },
-};
 
 // ─── New Booking Form ─────────────────────────────────────────
 
@@ -890,7 +851,11 @@ export default function Bookings() {
                   const linkedDest = b.refId ? tripMap[b.refId] : null;
 
                   return (
-                    <tr key={b.id} className="hover:bg-gray-50/70 transition-colors">
+                    <tr
+                      key={b.id}
+                      className="hover:bg-gray-50/70 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/bookings/${b.id}`)}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium capitalize', typeClr)}>
@@ -912,7 +877,7 @@ export default function Bookings() {
                       <td className="px-4 py-3">
                         {b.refId ? (
                           <button
-                            onClick={() => navigate(`/trips/${b.refId}`)}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/trips/${b.refId}`); }}
                             className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
                           >
                             {b.refId}
@@ -954,14 +919,21 @@ export default function Bookings() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-0.5">
                           <button
-                            onClick={() => setEditBooking(b)}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/bookings/${b.id}`); }}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"
+                            title="View booking & payments"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditBooking(b); }}
                             className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
                             title="Edit booking"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDeleteBooking(b)}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteBooking(b); }}
                             disabled={deletingId === b.id}
                             className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Delete booking"

@@ -141,21 +141,26 @@ export default function VendorDetail() {
               </div>
             </div>
 
-            {/* Financial pill */}
-            <div className="flex-shrink-0 text-right space-y-1">
-              {totalOwed > 0
-                ? <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-center">
-                    <div className="text-xs text-amber-600 font-medium">Outstanding</div>
-                    <div className="text-lg font-bold text-amber-700 font-display">{formatCurrency(totalOwed)}</div>
+            {/* Financial summary pill */}
+            {totalCost > 0 && (
+              <div className="flex-shrink-0 text-right space-y-1">
+                <div className="text-2xl font-bold text-gray-900 font-display">
+                  {formatCurrency(totalCost)}
+                </div>
+                <div className={cn('text-xs font-medium px-2.5 py-1 rounded-full inline-block',
+                  totalOwed > 0
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                )}>
+                  {totalOwed > 0 ? 'Outstanding' : 'Fully Settled'}
+                </div>
+                {totalOwed > 0 && (
+                  <div className="text-xs text-red-600 font-medium">
+                    Pending: {formatCurrency(totalOwed)}
                   </div>
-                : totalCost > 0
-                  ? <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-center">
-                      <div className="text-xs text-emerald-600 font-medium">Fully Settled</div>
-                      <div className="text-lg font-bold text-emerald-700 font-display">{formatCurrency(totalCost)}</div>
-                    </div>
-                  : null
-              }
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -193,17 +198,26 @@ export default function VendorDetail() {
 
       {/* Finance Summary */}
       {vendorPayments.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Total Cost',    value: totalCost, color: 'text-gray-900' },
-            { label: 'Total Paid',    value: totalPaid, color: 'text-emerald-600' },
-            { label: 'Outstanding',   value: totalOwed, color: totalOwed > 0 ? 'text-amber-600' : 'text-emerald-600' },
-          ].map(item => (
-            <div key={item.label} className="bg-white rounded-2xl border border-gray-200 p-4 text-center">
-              <div className={cn('text-2xl font-bold font-display', item.color)}>{formatCurrency(item.value)}</div>
-              <div className="text-xs text-gray-500 mt-1">{item.label}</div>
-            </div>
-          ))}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-4">
+            <IndianRupee className="w-4 h-4 text-blue-600" /> Payment Summary
+          </h3>
+          <div className="space-y-3">
+            {[
+              { label: 'Total Cost',   val: formatCurrency(totalCost) },
+              { label: 'Total Paid',   val: formatCurrency(totalPaid), green: true },
+              { label: 'Outstanding',  val: formatCurrency(totalOwed), red: totalOwed > 0, green2: totalOwed === 0 },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">{row.label}</span>
+                <span className={cn('font-semibold',
+                  row.red ? 'text-red-600' : (row.green || row.green2) ? 'text-emerald-600' : 'text-gray-800'
+                )}>
+                  {row.val}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

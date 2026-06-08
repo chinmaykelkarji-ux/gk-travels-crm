@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { formatCurrency } from '@/shared/utils/format';
+import { calcOutstandingAmount } from '@/shared/utils/finance';
 
 interface VendorPaymentFormProps {
   open:          boolean;
@@ -33,7 +34,7 @@ export function VendorPaymentForm({
   const [notes,       setNotes]       = useState('');
   const [error,       setError]       = useState('');
 
-  const outstanding = Math.max(0, (parseFloat(totalCost) || 0) - (parseFloat(advancePaid) || 0));
+  const outstanding = calcOutstandingAmount(parseFloat(totalCost) || 0, parseFloat(advancePaid) || 0);
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +54,7 @@ export function VendorPaymentForm({
     if (!total || total <= 0) { setError('Total cost must be greater than 0'); return; }
 
     const selectedTrip = trips.find(t => t.id === tripId);
+    const due = calcOutstandingAmount(total, advance);
     onSubmit({
       vendorId,
       vendorName,
@@ -61,8 +63,8 @@ export function VendorPaymentForm({
       description: description || undefined,
       totalCost:   total,
       advancePaid: advance,
-      outstanding: Math.max(0, total - advance),
-      isPaid:      Math.max(0, total - advance) === 0,
+      outstanding: due,
+      isPaid:      due === 0,
       dueDate:     dueDate || undefined,
       notes:       notes   || undefined,
     });

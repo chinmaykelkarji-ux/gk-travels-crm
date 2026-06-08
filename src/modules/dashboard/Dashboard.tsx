@@ -17,7 +17,7 @@ import {
 } from '@/shared/utils/finance';
 import type { ReceivableStatus } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
-import { fmtDate, daysUntil, isThisMonth, isLastMonth } from '@/shared/utils/date';
+import { fmtDate, daysUntil, isThisMonth, isLastMonth, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
@@ -124,6 +124,13 @@ export default function Dashboard() {
       ? Math.round(((thisMonthReceived - lastMonthReceived) / lastMonthReceived) * 100)
       : 0;
 
+    // Net cash flow this month — mirrors Finance.tsx's monthlyData reduction
+    // (received vs. supplier-paid), surfaced here as a single headline figure.
+    const thisMonthSupplierPaid = payments.supplierPayments
+      .filter(p => p.status === 'paid' && isThisMonth(p.paidDate || p.date))
+      .reduce((s, p) => s + p.amount, 0);
+    const netCashFlow = thisMonthReceived - thisMonthSupplierPaid;
+
     // Trips departing within 7 days
     const departingThisWeek = trips
       .filter(t => {
@@ -148,6 +155,7 @@ export default function Dashboard() {
       portfolio,
       thisMonthReceived,
       revTrend,
+      netCashFlow,
       departingThisWeek,
       overdueTrips,
       activeTrips,
@@ -157,18 +165,35 @@ export default function Dashboard() {
 
   // Receivables KPIs + recent payments feed
   const receivableStats = useMemo(() => {
-    let totalBalance = 0, overdueBalance = 0;
+    let totalBalance = 0, overdueBalance = 0, todayCollected = 0, upcomingDueBalance = 0;
+    let upcomingDueCount = 0;
     const recentPayments: { entry: typeof receivables[number]['entries'][number]; customerName: string; status: ReceivableStatus }[] = [];
+    const todayStr = today();
 
     for (const r of receivables) {
       const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
       totalBalance += fin.balanceDue;
       if (fin.status === 'overdue') overdueBalance += fin.balanceDue;
-      for (const e of r.entries) recentPayments.push({ entry: e, customerName: r.customerName, status: fin.status });
+      // Upcoming Dues — balance still owed, due within the next 7 days (not yet overdue)
+      if (fin.balanceDue > 0 && fin.status !== 'overdue') {
+        const d = daysUntil(r.dueDate);
+        if (d !== null && d >= 0 && d <= 7) {
+          upcomingDueBalance += fin.balanceDue;
+          upcomingDueCount++;
+        }
+      }
+      for (const e of r.entries) {
+        recentPayments.push({ entry: e, customerName: r.customerName, status: fin.status });
+        if (e.paymentDate === todayStr) todayCollected += e.amount;
+      }
     }
     recentPayments.sort((a, b) => (b.entry.paymentDate || '').localeCompare(a.entry.paymentDate || ''));
 
-    return { totalBalance, overdueBalance, recentPayments: recentPayments.slice(0, 8) };
+    return {
+      totalBalance, overdueBalance, todayCollected,
+      upcomingDueBalance, upcomingDueCount,
+      recentPayments: recentPayments.slice(0, 8),
+    };
   }, [receivables]);
 
   // Activity feed
@@ -255,6 +280,14 @@ export default function Dashboard() {
           onClick={() => navigate('/vendors')}
         />
         <KpiCard
+          title="Today's Collections"
+          value={formatCurrencyShort(receivableStats.todayCollected)}
+          sub={`Received on ${fmtDate(today())}`}
+          icon={IndianRupee}
+          color="green"
+          onClick={() => navigate('/receivables')}
+        />
+        <KpiCard
           title="Total Receivables"
           value={formatCurrencyShort(receivableStats.totalBalance)}
           sub={`${receivables.length} invoice${receivables.length !== 1 ? 's' : ''} tracked`}
@@ -269,6 +302,22 @@ export default function Dashboard() {
           icon={AlertTriangle}
           color="red"
           onClick={() => navigate('/receivables')}
+        />
+        <KpiCard
+          title="Upcoming Dues"
+          value={formatCurrencyShort(receivableStats.upcomingDueBalance)}
+          sub={`${receivableStats.upcomingDueCount} due in next 7 days`}
+          icon={Clock}
+          color="orange"
+          onClick={() => navigate('/receivables')}
+        />
+        <KpiCard
+          title="Net Cash Flow"
+          value={formatCurrencyShort(stats.netCashFlow)}
+          sub={`This month · ${stats.netCashFlow >= 0 ? 'positive' : 'negative'}`}
+          icon={stats.netCashFlow >= 0 ? TrendingUp : TrendingDown}
+          color={stats.netCashFlow >= 0 ? 'green' : 'red'}
+          onClick={() => navigate('/finance')}
         />
         <KpiCard
           title="Quotation Pipeline"

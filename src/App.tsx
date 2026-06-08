@@ -31,6 +31,7 @@ const Trips          = lazy(() => import('@/modules/trips/Trips'));
 const TripDetail     = lazy(() => import('@/modules/trips/TripDetail'));
 const Leads          = lazy(() => import('@/modules/leads/Leads'));
 const Bookings       = lazy(() => import('@/modules/bookings/Bookings'));
+const BookingDetail  = lazy(() => import('@/modules/bookings/BookingDetail'));
 const Customers      = lazy(() => import('@/modules/customers/Customers'));
 const Finance        = lazy(() => import('@/modules/finance/Finance'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
@@ -207,6 +208,7 @@ export default function App() {
                 <Route path="/trips"                 element={<Trips />} />
                 <Route path="/trips/:id"             element={<TripDetail />} />
                 <Route path="/bookings"              element={<Bookings />} />
+                <Route path="/bookings/:id"          element={<BookingDetail />} />
                 <Route path="/customers"             element={<Customers />} />
                 <Route path="/operations"            element={<Operations />} />
                 <Route path="/vendors"               element={<Vendors />} />

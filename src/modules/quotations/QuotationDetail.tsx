@@ -3,20 +3,24 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Copy, Send, CheckCircle,
   XCircle, Printer, FolderPlus, MapPin, Calendar,
-  Users, Phone, Mail, IndianRupee, MessageCircle,
+  Users, Phone, Mail, IndianRupee, MessageCircle, Receipt, Plus,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import apiClient from '@/lib/apiClient';
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
-import type { QuotationStatus } from '@/shared/types';
-import { calcGst } from '@/shared/utils/finance';
+import type { QuotationStatus, Receivable } from '@/shared/types';
+import {
+  calcGst, calcReceivableFinance,
+  RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL,
+} from '@/shared/utils/finance';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { whatsapp, gmail } from '@/shared/utils/email';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
 import { QUOTE_CATEGORIES } from './QuotationBuilder';
 
 // ─── Status helpers ───────────────────────────────────────────
@@ -52,8 +56,13 @@ export default function QuotationDetail() {
   const duplicateQuotation  = useStore(s => s.duplicateQuotation);
   const convertQuotationToTrip = useStore(s => s.convertQuotationToTrip);
 
+  const allReceivables     = useStore(s => s.receivables);
+  const addReceivableEntry = useStore(s => s.addReceivableEntry);
+
   const [converting, setConverting] = useState(false);
   const [deletingId,  setDeletingId] = useState(false);
+  const [recEntryOpen, setRecEntryOpen] = useState(false);
+  const [activeReceivable, setActiveReceivable] = useState<Receivable | null>(null);
 
   if (!quotation) {
     return (
@@ -73,6 +82,22 @@ export default function QuotationDetail() {
   const gstAmount    = gst.gstAmount;
   const taxableAmount = gst.taxableAmount;
   const totalPayable = gst.totalPayable;
+
+  // Quotations don't carry their own Receivable — once converted, the Trip's
+  // receivable (linked via tripId, created in the conversion transaction) is
+  // the single source of truth for payments. Surfacing it here avoids a second,
+  // disconnected ledger for the same money.
+  const linkedReceivables = quotation.convertedTripId
+    ? allReceivables.filter(r => r.tripId === quotation.convertedTripId)
+    : [];
+
+  function openRecordPayment() {
+    const existing = linkedReceivables.find(r => r.balanceDue > 0) ?? linkedReceivables[0];
+    if (existing) {
+      setActiveReceivable(existing);
+      setRecEntryOpen(true);
+    }
+  }
 
   async function handleDelete() {
     const ok = await confirm({
@@ -299,6 +324,85 @@ export default function QuotationDetail() {
           </div>
         </div>
 
+        {/* Payments */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-emerald-600" /> Payments
+            </h3>
+            {linkedReceivables.length > 0 && (
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={openRecordPayment}>
+                <Plus className="w-3 h-3" /> Record Payment
+              </Button>
+            )}
+          </div>
+
+          {!quotation.convertedTripId ? (
+            <p className="text-xs text-gray-400 py-6 text-center">
+              Payments are tracked once this quotation is converted to a Trip — the Trip's receivable will appear here automatically.
+            </p>
+          ) : linkedReceivables.length === 0 ? (
+            <p className="text-xs text-gray-400 py-6 text-center">No payments recorded for the linked Trip yet</p>
+          ) : (
+            <div className="space-y-4">
+              {linkedReceivables.map(r => {
+                const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+                return (
+                  <div key={r.id} className="border border-gray-100 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs">
+                        <span className="text-gray-500">Invoice </span>
+                        <span className="font-semibold text-gray-800">{formatCurrency(r.invoiceAmount)}</span>
+                        <span className="text-gray-400"> · Received </span>
+                        <span className="font-semibold text-emerald-600">{formatCurrency(fin.totalReceived)}</span>
+                        <span className="text-gray-400"> · Balance </span>
+                        <span className="font-semibold text-red-500">{formatCurrency(fin.balanceDue)}</span>
+                      </div>
+                      <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]', RECEIVABLE_STATUS_CLASS[fin.status])}>
+                        {RECEIVABLE_STATUS_LABEL[fin.status]}
+                      </span>
+                    </div>
+
+                    {r.entries.length === 0 ? (
+                      <p className="text-[11px] text-gray-400 py-2">No entries recorded yet</p>
+                    ) : (
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-gray-400">
+                            <th className="text-left font-medium py-1.5">Date</th>
+                            <th className="text-left font-medium py-1.5">Amount</th>
+                            <th className="text-left font-medium py-1.5">Method</th>
+                            <th className="text-left font-medium py-1.5">Reference</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {[...r.entries].reverse().map(e => (
+                            <tr key={e.id}>
+                              <td className="py-1.5 text-gray-500">{e.paymentDate ? fmtDate(e.paymentDate) : '—'}</td>
+                              <td className="py-1.5 font-semibold text-emerald-600">{formatCurrency(e.amount)}</td>
+                              <td className="py-1.5 text-gray-600">{e.paymentMode}</td>
+                              <td className="py-1.5 text-gray-400 font-mono">{e.reference || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {fin.balanceDue > 0 && (
+                      <button
+                        onClick={() => { setActiveReceivable(r); setRecEntryOpen(true); }}
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 hover:text-emerald-700"
+                      >
+                        <CheckCircle className="w-3 h-3" /> Record Payment
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Document card */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 space-y-8">
 
@@ -494,6 +598,19 @@ export default function QuotationDetail() {
           )}
         </div>
       </div>
+
+      {/* Record Payment Form */}
+      <ReceivableEntryForm
+        open={recEntryOpen}
+        onClose={() => { setRecEntryOpen(false); setActiveReceivable(null); }}
+        onSave={(data) => {
+          if (activeReceivable) addReceivableEntry(activeReceivable.id, data);
+          toast.success('Payment recorded');
+          setRecEntryOpen(false);
+          setActiveReceivable(null);
+        }}
+        receivable={activeReceivable}
+      />
 
       {/* ── Print / PDF view ──────────────────────────────────── */}
       <div className="hidden print:block" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, color: '#1F2937' }}>

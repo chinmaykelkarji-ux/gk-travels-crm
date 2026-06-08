@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { calcGst }                        from '../../../src/shared/utils/finance.js';
@@ -333,6 +334,33 @@ router.post('/:id/convert-trip', async (req, res) => {
           description:   `Trip ${trip.id} — converted from Quotation ${q.id}`,
           createdBy:     req.userId,
         }, tx);
+      }
+
+      // Auto-create follow-up reminders alongside the trip/tasks/receivable —
+      // same automation moment, mirroring the task-generation step above.
+      const reminderRows: Prisma.ReminderCreateManyInput[] = [];
+      if (gst.totalPayable && gst.totalPayable > 0 && trip.departure) {
+        reminderRows.push({
+          tripId:   trip.id,
+          type:     'balance_payment',
+          priority: 'high',
+          message:  `Follow up on payment for ${trip.customer} — ₹${gst.totalPayable.toLocaleString('en-IN')} due by ${trip.departure}`,
+          dueDate:  trip.departure,
+          sent:     false,
+        });
+      }
+      if (trip.departure) {
+        reminderRows.push({
+          tripId:   trip.id,
+          type:     'trip_prep',
+          priority: 'medium',
+          message:  `Prepare trip documents for ${trip.customer} — departing ${trip.departure} to ${trip.destination}`,
+          dueDate:  trip.departure,
+          sent:     false,
+        });
+      }
+      if (reminderRows.length) {
+        await tx.reminder.createMany({ data: reminderRows });
       }
 
       await logActivity(tx, {
