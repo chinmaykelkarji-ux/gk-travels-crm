@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -43,7 +44,7 @@ router.post('/reminders/bulk', async (req, res) => {
     await prisma.reminder.deleteMany({});
     if (reminders.length) {
       await prisma.reminder.createMany({
-        data:            reminders.map(({ id, ...r }) => r as Parameters<typeof prisma.reminder.createMany>[0]['data'][number]),
+        data:            reminders.map(({ id, ...r }) => r as Prisma.ReminderCreateManyInput),
         skipDuplicates: true,
       });
     }

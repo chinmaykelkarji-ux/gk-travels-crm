@@ -43,8 +43,8 @@ router.post('/', async (req, res) => {
   try {
     const vendor = await prisma.vendor.upsert({
       where:  { id: req.body.id },
-      update: stripMeta(req.body),
-      create: stripMeta(req.body),
+      update: stripMeta(req.body) as Parameters<typeof prisma.vendor.update>[0]['data'],
+      create: stripMeta(req.body) as Parameters<typeof prisma.vendor.create>[0]['data'],
     });
     res.status(201).json(vendor);
   } catch (err) {
@@ -58,7 +58,7 @@ router.put('/:id', async (req, res) => {
   try {
     const vendor = await prisma.vendor.update({
       where: { id: req.params.id },
-      data:  stripMeta(req.body),
+      data:  stripMeta(req.body) as Parameters<typeof prisma.vendor.update>[0]['data'],
     });
     res.json(vendor);
   } catch (err) {
@@ -106,8 +106,8 @@ router.post('/payments', async (req, res) => {
     const { createdAt, updatedAt, vendor, ...clean } = data as Record<string, unknown>;
     const payment = await prisma.vendorPayment.upsert({
       where:  { id: String(clean.id) },
-      update: clean,
-      create: clean,
+      update: clean as Parameters<typeof prisma.vendorPayment.update>[0]['data'],
+      create: clean as Parameters<typeof prisma.vendorPayment.create>[0]['data'],
     });
     res.status(201).json(payment);
   } catch (err) {

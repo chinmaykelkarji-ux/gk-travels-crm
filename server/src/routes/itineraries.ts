@@ -126,7 +126,7 @@ router.put('/:id/status', async (req, res) => {
 
 router.get('/from-trip/:tripId', requireAuth, async (req, res) => {
   try {
-    const trip = await prisma.trip.findUnique({ where: { id: req.params.tripId } });
+    const trip = await prisma.trip.findUnique({ where: { id: req.params.tripId as string } });
     if (!trip) { res.status(404).json({ error: 'Trip not found' }); return; }
 
     // Derive number of days from dates
@@ -178,7 +178,7 @@ router.get('/from-trip/:tripId', requireAuth, async (req, res) => {
 router.get('/from-quotation/:quotationId', requireAuth, async (req, res) => {
   try {
     const q = await prisma.quotation.findUnique({
-      where:   { id: req.params.quotationId },
+      where:   { id: req.params.quotationId as string },
       include: { items: true },
     });
     if (!q) { res.status(404).json({ error: 'Quotation not found' }); return; }

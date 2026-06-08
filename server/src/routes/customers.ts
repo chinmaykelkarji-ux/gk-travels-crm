@@ -14,8 +14,8 @@ router.post('/', async (req, res) => {
   try {
     const c = await prisma.customer.upsert({
       where:  { id: req.body.id },
-      update: sanitize(req.body),
-      create: sanitize(req.body),
+      update: sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
+      create: sanitize(req.body) as Parameters<typeof prisma.customer.create>[0]['data'],
     });
     res.status(201).json(c);
   } catch (err) {
@@ -28,7 +28,7 @@ router.put('/:id', async (req, res) => {
   try {
     const c = await prisma.customer.update({
       where: { id: req.params.id },
-      data:  sanitize(req.body),
+      data:  sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
     });
     res.json(c);
   } catch (err) { res.status(500).json({ error: String(err) }); }

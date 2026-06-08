@@ -94,7 +94,7 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     if (isActive !== undefined) data.isActive = isActive;
 
     const user = await prisma.user.update({
-      where:  { id: req.params.id },
+      where:  { id: req.params.id as string },
       data,
       select: SAFE_SELECT,
     });
@@ -117,7 +117,7 @@ router.put('/:id/password', requireRole('ADMIN'), async (req: AuthRequest, res) 
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data:  { passwordHash },
     });
     res.json({ ok: true });
@@ -133,7 +133,7 @@ router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
       res.status(400).json({ error: 'You cannot delete your own account' });
       return;
     }
-    await prisma.user.delete({ where: { id: req.params.id } });
+    await prisma.user.delete({ where: { id: req.params.id as string } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[users DELETE]', err);

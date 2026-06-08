@@ -73,7 +73,10 @@ router.post('/', async (req, res) => {
         ...(qData as Parameters<typeof prisma.quotation.create>[0]['data']),
         ...totals,
         items: {
-          create: calcedItems.map(({ id, quotationId, createdAt: _ca, updatedAt: _ua, ...it }) => it as Parameters<typeof prisma.quotationItem.create>[0]['data']),
+          create: calcedItems.map((entry) => {
+            const { id, quotationId, createdAt, updatedAt, ...it } = entry as Record<string, unknown>;
+            return it as Parameters<typeof prisma.quotationItem.create>[0]['data'];
+          }),
         },
       },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
@@ -103,9 +106,10 @@ router.put('/:id', async (req, res) => {
           ...(qData as Parameters<typeof prisma.quotation.update>[0]['data']),
           ...totals,
           items: {
-            create: calcedItems.map(({ id: _id, quotationId: _qid, createdAt: _ca, updatedAt: _ua, ...it }) =>
-              it as Parameters<typeof prisma.quotationItem.create>[0]['data']
-            ),
+            create: calcedItems.map((entry) => {
+              const { id, quotationId, createdAt, updatedAt, ...it } = entry as Record<string, unknown>;
+              return it as Parameters<typeof prisma.quotationItem.create>[0]['data'];
+            }),
           },
         },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
@@ -144,7 +148,7 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
     if (status === 'rejected') data.rejectedAt = now;
 
     const q = await prisma.quotation.update({
-      where:   { id: req.params.id },
+      where:   { id: req.params.id as string },
       data:    data as Parameters<typeof prisma.quotation.update>[0]['data'],
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });

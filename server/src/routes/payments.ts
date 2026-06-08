@@ -19,8 +19,8 @@ router.post('/', async (req, res) => {
   try {
     const p = await prisma.payment.upsert({
       where:  { id: req.body.id },
-      update: sanitize(req.body),
-      create: sanitize(req.body),
+      update: sanitize(req.body) as Parameters<typeof prisma.payment.update>[0]['data'],
+      create: sanitize(req.body) as Parameters<typeof prisma.payment.create>[0]['data'],
     });
     res.status(201).json(p);
   } catch (err) {
@@ -33,7 +33,7 @@ router.put('/:id', async (req, res) => {
   try {
     const p = await prisma.payment.update({
       where: { id: req.params.id },
-      data:  sanitize(req.body),
+      data:  sanitize(req.body) as Parameters<typeof prisma.payment.update>[0]['data'],
     });
     res.json(p);
   } catch (err) { res.status(500).json({ error: String(err) }); }

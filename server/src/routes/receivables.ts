@@ -72,10 +72,10 @@ router.post('/:id/entries', async (req, res) => {
     const { id, receivableId, createdAt, ...data } = req.body as Record<string, unknown>;
     const entry = await prisma.receivableEntry.create({
       data: {
-        ...(data as Parameters<typeof prisma.receivableEntry.create>[0]['data']),
+        ...data,
         id: String(id),
         receivableId: req.params.id,
-      },
+      } as Parameters<typeof prisma.receivableEntry.create>[0]['data'],
     });
     res.status(201).json(entry);
   } catch (err) {
