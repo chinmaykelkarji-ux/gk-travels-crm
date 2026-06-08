@@ -146,11 +146,12 @@ gstMode         GstMode  @default(EXCLUDED)
 gstAmount       Float    @default(0)
 taxableAmount   Float    @default(0)
 
-// Ticket Booking Mode (flight/train/bus): Convenience Fee is a manually
-// entered service charge; GST applies ONLY on it — never on the full ticket
-// value. Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee when
+// Service Margin Mode (flight/train/bus/hotel/cab/activity & other vendor-
+// arranged services): Convenience Fee is a manually entered service charge;
+// GST applies ONLY on it — never on the full supplier/vendor amount.
+// Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee when
 // EXCLUDED). taxableFee/gstOnFee are the GST breakdown of the convenience fee.
-ticketBookingMode Boolean @default(false)
+serviceMarginMode Boolean @default(false)
 convenienceFee    Float   @default(0)
 taxableFee        Float   @default(0)
 gstOnFee          Float   @default(0)
@@ -193,6 +194,50 @@ model Payment {
   trip       Trip?    @relation(fields: [tripId], references: [id])
 
   @@map("payments")
+}
+
+model Receivable {
+  id            String   @id
+  customerId    String?
+  customerName  String
+  bookingId     String?
+  tripId        String?
+  invoiceAmount Float
+  description   String   @default("")
+  dueDate       String?
+
+  // Cached aggregates — pure numeric derivations of entries, recalculated on
+  // every entry change (mirrors Booking.financialStatus pattern). Status
+  // ('pending'/'partial'/'paid'/'overdue') is intentionally NOT stored here:
+  // 'overdue' depends on today's date and is always derived live.
+  totalReceived Float    @default(0)
+  balanceDue    Float    @default(0)
+
+  notes         String   @default("")
+  createdDate   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  entries       ReceivableEntry[]
+
+  @@index([customerId])
+  @@index([bookingId])
+  @@index([tripId])
+  @@map("receivables")
+}
+
+model ReceivableEntry {
+  id           String     @id
+  receivableId String
+  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  amount       Float
+  paymentDate  String
+  paymentMode  String
+  reference    String?
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([receivableId])
+  @@map("receivable_entries")
 }
 
 model Task {

@@ -73,6 +73,14 @@ export type FinancialStatus = 'unpriced' | 'unpaid' | 'partial' | 'paid';
 // Always compute via calcGst() from utils/finance.ts.
 export type GstMode = 'INCLUDED' | 'EXCLUDED';
 
+// ─── Receivables (Accounts Receivable) ──────────────────────
+// A standalone ledger — independent of Payment — tracking pending customer
+// dues (invoices) and the entries recorded against them over time.
+// ReceivableStatus is NEVER persisted: 'overdue' depends on today's date,
+// so it is always derived live via calcReceivableFinance().
+export type PaymentMode = 'Cash' | 'UPI' | 'Bank Transfer' | 'Card' | 'Cheque' | 'Other';
+export type ReceivableStatus = 'pending' | 'partial' | 'paid' | 'overdue';
+
 // ─── Activity Entity Type ────────────────────────────────────
 // Named type for ActivityLog.entityType — prevents generic string inference
 // inside Zustand set() closures where contextual typing may not flow through.
@@ -82,6 +90,7 @@ export type ActivityEntityType =
   | 'booking'
   | 'customer'
   | 'payment'
+  | 'receivable'
   | 'task'
   | 'system';
 
@@ -354,14 +363,16 @@ export interface Booking {
   gstRate: number;
   gstMode: GstMode;
 
-  // Ticket Booking Mode (flight/train/bus): a fundamentally different
-  // workflow from standard package/hotel bookings. Convenience Fee is a
-  // manually entered service charge (NOT derived from selling price); GST
-  // applies ONLY on it — never on the full ticket value. Standard
-  // selling-price logic is hidden while this mode is active.
+  // Service Margin Mode (flights, trains, buses, hotels, cabs, transfers and
+  // other vendor-arranged services): a fundamentally different workflow from
+  // standard package/selling-price bookings — the supplier/vendor cost passes
+  // through untaxed by us, and Convenience Fee is a manually entered service
+  // charge (NOT derived from a selling price). GST applies ONLY on that fee —
+  // never on the full supplier/vendor value. Standard selling-price logic is
+  // hidden while this mode is active.
   //   Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee)
   //   taxableFee / gstOnFee = GST breakdown of the convenience fee
-  ticketBookingMode?: boolean;
+  serviceMarginMode?: boolean;
   convenienceFee?: number;
   taxableFee?: number;
   gstOnFee?: number;
@@ -398,6 +409,35 @@ export interface Payment {
   status: 'pending' | 'received' | 'paid';
   reference?: string;
   notes?: string;
+}
+
+export interface ReceivableEntry {
+  id: string;
+  receivableId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMode: PaymentMode;
+  reference?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface Receivable {
+  id: string;
+  customerId?: string;
+  customerName: string;
+  bookingId?: string;
+  tripId?: string;
+  invoiceAmount: number;
+  description: string;
+  dueDate?: string;
+  // Cached aggregates — pure numeric derivations of entries, recalculated via
+  // calcReceivableFinance() on every entry change (mirrors Booking.financialStatus).
+  totalReceived: number;
+  balanceDue: number;
+  notes: string;
+  entries: ReceivableEntry[];
+  createdDate: string;
 }
 
 export interface Task {
@@ -702,6 +742,7 @@ export interface GKStoreState {
   quotations:      Quotation[];
   itineraries:     Itinerary[];
   vouchers:        Voucher[];
+  receivables:     Receivable[];
   staff:           Staff[];
   // Data-load lifecycle — used by AppShell to render loading/error UI
   dataLoading:     boolean;

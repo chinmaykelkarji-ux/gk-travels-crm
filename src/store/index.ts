@@ -17,12 +17,14 @@ import type {
   Quotation, QuotationItem, QuotationStatus,
   Itinerary, ItineraryStatus,
   Voucher, VoucherStatus,
+  Receivable, ReceivableEntry,
 } from '@/shared/types';
-import { calcTripFinance, calcBookingFinance } from '@/shared/utils/finance';
+import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
 import {
   nextTripId, nextLeadId, nextCustomerId, nextBookingId,
   nextTaskId, nextPayId, nextVendorId, nextVendorPaymentId,
   nextQuotationId, nextItineraryId, nextVoucherId, uid, reminderUid, activityUid,
+  nextReceivableId, nextReceivableEntryId,
 } from '@/shared/utils/id';
 import { today } from '@/shared/utils/date';
 import { canConfirmTrip } from '@/shared/schemas/trip';
@@ -97,6 +99,7 @@ const defaultState: GKStoreState = {
   quotations:     [],
   itineraries:    [],
   vouchers:       [],
+  receivables:    [],
   staff:          defaultStaff,
   dataLoading:    true,
   dataError:      null,
@@ -185,6 +188,13 @@ interface StoreActions {
   deleteVoucher:      (id: string) => void;
   setVoucherStatus:   (id: string, status: VoucherStatus) => void;
   duplicateVoucher:   (sourceId: string) => Voucher | null;
+
+  // â”€â”€ Receivables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  createReceivable:      (data: Partial<Receivable>) => Receivable;
+  updateReceivable:      (id: string, data: Partial<Receivable>) => void;
+  deleteReceivable:      (id: string) => void;
+  addReceivableEntry:    (receivableId: string, entry: Partial<ReceivableEntry>) => ReceivableEntry | null;
+  deleteReceivableEntry: (receivableId: string, entryId: string) => void;
 
   // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clearAll:    () => void;
@@ -605,7 +615,7 @@ export const useStore = create<GKStore>()(
           advance:           data.advance           ?? 0,
           supplierCost:      data.supplierCost      ?? 0,
           supplierPaid:      data.supplierPaid      ?? 0,
-          ticketBookingMode: data.ticketBookingMode ?? false,
+          serviceMarginMode: data.serviceMarginMode ?? false,
           convenienceFee:    data.convenienceFee    ?? 0,
         });
         const booking: Booking = {
@@ -1252,6 +1262,141 @@ export const useStore = create<GKStore>()(
 
       // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+      // ── Receivable Actions ──────────────────────────────────────
+      // Standalone Accounts Receivable ledger — independent of the Payment
+      // model. totalReceived/balanceDue are cached aggregates recalculated
+      // via calcReceivableFinance() on every entry change (mirrors how
+      // Booking.financialStatus is always derived, never hand-computed).
+
+      createReceivable(data) {
+        const state = get();
+        const id    = nextReceivableId(state.receivables.map(r => r.id));
+        const now   = today();
+
+        const invoiceAmount = data.invoiceAmount ?? 0;
+        const fin = calcReceivableFinance({ invoiceAmount, entries: [], dueDate: data.dueDate });
+
+        const receivable: Receivable = {
+          id,
+          customerId:    data.customerId,
+          customerName:  data.customerName ?? '',
+          bookingId:     data.bookingId,
+          tripId:        data.tripId,
+          invoiceAmount,
+          description:   data.description ?? '',
+          dueDate:       data.dueDate,
+          totalReceived: fin.totalReceived,
+          balanceDue:    fin.balanceDue,
+          notes:         data.notes ?? '',
+          entries:       [],
+          createdDate:   now,
+        };
+
+        set((s: GKStore) => ({ receivables: [receivable, ...s.receivables] }));
+
+        get().logActivity(
+          'receivable_created',
+          `Receivable ${id} for ${receivable.customerName} (Rs. ${invoiceAmount}) created`,
+          'receivable',
+          id,
+        );
+
+        void apiClient.post('/receivables', receivable).catch(onMutationError(''));
+        return receivable;
+      },
+
+      updateReceivable(id, data) {
+        set((s: GKStore) => ({
+          receivables: s.receivables.map(r => {
+            if (r.id !== id) return r;
+            const merged = { ...r, ...data };
+            const fin = calcReceivableFinance({
+              invoiceAmount: merged.invoiceAmount,
+              entries:       merged.entries,
+              dueDate:       merged.dueDate,
+            });
+            return { ...merged, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
+          }),
+        }));
+        const updated = get().receivables.find(r => r.id === id);
+        if (updated) void apiClient.put(`/receivables/${id}`, updated).catch(onMutationError(''));
+      },
+
+      deleteReceivable(id) {
+        const receivable = get().receivables.find(r => r.id === id);
+        set((s: GKStore) => ({ receivables: s.receivables.filter(r => r.id !== id) }));
+        if (receivable) {
+          get().logActivity(
+            'receivable_deleted',
+            `Receivable ${id} for ${receivable.customerName} deleted`,
+            'receivable',
+            id,
+          );
+        }
+        void apiClient.delete(`/receivables/${id}`).catch(onMutationError(''));
+      },
+
+      addReceivableEntry(receivableId, entry) {
+        const state      = get();
+        const receivable = state.receivables.find(r => r.id === receivableId);
+        if (!receivable) return null;
+
+        const allEntryIds = state.receivables.flatMap(r => r.entries.map(e => e.id));
+        const id  = nextReceivableEntryId(allEntryIds);
+        const now = today();
+
+        const newEntry: ReceivableEntry = {
+          id,
+          receivableId,
+          amount:      entry.amount ?? 0,
+          paymentDate: entry.paymentDate ?? now,
+          paymentMode: entry.paymentMode ?? 'Cash',
+          reference:   entry.reference,
+          notes:       entry.notes,
+        };
+
+        set((s: GKStore) => ({
+          receivables: s.receivables.map(r => {
+            if (r.id !== receivableId) return r;
+            const entries = [...r.entries, newEntry];
+            const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries, dueDate: r.dueDate });
+            return { ...r, entries, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
+          }),
+        }));
+
+        get().logActivity(
+          'receivable_payment_recorded',
+          `Payment of Rs. ${newEntry.amount} recorded against receivable ${receivableId} (${receivable.customerName})`,
+          'receivable',
+          receivableId,
+        );
+
+        void apiClient.post(`/receivables/${receivableId}/entries`, newEntry)
+          .then(() => {
+            const updated = get().receivables.find(r => r.id === receivableId);
+            if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
+          })
+          .catch(onMutationError(''));
+        return newEntry;
+      },
+
+      deleteReceivableEntry(receivableId, entryId) {
+        set((s: GKStore) => ({
+          receivables: s.receivables.map(r => {
+            if (r.id !== receivableId) return r;
+            const entries = r.entries.filter(e => e.id !== entryId);
+            const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries, dueDate: r.dueDate });
+            return { ...r, entries, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
+          }),
+        }));
+        void apiClient.delete(`/receivables/${receivableId}/entries/${entryId}`)
+          .then(() => {
+            const updated = get().receivables.find(r => r.id === receivableId);
+            if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
+          })
+          .catch(onMutationError(''));
+      },
+
       clearAll() {
         set({ ...defaultState, dataLoading: false, dataError: null });
       },
@@ -1285,6 +1430,7 @@ export const useStore = create<GKStore>()(
               quotations:     Quotation[];
               itineraries:    Itinerary[];
               vouchers:       Voucher[];
+              receivables:    Receivable[];
             };
 
             set({
@@ -1301,6 +1447,7 @@ export const useStore = create<GKStore>()(
               quotations:     Array.isArray(d.quotations)     ? d.quotations     : [],
               itineraries:    Array.isArray(d.itineraries)    ? d.itineraries    : [],
               vouchers:       Array.isArray(d.vouchers)       ? d.vouchers       : [],
+              receivables:    Array.isArray(d.receivables)    ? d.receivables    : [],
               dataLoading:    false,
               dataError:      null,
             });

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
-  AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck,
+  AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
@@ -11,7 +11,11 @@ import {
   normalizeTripFinance,
   FINANCIAL_STATUS_CLASS,
   FINANCIAL_STATUS_LABEL,
+  RECEIVABLE_STATUS_CLASS,
+  RECEIVABLE_STATUS_LABEL,
+  calcReceivableFinance,
 } from '@/shared/utils/finance';
+import type { ReceivableStatus } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, daysUntil, isThisMonth, isLastMonth } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
@@ -89,6 +93,7 @@ export default function Dashboard() {
   const quotations        = useStore(s => s.quotations);
   const itineraries       = useStore(s => s.itineraries);
   const vouchers          = useStore(s => s.vouchers);
+  const receivables       = useStore(s => s.receivables);
 
   // Quotation KPIs
   const quotationKpis = useMemo(() => {
@@ -149,6 +154,22 @@ export default function Dashboard() {
       openLeads,
     };
   }, [trips, leads, payments]);
+
+  // Receivables KPIs + recent payments feed
+  const receivableStats = useMemo(() => {
+    let totalBalance = 0, overdueBalance = 0;
+    const recentPayments: { entry: typeof receivables[number]['entries'][number]; customerName: string; status: ReceivableStatus }[] = [];
+
+    for (const r of receivables) {
+      const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+      totalBalance += fin.balanceDue;
+      if (fin.status === 'overdue') overdueBalance += fin.balanceDue;
+      for (const e of r.entries) recentPayments.push({ entry: e, customerName: r.customerName, status: fin.status });
+    }
+    recentPayments.sort((a, b) => (b.entry.paymentDate || '').localeCompare(a.entry.paymentDate || ''));
+
+    return { totalBalance, overdueBalance, recentPayments: recentPayments.slice(0, 8) };
+  }, [receivables]);
 
   // Activity feed
   const recentActivity = useMemo(
@@ -232,6 +253,22 @@ export default function Dashboard() {
           icon={Building2}
           color="red"
           onClick={() => navigate('/vendors')}
+        />
+        <KpiCard
+          title="Total Receivables"
+          value={formatCurrencyShort(receivableStats.totalBalance)}
+          sub={`${receivables.length} invoice${receivables.length !== 1 ? 's' : ''} tracked`}
+          icon={Receipt}
+          color="blue"
+          onClick={() => navigate('/receivables')}
+        />
+        <KpiCard
+          title="Overdue Amount"
+          value={formatCurrencyShort(receivableStats.overdueBalance)}
+          sub="Past due date, unpaid"
+          icon={AlertTriangle}
+          color="red"
+          onClick={() => navigate('/receivables')}
         />
         <KpiCard
           title="Quotation Pipeline"
@@ -475,6 +512,53 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Recent Receivable Payments ─────────────────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Receipt className="w-4 h-4 text-indigo-600" />
+              Recent Receivable Payments
+            </CardTitle>
+            <button
+              onClick={() => navigate('/receivables')}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              View all <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        </CardHeader>
+        <Separator />
+        <CardContent className="pt-0 pb-3">
+          {receivableStats.recentPayments.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-400">
+              No receivable payments recorded yet
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {receivableStats.recentPayments.map(({ entry, customerName, status }) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between py-2.5 cursor-pointer hover:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
+                  onClick={() => navigate('/receivables')}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{customerName}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{entry.paymentMode} · {fmtDate(entry.paymentDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-sm font-bold text-emerald-600">{formatCurrency(entry.amount)}</span>
+                    <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]', RECEIVABLE_STATUS_CLASS[status])}>
+                      {RECEIVABLE_STATUS_LABEL[status]}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -90,3 +90,17 @@ export function nextVoucherId(existingIds: string[]): string {
   const seq  = maxSeq(existingIds, 'VCH', 2) + 1;
   return `VCH-${year}-${String(seq).padStart(4, '0')}`;
 }
+
+export function nextReceivableId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'REC', 2) + 1;
+  return `REC-${year}-${String(seq).padStart(4, '0')}`;
+}
+
+export function nextReceivableEntryId(existingIds: string[]): string {
+  const seq = existingIds.reduce((max, id) => {
+    const n = parseInt((id || '').split('-')[1], 10);
+    return isNaN(n) ? max : Math.max(max, n);
+  }, 0) + 1;
+  return `RCE-${String(seq).padStart(3, '0')}`;
+}

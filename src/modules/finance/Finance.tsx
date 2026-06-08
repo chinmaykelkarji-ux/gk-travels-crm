@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   IndianRupee, TrendingUp, AlertTriangle,
-  Clock, ArrowUpRight, ArrowDownRight, Edit2, Trash2,
+  Clock, ArrowUpRight, ArrowDownRight, Edit2, Trash2, Receipt,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
@@ -12,6 +12,9 @@ import {
   FINANCIAL_STATUS_CLASS,
   FINANCIAL_STATUS_LABEL,
   getFinancialStatus,
+  RECEIVABLE_STATUS_CLASS,
+  RECEIVABLE_STATUS_LABEL,
+  calcReceivableFinance,
 } from '@/shared/utils/finance';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, isThisMonth, isLastMonth, monthKey } from '@/shared/utils/date';
@@ -22,6 +25,7 @@ import { confirm } from '@/shared/hooks/useConfirm';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { Button } from '@/shared/components/ui/button';
 import { PaymentForm } from '@/shared/components/PaymentForm';
 import { GmailIcon } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
@@ -79,6 +83,7 @@ export default function Finance() {
   const bookings      = useStore(s => s.bookings);
   const updatePayment = useStore(s => s.updatePayment);
   const deletePayment = useStore(s => s.deletePayment);
+  const receivables   = useStore(s => s.receivables);
 
   const [payFormOpen, setPayFormOpen] = useState(false);
   const [editPayment, setEditPayment] = useState<Payment | null>(null);
@@ -145,6 +150,34 @@ export default function Finance() {
 
     return { received, supplierPaid, thisMonthRec, revTrend, portfolio, urgentBalance, monthlyData };
   }, [trips, payments]);
+
+  const receivableStats = useMemo(() => {
+    const rows = receivables.map(r => ({
+      receivable: r,
+      fin: calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate }),
+    }));
+
+    // Flattened entry/payment history, newest first
+    const history = rows
+      .flatMap(({ receivable, fin }) => receivable.entries.map(e => ({ entry: e, receivable, status: fin.status })))
+      .sort((a, b) => (b.entry.paymentDate || '').localeCompare(a.entry.paymentDate || ''));
+
+    // Customer-wise grouped dues (only those with a balance)
+    const byCustomer = new Map<string, { name: string; balance: number; count: number }>();
+    for (const { receivable, fin } of rows) {
+      if (fin.balanceDue <= 0) continue;
+      const key = receivable.customerId || receivable.customerName;
+      const existing = byCustomer.get(key);
+      if (existing) { existing.balance += fin.balanceDue; existing.count += 1; }
+      else byCustomer.set(key, { name: receivable.customerName, balance: fin.balanceDue, count: 1 });
+    }
+    const groupedDues = Array.from(byCustomer.values()).sort((a, b) => b.balance - a.balance);
+
+    const totalReceivable = rows.reduce((s, { fin }) => s + fin.balanceDue, 0);
+    const overdueAmount   = rows.filter(({ fin }) => fin.status === 'overdue').reduce((s, { fin }) => s + fin.balanceDue, 0);
+
+    return { rows, history, groupedDues, totalReceivable, overdueAmount };
+  }, [receivables]);
 
   // Overdue alert
   return (
@@ -214,6 +247,7 @@ export default function Finance() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ledger">Customer Ledger</TabsTrigger>
           <TabsTrigger value="supplier">Supplier Ledger</TabsTrigger>
+          <TabsTrigger value="receivables">Receivables</TabsTrigger>
           <TabsTrigger value="monthly">Monthly Report</TabsTrigger>
         </TabsList>
 
@@ -435,6 +469,102 @@ export default function Finance() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Receivables */}
+        <TabsContent value="receivables">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Payment history */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-indigo-600" /> Payment History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {receivableStats.history.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-8 text-center">No receivable payments recorded yet</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Customer', 'Amount', 'Mode', 'Date', 'Status', ''].map(h => (
+                            <th key={h} className="text-left font-semibold text-gray-500 pb-2 pr-3">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {receivableStats.history.slice(0, 30).map(({ entry, receivable, status }) => (
+                          <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-2.5 pr-3 font-medium text-gray-800">{receivable.customerName}</td>
+                            <td className="py-2.5 pr-3 font-semibold text-emerald-600">{formatCurrency(entry.amount)}</td>
+                            <td className="py-2.5 pr-3 text-gray-600">{entry.paymentMode}</td>
+                            <td className="py-2.5 pr-3 text-gray-500">{fmtDate(entry.paymentDate)}</td>
+                            <td className="py-2.5 pr-3">
+                              <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]', RECEIVABLE_STATUS_CLASS[status])}>
+                                {RECEIVABLE_STATUS_LABEL[status]}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-3 text-gray-400 cursor-pointer hover:underline text-blue-600"
+                              onClick={() => navigate('/receivables')}>
+                              {receivable.id}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Grouped dues */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500" /> Outstanding Dues by Customer
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {receivableStats.groupedDues.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-8 text-center">No outstanding balances</p>
+                ) : (
+                  <div className="space-y-2">
+                    {receivableStats.groupedDues.map(g => (
+                      <div key={g.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-gray-800 truncate">{g.name}</div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            {g.count} invoice{g.count > 1 ? 's' : ''} pending
+                          </div>
+                        </div>
+                        <div className="text-sm font-bold text-red-500 flex-shrink-0">{formatCurrency(g.balance)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <div className="text-sm font-bold font-display text-gray-800">{formatCurrency(receivableStats.totalReceivable)}</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">Total Outstanding</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3 text-center">
+                    <div className="text-sm font-bold font-display text-red-600">{formatCurrency(receivableStats.overdueAmount)}</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">Overdue</div>
+                  </div>
+                </div>
+
+                <Button
+                  size="sm" variant="outline" className="w-full mt-4 gap-1.5 text-xs"
+                  onClick={() => navigate('/receivables')}
+                >
+                  Open Receivables Ledger →
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Monthly Report */}

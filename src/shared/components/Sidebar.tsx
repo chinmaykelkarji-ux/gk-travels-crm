@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
-  FileText, Map, FileCheck, BarChart2, LogOut,
+  FileText, Map, FileCheck, BarChart2, LogOut, Receipt,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
@@ -49,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'FINANCE',
     items: [
       { path: '/finance', label: 'Finance', icon: IndianRupee },
+      { path: '/receivables', label: 'Receivables', icon: Receipt },
       { path: '/vendors', label: 'Vendors', icon: Building2   },
     ],
   },

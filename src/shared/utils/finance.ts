@@ -19,7 +19,8 @@
 //   - Finance results use `financialStatus`, never `status`.
 // ============================================================
 
-import type { FinancialStatus, GstMode } from '@/shared/types';
+import type { FinancialStatus, GstMode, ReceivableStatus } from '@/shared/types';
+import { today } from '@/shared/utils/date';
 
 // ─── GST Calculation ─────────────────────────────────────────
 //
@@ -183,13 +184,13 @@ export interface BookingFinanceResult {
   supplierPending:   number;
   grossMargin:       number;
   marginPct:         number;
-  // Ticket Booking Mode — Convenience Fee is a manually entered service
-  // charge; GST applies ONLY on it (never on the full ticket value).
+  // Service Margin Mode — Convenience Fee is a manually entered service
+  // charge; GST applies ONLY on it (never on the full supplier/vendor value).
   // taxableFee/gstOnFee are the GST breakdown of that fee — they mirror
   // taxableAmount/gstAmount but are kept distinct so standard bookings
-  // (which tax the full selling price) are never confused with ticket
-  // bookings (which tax only the fee).
-  ticketBookingMode: boolean;
+  // (which tax the full selling price) are never confused with service-
+  // margin bookings (which tax only the fee).
+  serviceMarginMode: boolean;
   convenienceFee:    number;
   taxableFee:        number;
   gstOnFee:          number;
@@ -204,7 +205,7 @@ export function calcBookingFinance(opts: {
   advance?:           number;
   supplierCost?:      number;
   supplierPaid?:      number;
-  ticketBookingMode?: boolean;
+  serviceMarginMode?: boolean;
   convenienceFee?:    number | null;
 }): BookingFinanceResult {
   const gstRate      = opts.gstRate      ?? 0;
@@ -213,14 +214,17 @@ export function calcBookingFinance(opts: {
   const supplierCost = opts.supplierCost ?? 0;
   const supplierPaid = opts.supplierPaid ?? 0;
   const supplierPending   = Math.max(0, supplierCost - supplierPaid);
-  const ticketBookingMode = opts.ticketBookingMode ?? false;
+  const serviceMarginMode = opts.serviceMarginMode ?? false;
 
-  // ─── Ticket Booking Mode ───────────────────────────────────
-  // Operationally distinct from standard package/hotel bookings: the
-  // Convenience Fee is a manually entered service charge (NOT derived
-  // from a selling price), and GST is levied ONLY on that fee — the
-  // supplier cost (the airline/vendor's ticket value) passes through
-  // untaxed by us. Standard selling-price logic does not apply here.
+  // ─── Service Margin Mode ───────────────────────────────────
+  // Operationally distinct from standard selling-price bookings: applies to
+  // flights, trains, buses, hotels, cabs, transfers and other vendor-
+  // arranged services where we pass the supplier/vendor cost straight
+  // through and earn via a service/convenience margin. The Convenience Fee
+  // is a manually entered service charge (NOT derived from a selling
+  // price), and GST is levied ONLY on that fee — the supplier/vendor cost
+  // passes through untaxed by us. Standard selling-price logic does not
+  // apply here.
   //
   //   Taxable Fee / GST on Fee = calcGst(convenienceFee, rate, mode)
   //   Invoice Total            = Supplier Cost + (fee + GST on fee)
@@ -229,7 +233,7 @@ export function calcBookingFinance(opts: {
   //   e.g. cost 10,000 + fee 500 + GST 90  = invoice 10,590
   // INCLUDED: convenienceFee already contains GST — it is back-calculated.
   //   e.g. cost 10,000 + fee 590 (taxable 500 + GST 90) = invoice 10,590
-  if (ticketBookingMode) {
+  if (serviceMarginMode) {
     const convenienceFee = opts.convenienceFee ?? 0;
 
     if (supplierCost === 0 && convenienceFee === 0) {
@@ -242,7 +246,7 @@ export function calcBookingFinance(opts: {
         supplierPending,
         grossMargin:     0,
         marginPct:       0,
-        ticketBookingMode,
+        serviceMarginMode,
         convenienceFee:  0,
         taxableFee:      0,
         gstOnFee:        0,
@@ -271,7 +275,7 @@ export function calcBookingFinance(opts: {
       supplierPending,
       grossMargin,
       marginPct,
-      ticketBookingMode,
+      serviceMarginMode,
       convenienceFee,
       taxableFee,
       gstOnFee,
@@ -293,7 +297,7 @@ export function calcBookingFinance(opts: {
       supplierPending,
       grossMargin:     0,
       marginPct:       0,
-      ticketBookingMode,
+      serviceMarginMode,
       convenienceFee:  0,
       taxableFee:      0,
       gstOnFee:        0,
@@ -319,7 +323,7 @@ export function calcBookingFinance(opts: {
     supplierPending,
     grossMargin,
     marginPct,
-    ticketBookingMode,
+    serviceMarginMode,
     convenienceFee: 0,
     taxableFee:     0,
     gstOnFee:       0,
@@ -456,6 +460,66 @@ export function normalizeBookingFinance(booking: {
     grossMargin:     booking.grossMargin,
     financialStatus: getFinancialStatus(booking.totalPayable, booking.advance),
   };
+}
+
+// ─── Receivables (Accounts Receivable) ───────────────────────
+//
+// A Receivable is a standalone invoice/amount-due ledger entry — independent
+// of the existing Payment model — against which one or more ReceivableEntry
+// payments are recorded over time (supports partial + full collection).
+//
+// `status` is intentionally NEVER persisted: 'overdue' depends on today's
+// date, so a stored value would go stale without a background job. It is
+// always derived live here, exactly like FinancialStatus elsewhere.
+//
+// Rule table:
+//   balanceDue <= 0                         → 'paid'
+//   dueDate is set AND dueDate < asOf       → 'overdue'
+//   totalReceived > 0                       → 'partial'
+//   otherwise                               → 'pending'
+
+export const RECEIVABLE_STATUS_LABEL: Record<ReceivableStatus, string> = {
+  pending:  'Pending',
+  partial:  'Partially Received',
+  paid:     'Paid',
+  overdue:  'Overdue',
+};
+
+export const RECEIVABLE_STATUS_CLASS: Record<ReceivableStatus, string> = {
+  pending:  'bg-yellow-50 text-yellow-700 border border-yellow-200 ring-0',
+  partial:  'bg-orange-50 text-orange-700 border border-orange-200 ring-0',
+  paid:     'bg-green-50 text-green-700 border border-green-200 ring-0',
+  overdue:  'bg-red-50 text-red-700 border border-red-200 ring-0',
+};
+
+export interface ReceivableFinanceResult {
+  totalReceived: number;
+  balanceDue:    number;
+  status:        ReceivableStatus;
+}
+
+export function calcReceivableFinance(opts: {
+  invoiceAmount: number;
+  entries:       { amount: number }[];
+  dueDate?:      string | null;
+  asOf?:         string;
+}): ReceivableFinanceResult {
+  const asOf          = opts.asOf ?? today();
+  const totalReceived = Math.round(opts.entries.reduce((sum, e) => sum + (e.amount || 0), 0) * 100) / 100;
+  const balanceDue    = Math.max(0, Math.round((opts.invoiceAmount - totalReceived) * 100) / 100);
+
+  let status: ReceivableStatus;
+  if (balanceDue <= 0) {
+    status = 'paid';
+  } else if (opts.dueDate && opts.dueDate < asOf) {
+    status = 'overdue';
+  } else if (totalReceived > 0) {
+    status = 'partial';
+  } else {
+    status = 'pending';
+  }
+
+  return { totalReceived, balanceDue, status };
 }
 
 /** @deprecated Use normalizeTripFinance() */

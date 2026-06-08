@@ -19,6 +19,10 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import {
+  RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL, calcReceivableFinance,
+} from '@/shared/utils/finance';
+import { ReceivableForm } from '@/shared/components/ReceivableForm';
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogFooter, DialogBody,
 } from '@/shared/components/ui/dialog';
@@ -384,6 +388,9 @@ interface DrawerProps {
 function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
   const trips    = useStore(s => s.trips);
   const payments = useStore(s => s.payments);
+  const allReceivables   = useStore(s => s.receivables);
+  const createReceivable = useStore(s => s.createReceivable);
+  const [recFormOpen, setRecFormOpen] = useState(false);
 
   const customerTrips = useMemo(
     () => trips.filter(t => t.customerId === customer.id || (customer.tripIds ?? []).includes(t.id)),
@@ -397,6 +404,22 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
     [payments, customer]
   );
 
+  const customerReceivables = useMemo(
+    () => allReceivables.filter(r => r.customerId === customer.id),
+    [allReceivables, customer]
+  );
+
+  const billingSummary = useMemo(() => {
+    let totalBilled = 0, totalReceived = 0, pending = 0;
+    for (const r of customerReceivables) {
+      const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+      totalBilled   += r.invoiceAmount;
+      totalReceived += fin.totalReceived;
+      pending       += fin.balanceDue;
+    }
+    return { totalBilled, totalReceived, pending };
+  }, [customerReceivables]);
+
   const passportDays = customer.passportExpiry ? daysUntil(customer.passportExpiry) : null;
 
   const prefs = typeof customer.preferences === 'string'
@@ -404,6 +427,7 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
     : customer.preferences;
 
   return (
+    <>
     <div className="fixed inset-0 z-40 flex">
       <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div
@@ -622,6 +646,56 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
             </div>
           )}
 
+          {/* Billing / Receivables */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Billing</h4>
+              <Button
+                size="sm" variant="outline"
+                className="gap-1.5 text-[11px] h-7"
+                onClick={() => setRecFormOpen(true)}
+              >
+                <Plus className="w-3 h-3" /> Add Receivable
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-sm font-bold font-display text-gray-700">{formatCurrency(billingSummary.totalBilled)}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Total Billed</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-sm font-bold font-display text-emerald-600">{formatCurrency(billingSummary.totalReceived)}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Received</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-sm font-bold font-display text-red-500">{formatCurrency(billingSummary.pending)}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Pending</div>
+              </div>
+            </div>
+
+            {customerReceivables.length > 0 && (
+              <div className="space-y-2">
+                {customerReceivables.slice(0, 6).map(r => {
+                  const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+                  return (
+                    <div key={r.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-gray-800 truncate">{r.description || r.id}</div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {formatCurrency(r.invoiceAmount)} · Balance {formatCurrency(fin.balanceDue)}
+                        </div>
+                      </div>
+                      <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px] flex-shrink-0', RECEIVABLE_STATUS_CLASS[fin.status])}>
+                        {RECEIVABLE_STATUS_LABEL[fin.status]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Notes */}
           {customer.notes && (
             <div>
@@ -634,6 +708,22 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
         </div>
       </div>
     </div>
+
+    <ReceivableForm
+      open={recFormOpen}
+      onClose={() => setRecFormOpen(false)}
+      onSave={(data) => {
+        createReceivable({
+          ...data,
+          customerId:   customer.id,
+          customerName: data.customerName ?? customer.name,
+        });
+        toast.success('Receivable added');
+        setRecFormOpen(false);
+      }}
+      defaults={{ customerId: customer.id, customerName: customer.name }}
+    />
+    </>
   );
 }
 

@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/all', requireAuth, async (_req, res) => {
   try {
-    const [trips, leads, customers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers] =
+    const [trips, leads, customers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers, receivables] =
       await Promise.all([
         prisma.trip.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.lead.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -28,6 +28,10 @@ router.get('/all', requireAuth, async (_req, res) => {
           include: { days: { orderBy: { sortOrder: 'asc' } } },
         }),
         prisma.voucher.findMany({ orderBy: { createdAt: 'desc' } }),
+        prisma.receivable.findMany({
+          orderBy: { createdAt: 'desc' },
+          include: { entries: { orderBy: { createdAt: 'desc' } } },
+        }),
       ]);
 
     res.json({
@@ -42,6 +46,7 @@ router.get('/all', requireAuth, async (_req, res) => {
       quotations,
       itineraries,
       vouchers,
+      receivables,
       activityLog: activityLog.map(a => ({
         ...a,
         date:      a.date,

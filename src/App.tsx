@@ -43,6 +43,7 @@ const Itineraries       = lazy(() => import('@/modules/itineraries/Itineraries')
 const ItineraryBuilder  = lazy(() => import('@/modules/itineraries/ItineraryBuilder'));
 const ItineraryDetail   = lazy(() => import('@/modules/itineraries/ItineraryDetail'));
 const Analytics         = lazy(() => import('@/modules/analytics/Analytics'));
+const Receivables       = lazy(() => import('@/modules/receivables/Receivables'));
 const Vouchers          = lazy(() => import('@/modules/vouchers/Vouchers'));
 const VoucherFormPage   = lazy(() => import('@/modules/vouchers/VoucherForm'));
 const VoucherDetail     = lazy(() => import('@/modules/vouchers/VoucherDetail'));
@@ -224,6 +225,7 @@ export default function App() {
                 <Route path="/vouchers/:id"          element={<VoucherDetail />} />
                 <Route path="/vouchers/:id/edit"     element={<VoucherFormPage />} />
                 <Route path="/finance"               element={<Finance />} />
+                <Route path="/receivables"           element={<Receivables />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />
               </Route>

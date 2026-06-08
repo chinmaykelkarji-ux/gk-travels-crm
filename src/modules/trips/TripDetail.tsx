@@ -2,18 +2,19 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Calendar, Users, Phone, IndianRupee,
-  Edit2, Trash2, CheckCircle, Clock, Plane, Hotel, Globe, Plus,
+  Edit2, Trash2, CheckCircle, Clock, Plane, Hotel, Globe, Plus, Receipt,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
   FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL, getFinancialStatus,
+  RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL, calcReceivableFinance,
 } from '@/shared/utils/finance';
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntilLabel, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { canConfirmTrip } from '@/shared/schemas/trip';
 import type { TripFormSchema } from '@/shared/schemas/trip';
-import type { TripStatus, Payment } from '@/shared/types';
+import type { TripStatus, Payment, Receivable } from '@/shared/types';
 import { VOUCHER_TYPES, VOUCHER_STATUS_BADGE } from '@/modules/vouchers/Vouchers';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -23,6 +24,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui
 import { Separator } from '@/shared/components/ui/separator';
 import { TripForm } from './TripForm';
 import { PaymentForm } from '@/shared/components/PaymentForm';
+import { ReceivableForm } from '@/shared/components/ReceivableForm';
+import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 
@@ -46,6 +49,12 @@ export default function TripDetail() {
   const updatePayment = useStore(s => s.updatePayment);
   const deletePayment = useStore(s => s.deletePayment);
 
+  const allReceivables   = useStore(s => s.receivables);
+  const createReceivable = useStore(s => s.createReceivable);
+  const deleteReceivable = useStore(s => s.deleteReceivable);
+  const addReceivableEntry = useStore(s => s.addReceivableEntry);
+  const receivables = allReceivables.filter(r => r.tripId === id);
+
   const [editOpen, setEditOpen] = useState(false);
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('Cash');
@@ -54,6 +63,11 @@ export default function TripDetail() {
   const [payFormOpen, setPayFormOpen]   = useState(false);
   const [editPayment, setEditPayment]   = useState<Payment | null>(null);
   const [editPayType, setEditPayType]   = useState<'customer' | 'supplier'>('customer');
+
+  // Receivable dialog state
+  const [recFormOpen, setRecFormOpen]   = useState(false);
+  const [recEntryOpen, setRecEntryOpen] = useState(false);
+  const [activeReceivable, setActiveReceivable] = useState<Receivable | null>(null);
 
   if (!trip) {
     return (
@@ -531,6 +545,86 @@ export default function TripDetail() {
                 </div>
               )}
             </div>
+
+            {/* Receivables */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-indigo-600" /> Receivables
+                </h3>
+                <Button
+                  size="sm" variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={() => { setActiveReceivable(null); setRecFormOpen(true); }}
+                >
+                  <Plus className="w-3 h-3" /> Add Receivable
+                </Button>
+              </div>
+
+              {receivables.length === 0 ? (
+                <p className="text-xs text-gray-400 py-4 text-center">No receivables linked to this trip</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Invoice</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Received</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Balance</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Due</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Status</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {receivables.map(r => {
+                        const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+                        return (
+                          <tr key={r.id} className="hover:bg-gray-50">
+                            <td className="py-2 font-semibold text-gray-700 pr-3">{formatCurrency(r.invoiceAmount)}</td>
+                            <td className="py-2 text-emerald-600 pr-3">{formatCurrency(fin.totalReceived)}</td>
+                            <td className="py-2 text-red-500 pr-3">{formatCurrency(fin.balanceDue)}</td>
+                            <td className="py-2 text-gray-500 pr-3">{r.dueDate ? fmtDate(r.dueDate) : '—'}</td>
+                            <td className="py-2 pr-3">
+                              <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]', RECEIVABLE_STATUS_CLASS[fin.status])}>
+                                {RECEIVABLE_STATUS_LABEL[fin.status]}
+                              </span>
+                            </td>
+                            <td className="py-2">
+                              <div className="flex items-center gap-1">
+                                {fin.balanceDue > 0 && (
+                                  <button
+                                    onClick={() => { setActiveReceivable(r); setRecEntryOpen(true); }}
+                                    className="p-1 rounded hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors"
+                                    title="Record Payment"
+                                  >
+                                    <CheckCircle className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    const ok = await confirm({
+                                      title: `Delete ${r.id}?`,
+                                      description: 'This will permanently remove this receivable and its payment history.',
+                                      confirmLabel: 'Delete', cancelLabel: 'Cancel', variant: 'destructive',
+                                    });
+                                    if (ok) { deleteReceivable(r.id); toast.success('Receivable deleted'); }
+                                  }}
+                                  className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -720,6 +814,36 @@ export default function TripDetail() {
         onSave={handleSavePayment}
         payment={editPayment}
         payType={editPayType}
+      />
+
+      {/* Receivable Add Form */}
+      <ReceivableForm
+        open={recFormOpen}
+        onClose={() => setRecFormOpen(false)}
+        onSave={(data) => {
+          createReceivable({
+            ...data,
+            customerId:   trip.customerId,
+            customerName: data.customerName ?? trip.customer,
+            tripId:       trip.id,
+          });
+          toast.success('Receivable added');
+          setRecFormOpen(false);
+        }}
+        defaults={{ customerId: trip.customerId, customerName: trip.customer, tripId: trip.id }}
+      />
+
+      {/* Receivable Record Payment Form */}
+      <ReceivableEntryForm
+        open={recEntryOpen}
+        onClose={() => { setRecEntryOpen(false); setActiveReceivable(null); }}
+        onSave={(data) => {
+          if (activeReceivable) addReceivableEntry(activeReceivable.id, data);
+          toast.success('Payment recorded');
+          setRecEntryOpen(false);
+          setActiveReceivable(null);
+        }}
+        receivable={activeReceivable}
       />
     </div>
   );

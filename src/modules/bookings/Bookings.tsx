@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Ticket, Search, Plus, Plane, Hotel, Car, Train, Bus,
   Shield, Activity, Package, HelpCircle, IndianRupee,
-  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2,
+  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Booking, BookingType, BookingStatus } from '@/shared/types';
@@ -11,7 +11,11 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate } from '@/shared/utils/date';
-import { FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL, getFinancialStatus, calcBookingFinance } from '@/shared/utils/finance';
+import {
+  FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL, getFinancialStatus, calcBookingFinance,
+  RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL, calcReceivableFinance,
+} from '@/shared/utils/finance';
+import { ReceivableForm } from '@/shared/components/ReceivableForm';
 import { cn } from '@/shared/utils/cn';
 import { EmptyState } from '@/shared/components/EmptyState';
 import {
@@ -82,7 +86,7 @@ interface BookingFormData {
   supplierPaid:      string;
   gstRate:           string;
   gstMode:           'INCLUDED' | 'EXCLUDED';
-  ticketBookingMode: boolean;
+  serviceMarginMode: boolean;
   status:            BookingStatus;
   notes:             string;
 }
@@ -98,15 +102,17 @@ const DEFAULT_FORM: BookingFormData = {
   supplierPaid:      '',
   gstRate:           '5',
   gstMode:           'EXCLUDED',
-  ticketBookingMode: false,
+  serviceMarginMode: false,
   status:            'pending',
   notes:             '',
 };
 
-// Ticket Booking Mode applies only to ticket-type bookings (flight/train/bus) —
-// it must never affect package, hotel, or tour booking calculations.
-const TICKET_TYPES: BookingType[] = ['flight', 'train', 'bus'];
-const TICKET_GST_RATES = ['18', '5'];
+// Service Margin Mode applies to bookings where suppliers/vendors are paid
+// pass-through and the agency earns via a service/convenience fee — flights,
+// trains, buses, hotels, cabs and vendor-arranged activities. It must never
+// affect package or tour booking calculations driven by selling price.
+const SERVICE_MARGIN_TYPES: BookingType[] = ['flight', 'train', 'bus', 'hotel', 'cab', 'activity'];
+const SERVICE_FEE_GST_RATES = ['18', '5'];
 
 function formFromBooking(b: Booking): BookingFormData {
   return {
@@ -120,7 +126,7 @@ function formFromBooking(b: Booking): BookingFormData {
     supplierPaid:      String(b.supplierPaid ?? 0),
     gstRate:           String(b.gstRate ?? 5),
     gstMode:           b.gstMode ?? 'EXCLUDED',
-    ticketBookingMode: b.ticketBookingMode ?? false,
+    serviceMarginMode: b.serviceMarginMode ?? false,
     status:            b.status,
     notes:             b.notes ?? '',
   };
@@ -143,9 +149,14 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
   const trips         = useStore(s => s.trips);
   const createBooking = useStore(s => s.createBooking);
   const updateBooking = useStore(s => s.updateBooking);
+  const allReceivables   = useStore(s => s.receivables);
+  const createReceivable = useStore(s => s.createReceivable);
   const isEdit        = !!booking;
   const [form, setForm] = useState<BookingFormData>(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
+  const [recFormOpen, setRecFormOpen] = useState(false);
+
+  const bookingReceivables = booking ? allReceivables.filter(r => r.bookingId === booking.id) : [];
 
   useEffect(() => {
     if (open) setForm(booking ? formFromBooking(booking) : DEFAULT_FORM);
@@ -160,8 +171,8 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
     onClose();
   }
 
-  const isTicketType     = TICKET_TYPES.includes(form.type);
-  const ticketModeActive = isTicketType && form.ticketBookingMode;
+  const isServiceMarginType = SERVICE_MARGIN_TYPES.includes(form.type);
+  const serviceMarginActive = isServiceMarginType && form.serviceMarginMode;
 
   function handleSave() {
     const name = form.customerName.trim();
@@ -174,13 +185,13 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
     const paid    = parseAmount(form.supplierPaid)   ?? 0;
     const gst     = parseAmount(form.gstRate)        ?? 0;
 
-    if (!ticketModeActive && selling !== null && (isNaN(selling) || selling < 0)) {
+    if (!serviceMarginActive && selling !== null && (isNaN(selling) || selling < 0)) {
       toast.error('Invalid selling price', 'Enter a valid non-negative amount'); return;
     }
     if (isNaN(cost) || cost < 0) {
       toast.error('Invalid supplier cost', 'Enter a valid non-negative amount'); return;
     }
-    if (ticketModeActive && (isNaN(fee) || fee < 0)) {
+    if (serviceMarginActive && (isNaN(fee) || fee < 0)) {
       toast.error('Invalid convenience fee', 'Enter a valid non-negative amount'); return;
     }
     if (isNaN(adv) || adv < 0) {
@@ -196,13 +207,13 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
     setSaving(true);
     try {
       const refId = form.refId && form.refId !== '__none__' ? form.refId : undefined;
-      // Ticket Booking Mode only ever applies to ticket-type bookings — never
-      // carries over to package/hotel/tour bookings even if toggled previously.
-      const ticketBookingMode = TICKET_TYPES.includes(form.type) && form.ticketBookingMode;
-      // Ticket mode hides standard selling-price logic entirely — the invoice
-      // total is derived from Supplier Cost + Convenience Fee instead.
-      const sellingForSave    = ticketBookingMode ? null : selling;
-      const feeForSave        = ticketBookingMode ? fee  : 0;
+      // Service Margin Mode only ever applies to eligible booking types — never
+      // carries over to package/tour bookings even if toggled previously.
+      const serviceMarginMode = SERVICE_MARGIN_TYPES.includes(form.type) && form.serviceMarginMode;
+      // Service Margin Mode hides standard selling-price logic entirely — the
+      // invoice total is derived from Supplier Cost + Convenience Fee instead.
+      const sellingForSave    = serviceMarginMode ? null : selling;
+      const feeForSave        = serviceMarginMode ? fee  : 0;
 
       if (booking) {
         updateBooking(booking.id, {
@@ -216,7 +227,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           supplierPaid:   paid,
           gstRate:        gst,
           gstMode:        form.gstMode,
-          ticketBookingMode,
+          serviceMarginMode,
           status:         form.status,
           notes:          form.notes,
         });
@@ -233,7 +244,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           supplierPaid:   paid,
           gstRate:        gst,
           gstMode:        form.gstMode,
-          ticketBookingMode,
+          serviceMarginMode,
           status:         form.status,
           notes:          form.notes,
           detail:         {},
@@ -248,7 +259,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
 
   // Live financial preview — mirrors calcBookingFinance so the form shows
   // exactly what will be persisted (create/edit/print/refresh stay in sync).
-  // Ticket Booking Mode is driven by Supplier Cost + Convenience Fee (manual);
+  // Service Margin Mode is driven by Supplier Cost + Convenience Fee (manual);
   // standard mode is driven by Selling Price — the two never mix.
   const preview = useMemo(() => {
     const cost = parseAmount(form.supplierCost) ?? 0;
@@ -256,7 +267,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
     const adv  = parseAmount(form.advance)      ?? 0;
     const paid = parseAmount(form.supplierPaid) ?? 0;
 
-    if (ticketModeActive) {
+    if (serviceMarginActive) {
       const fee = parseAmount(form.convenienceFee) ?? 0;
       if (cost === 0 && fee === 0) return null;
       return calcBookingFinance({
@@ -266,7 +277,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
         advance:           adv,
         supplierCost:      cost,
         supplierPaid:      paid,
-        ticketBookingMode: true,
+        serviceMarginMode: true,
         convenienceFee:    fee,
       });
     }
@@ -280,11 +291,12 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
       advance:           adv,
       supplierCost:      cost,
       supplierPaid:      paid,
-      ticketBookingMode: false,
+      serviceMarginMode: false,
     });
-  }, [form.sellingPrice, form.convenienceFee, form.gstRate, form.gstMode, form.advance, form.supplierCost, form.supplierPaid, ticketModeActive]);
+  }, [form.sellingPrice, form.convenienceFee, form.gstRate, form.gstMode, form.advance, form.supplierCost, form.supplierPaid, serviceMarginActive]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
       <DialogContent size="md">
         <DialogHeader>
@@ -317,34 +329,37 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
             </div>
           </div>
 
-          {/* Ticket Booking Mode — flight/train/bus only. Operationally and
-              financially distinct from package/hotel bookings: the
-              Convenience Fee is entered manually and GST is charged ONLY on
-              that fee, never on the full ticket value. Standard selling-price
-              logic is hidden while this mode is active. */}
-          {isTicketType && (
+          {/* Service Margin Mode — flights, trains, buses, hotels, cabs and
+              vendor-arranged activities. Operationally and financially
+              distinct from package/tour bookings: the Convenience Fee is
+              entered manually and GST is charged ONLY on that fee, never on
+              the full supplier/vendor amount. Standard selling-price logic
+              is hidden while this mode is active. */}
+          {isServiceMarginType && (
             <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold text-indigo-900">Ticket Booking Mode</p>
+                <p className="text-xs font-semibold text-indigo-900">Service Margin Mode</p>
                 <p className="text-[11px] text-indigo-600/80 mt-0.5 max-w-md">
                   When enabled, enter the Supplier Cost and a manual Convenience Fee — GST
-                  applies only on the fee, never on the full ticket value. Invoice Total =
-                  Supplier Cost + Convenience Fee. Matches real airline/rail/bus ticketing rules.
+                  applies only on the fee, never on the full supplier/vendor amount. Invoice
+                  Total = Supplier Cost + Convenience Fee. Matches how agencies pass through
+                  supplier costs and earn via service margins on tickets, hotels, cabs and
+                  other vendor-arranged services.
                 </p>
               </div>
               <button
                 type="button"
                 role="switch"
-                aria-checked={form.ticketBookingMode}
-                onClick={() => set('ticketBookingMode', !form.ticketBookingMode)}
+                aria-checked={form.serviceMarginMode}
+                onClick={() => set('serviceMarginMode', !form.serviceMarginMode)}
                 className={cn(
                   'relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 mt-0.5',
-                  form.ticketBookingMode ? 'bg-indigo-600' : 'bg-gray-300'
+                  form.serviceMarginMode ? 'bg-indigo-600' : 'bg-gray-300'
                 )}
               >
                 <span className={cn(
                   'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
-                  form.ticketBookingMode ? 'translate-x-[18px]' : 'translate-x-1'
+                  form.serviceMarginMode ? 'translate-x-[18px]' : 'translate-x-1'
                 )} />
               </button>
             </div>
@@ -376,10 +391,10 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                 </SelectContent>
               </Select>
             </div>
-            {/* Standard selling-price logic is hidden entirely in Ticket
-                Booking Mode — the invoice is built from Supplier Cost +
+            {/* Standard selling-price logic is hidden entirely in Service
+                Margin Mode — the invoice is built from Supplier Cost +
                 Convenience Fee instead (Section 2/5 of the spec). */}
-            {!ticketModeActive && (
+            {!serviceMarginActive && (
               <div className="space-y-1.5">
                 <Label htmlFor="bk-selling">Selling Price (₹)</Label>
                 <Input
@@ -405,7 +420,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                 placeholder="0.00"
               />
             </div>
-            {ticketModeActive && (
+            {serviceMarginActive && (
               <div className="space-y-1.5">
                 <Label htmlFor="bk-convenience-fee">Convenience Fee (₹)</Label>
                 <Input
@@ -450,7 +465,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(ticketModeActive ? TICKET_GST_RATES : ['0', '5', '12', '18', '28']).map(r => (
+                  {(serviceMarginActive ? SERVICE_FEE_GST_RATES : ['0', '5', '12', '18', '28']).map(r => (
                     <SelectItem key={r} value={r}>{r}%</SelectItem>
                   ))}
                 </SelectContent>
@@ -493,11 +508,11 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           </div>
 
           {/* Financial summary preview — driven by calcBookingFinance(), the
-              single source of truth. Switches layout for Ticket Booking Mode
+              single source of truth. Switches layout for Service Margin Mode
               (GST only on convenience fee) vs standard bookings. */}
           {preview && (
             <div className="bg-gray-50 rounded-xl p-3.5 space-y-2 text-xs">
-              {ticketModeActive ? (
+              {serviceMarginActive ? (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-500">Supplier Cost</span>
@@ -555,6 +570,46 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
               )}
             </div>
           )}
+
+          {/* Receivables linked to this booking — edit mode only */}
+          {isEdit && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-indigo-600" /> Receivables
+                </Label>
+                <Button
+                  size="sm" variant="outline" type="button"
+                  className="gap-1.5 text-xs"
+                  onClick={() => setRecFormOpen(true)}
+                >
+                  <Plus className="w-3 h-3" /> Add Receivable
+                </Button>
+              </div>
+
+              {bookingReceivables.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2 text-center bg-gray-50 rounded-lg">No receivables linked to this booking</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {bookingReceivables.map(r => {
+                    const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries, dueDate: r.dueDate });
+                    return (
+                      <div key={r.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-gray-700">{formatCurrency(r.invoiceAmount)}</span>
+                          <span className="text-gray-400">•</span>
+                          <span className="text-gray-500">Balance {formatCurrency(fin.balanceDue)}</span>
+                        </div>
+                        <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px] flex-shrink-0', RECEIVABLE_STATUS_CLASS[fin.status])}>
+                          {RECEIVABLE_STATUS_LABEL[fin.status]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
@@ -562,6 +617,34 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {isEdit && booking && (
+      <ReceivableForm
+        open={recFormOpen}
+        onClose={() => setRecFormOpen(false)}
+        onSave={(data) => {
+          createReceivable({
+            ...data,
+            customerId:    data.customerId    ?? booking.customerId,
+            customerName:  data.customerName  ?? booking.customerName,
+            bookingId:     booking.id,
+            tripId:        data.tripId        ?? booking.refId,
+            invoiceAmount: data.invoiceAmount ?? (booking.totalPayable ?? 0),
+          });
+          toast.success('Receivable added');
+          setRecFormOpen(false);
+        }}
+        defaults={{
+          customerId:    booking.customerId,
+          customerName:  booking.customerName,
+          bookingId:     booking.id,
+          tripId:        booking.refId,
+          invoiceAmount: booking.totalPayable ?? undefined,
+          description:   `${booking.type} booking — ${booking.id}`,
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -814,7 +897,7 @@ export default function Bookings() {
                             <Icon className="w-3 h-3" />
                             {b.type}
                           </div>
-                          {b.ticketBookingMode && (
+                          {b.serviceMarginMode && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100"
                               title="GST charged only on convenience fee">
                               GST on Fee
