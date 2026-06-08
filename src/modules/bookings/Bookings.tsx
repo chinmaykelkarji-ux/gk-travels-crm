@@ -11,7 +11,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate } from '@/shared/utils/date';
-import { FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL, getFinancialStatus } from '@/shared/utils/finance';
+import { FINANCIAL_STATUS_CLASS, FINANCIAL_STATUS_LABEL, getFinancialStatus, calcBookingFinance } from '@/shared/utils/finance';
 import { cn } from '@/shared/utils/cn';
 import { EmptyState } from '@/shared/components/EmptyState';
 import {
@@ -72,46 +72,54 @@ const STATUS_CONFIG: Record<BookingStatus, { label: string; class: string }> = {
 // ─── New Booking Form ─────────────────────────────────────────
 
 interface BookingFormData {
-  type:          BookingType;
-  customerName:  string;
-  refId:         string;
-  sellingPrice:  string;
-  supplierCost:  string;
-  advance:       string;
-  supplierPaid:  string;
-  gstRate:       string;
-  gstMode:       'INCLUDED' | 'EXCLUDED';
-  status:        BookingStatus;
-  notes:         string;
+  type:              BookingType;
+  customerName:      string;
+  refId:             string;
+  sellingPrice:      string;
+  supplierCost:      string;
+  advance:           string;
+  supplierPaid:      string;
+  gstRate:           string;
+  gstMode:           'INCLUDED' | 'EXCLUDED';
+  ticketBookingMode: boolean;
+  status:            BookingStatus;
+  notes:             string;
 }
 
 const DEFAULT_FORM: BookingFormData = {
-  type:         'flight',
-  customerName: '',
-  refId:        '',
-  sellingPrice: '',
-  supplierCost: '',
-  advance:      '',
-  supplierPaid: '',
-  gstRate:      '5',
-  gstMode:      'EXCLUDED',
-  status:       'pending',
-  notes:        '',
+  type:              'flight',
+  customerName:      '',
+  refId:             '',
+  sellingPrice:      '',
+  supplierCost:      '',
+  advance:           '',
+  supplierPaid:      '',
+  gstRate:           '5',
+  gstMode:           'EXCLUDED',
+  ticketBookingMode: false,
+  status:            'pending',
+  notes:             '',
 };
+
+// Ticket Booking Mode applies only to ticket-type bookings (flight/train/bus) —
+// it must never affect package, hotel, or tour booking calculations.
+const TICKET_TYPES: BookingType[] = ['flight', 'train', 'bus'];
+const TICKET_GST_RATES = ['18', '5'];
 
 function formFromBooking(b: Booking): BookingFormData {
   return {
-    type:         b.type,
-    customerName: b.customerName,
-    refId:        b.refId ?? '',
-    sellingPrice: b.sellingPrice !== null ? String(b.sellingPrice) : '',
-    supplierCost: String(b.supplierCost ?? 0),
-    advance:      String(b.advance ?? 0),
-    supplierPaid: String(b.supplierPaid ?? 0),
-    gstRate:      String(b.gstRate ?? 5),
-    gstMode:      b.gstMode ?? 'EXCLUDED',
-    status:       b.status,
-    notes:        b.notes ?? '',
+    type:              b.type,
+    customerName:      b.customerName,
+    refId:             b.refId ?? '',
+    sellingPrice:      b.sellingPrice !== null ? String(b.sellingPrice) : '',
+    supplierCost:      String(b.supplierCost ?? 0),
+    advance:           String(b.advance ?? 0),
+    supplierPaid:      String(b.supplierPaid ?? 0),
+    gstRate:           String(b.gstRate ?? 5),
+    gstMode:           b.gstMode ?? 'EXCLUDED',
+    ticketBookingMode: b.ticketBookingMode ?? false,
+    status:            b.status,
+    notes:             b.notes ?? '',
   };
 }
 
@@ -178,6 +186,9 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
     setSaving(true);
     try {
       const refId = form.refId && form.refId !== '__none__' ? form.refId : undefined;
+      // Ticket Booking Mode only ever applies to ticket-type bookings — never
+      // carries over to package/hotel/tour bookings even if toggled previously.
+      const ticketBookingMode = TICKET_TYPES.includes(form.type) && form.ticketBookingMode;
 
       if (booking) {
         updateBooking(booking.id, {
@@ -190,6 +201,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           supplierPaid: paid,
           gstRate:      gst,
           gstMode:      form.gstMode,
+          ticketBookingMode,
           status:       form.status,
           notes:        form.notes,
         });
@@ -205,6 +217,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           supplierPaid: paid,
           gstRate:      gst,
           gstMode:      form.gstMode,
+          ticketBookingMode,
           status:       form.status,
           notes:        form.notes,
           detail:       {},
@@ -216,6 +229,25 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
       setSaving(false);
     }
   }
+
+  const isTicketType = TICKET_TYPES.includes(form.type);
+  const ticketModeActive = isTicketType && form.ticketBookingMode;
+
+  // Live financial preview — mirrors calcBookingFinance so the form shows
+  // exactly what will be persisted (create/edit/print/refresh stay in sync).
+  const preview = useMemo(() => {
+    const selling = parseAmount(form.sellingPrice);
+    if (selling === null) return null;
+    return calcBookingFinance({
+      sellingPrice:      selling,
+      gstRate:           parseAmount(form.gstRate)      ?? 0,
+      gstMode:           form.gstMode,
+      advance:           parseAmount(form.advance)      ?? 0,
+      supplierCost:      parseAmount(form.supplierCost) ?? 0,
+      supplierPaid:      parseAmount(form.supplierPaid) ?? 0,
+      ticketBookingMode: ticketModeActive,
+    });
+  }, [form.sellingPrice, form.gstRate, form.gstMode, form.advance, form.supplierCost, form.supplierPaid, ticketModeActive]);
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
@@ -249,6 +281,36 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
               })}
             </div>
           </div>
+
+          {/* Ticket Booking Mode — flight/train/bus only. GST is charged ONLY
+              on the convenience fee (selling price − supplier cost), never on
+              the full ticket amount. Does not affect package/hotel/tour bookings. */}
+          {isTicketType && (
+            <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-indigo-900">Ticket Booking Mode</p>
+                <p className="text-[11px] text-indigo-600/80 mt-0.5 max-w-md">
+                  When enabled, GST applies only on the convenience fee (Selling Price − Supplier Cost) —
+                  not on the full ticket amount. Matches real airline/rail/bus ticketing rules.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.ticketBookingMode}
+                onClick={() => set('ticketBookingMode', !form.ticketBookingMode)}
+                className={cn(
+                  'relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 mt-0.5',
+                  form.ticketBookingMode ? 'bg-indigo-600' : 'bg-gray-300'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+                  form.ticketBookingMode ? 'translate-x-[18px]' : 'translate-x-1'
+                )} />
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -331,7 +393,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {['0', '5', '12', '18', '28'].map(r => (
+                  {(ticketModeActive ? TICKET_GST_RATES : ['0', '5', '12', '18', '28']).map(r => (
                     <SelectItem key={r} value={r}>{r}%</SelectItem>
                   ))}
                 </SelectContent>
@@ -373,21 +435,66 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
             </div>
           </div>
 
-          {/* Quick margin preview */}
-          {form.sellingPrice && form.supplierCost && (
-            <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between text-xs">
-              <span className="text-gray-500">Estimated margin:</span>
-              <span className={cn(
-                'font-bold',
-                parseFloat(form.sellingPrice) - parseFloat(form.supplierCost) >= 0
-                  ? 'text-emerald-600' : 'text-red-600'
-              )}>
-                {formatCurrency(parseFloat(form.sellingPrice) - parseFloat(form.supplierCost))}
-                {' '}
-                ({parseFloat(form.sellingPrice) > 0
-                  ? `${(((parseFloat(form.sellingPrice) - parseFloat(form.supplierCost)) / parseFloat(form.sellingPrice)) * 100).toFixed(1)}%`
-                  : '—'})
-              </span>
+          {/* Financial summary preview — driven by calcBookingFinance(), the
+              single source of truth. Switches layout for Ticket Booking Mode
+              (GST only on convenience fee) vs standard bookings. */}
+          {preview && (
+            <div className="bg-gray-50 rounded-xl p-3.5 space-y-2 text-xs">
+              {ticketModeActive ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Ticket Cost (Supplier)</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(parseAmount(form.supplierCost) ?? 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Selling Price</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(parseAmount(form.sellingPrice) ?? 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Convenience Fee</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(preview.convenienceFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">GST on Fee ({form.gstRate || 0}%)</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(preview.gstAmount)}</span>
+                  </div>
+                  <div className="h-px bg-gray-200" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Total Customer Amount</span>
+                    <span className="font-bold text-gray-900">{formatCurrency(preview.totalPayable ?? 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Actual Net Earnings</span>
+                    <span className={cn('font-bold', preview.grossMargin >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {formatCurrency(preview.grossMargin)}
+                      {' '}({preview.marginPct.toFixed(1)}%)
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Taxable Amount</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(preview.taxableAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">GST Amount ({form.gstRate || 0}%)</span>
+                    <span className="font-semibold text-gray-700">{formatCurrency(preview.gstAmount)}</span>
+                  </div>
+                  <div className="h-px bg-gray-200" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Total Payable</span>
+                    <span className="font-bold text-gray-900">{formatCurrency(preview.totalPayable ?? 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Estimated Margin</span>
+                    <span className={cn('font-bold', preview.grossMargin >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {formatCurrency(preview.grossMargin)}
+                      {' '}({preview.marginPct.toFixed(1)}%)
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </DialogBody>
@@ -644,9 +751,17 @@ export default function Bookings() {
                   return (
                     <tr key={b.id} className="hover:bg-gray-50/70 transition-colors">
                       <td className="px-4 py-3">
-                        <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium capitalize', typeClr)}>
-                          <Icon className="w-3 h-3" />
-                          {b.type}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium capitalize', typeClr)}>
+                            <Icon className="w-3 h-3" />
+                            {b.type}
+                          </div>
+                          {b.ticketBookingMode && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100"
+                              title="GST charged only on convenience fee">
+                              GST on Fee
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">

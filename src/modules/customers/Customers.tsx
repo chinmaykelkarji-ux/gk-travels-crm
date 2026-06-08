@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserCircle, Search, Phone, Mail, MapPin, Shield,
   Star, Users, TrendingUp, X, Plus,
-  FileText, ChevronRight, Hash,
+  FileText, ChevronRight, Hash, Pencil, Trash2, Building2, Receipt,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Customer } from '@/shared/types';
@@ -26,6 +26,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/shared/components/ui/select';
 import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 
 // ─── Segment helpers ──────────────────────────────────────────
 
@@ -58,7 +59,7 @@ function avatarColor(id: string) {
   return AVATAR_COLORS[i];
 }
 
-// ─── New Customer Dialog ──────────────────────────────────────
+// ─── Customer Form Dialog (Create / Edit) ────────────────────
 
 interface CustomerFormData {
   name:           string;
@@ -71,6 +72,12 @@ interface CustomerFormData {
   passportExpiry: string;
   panNumber:      string;
   notes:          string;
+  // GST / business details
+  gstRegistered:  boolean;
+  gstNumber:      string;
+  companyName:    string;
+  billingAddress: string;
+  state:          string;
 }
 
 const DEFAULT_CUSTOMER: CustomerFormData = {
@@ -84,17 +91,49 @@ const DEFAULT_CUSTOMER: CustomerFormData = {
   passportExpiry: '',
   panNumber:      '',
   notes:          '',
+  gstRegistered:  false,
+  gstNumber:      '',
+  companyName:    '',
+  billingAddress: '',
+  state:          '',
 };
 
-interface NewCustomerDialogProps {
-  open:    boolean;
-  onClose: () => void;
+function formFromCustomer(c: Customer): CustomerFormData {
+  return {
+    name:           c.name           ?? '',
+    phone:          c.phone          ?? '',
+    altPhone:       c.altPhone       ?? '',
+    email:          c.email          ?? '',
+    city:           c.city           ?? '',
+    address:        c.address        ?? '',
+    passportNo:     c.passportNo     ?? '',
+    passportExpiry: c.passportExpiry ?? '',
+    panNumber:      c.panNumber      ?? '',
+    notes:          c.notes          ?? '',
+    gstRegistered:  c.gstRegistered  ?? false,
+    gstNumber:      c.gstNumber      ?? '',
+    companyName:    c.companyName    ?? '',
+    billingAddress: c.billingAddress ?? '',
+    state:          c.state          ?? '',
+  };
 }
 
-function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
+interface CustomerFormDialogProps {
+  open:     boolean;
+  onClose:  () => void;
+  customer?: Customer | null;
+}
+
+function CustomerFormDialog({ open, onClose, customer }: CustomerFormDialogProps) {
   const createCustomer = useStore(s => s.createCustomer);
+  const updateCustomer = useStore(s => s.updateCustomer);
+  const isEdit         = !!customer;
   const [form, setForm] = useState<CustomerFormData>(DEFAULT_CUSTOMER);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setForm(customer ? formFromCustomer(customer) : DEFAULT_CUSTOMER);
+  }, [open, customer]);
 
   function field<K extends keyof CustomerFormData>(key: K, val: CustomerFormData[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -107,7 +146,7 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
     if (!form.phone.trim()) { toast.error('Phone is required'); return; }
     setSaving(true);
     try {
-      createCustomer({
+      const payload = {
         name:           form.name.trim(),
         phone:          form.phone.trim(),
         altPhone:       form.altPhone  || undefined,
@@ -118,11 +157,26 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
         passportExpiry: form.passportExpiry || undefined,
         panNumber:      form.panNumber || undefined,
         notes:          form.notes     || undefined,
-        preferences:    {},
-        tripIds:        [],
-        documents:      [],
-      });
-      toast.success('Customer added', form.name);
+        // GST fields stay optional — only persisted when the toggle is on
+        // or a value was actually entered (keeps retail customer records clean).
+        gstRegistered:  form.gstRegistered,
+        gstNumber:      form.gstNumber      || undefined,
+        companyName:    form.companyName    || undefined,
+        billingAddress: form.billingAddress || undefined,
+        state:          form.state          || undefined,
+      };
+      if (customer) {
+        updateCustomer(customer.id, payload);
+        toast.success('Customer updated', form.name);
+      } else {
+        createCustomer({
+          ...payload,
+          preferences: {},
+          tripIds:     [],
+          documents:   [],
+        });
+        toast.success('Customer added', form.name);
+      }
       handleClose();
     } finally {
       setSaving(false);
@@ -133,7 +187,7 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>New Customer</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit Customer — ${customer!.name}` : 'New Customer'}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           {/* Basic info */}
@@ -198,6 +252,72 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
             </div>
           </div>
 
+          {/* GST / Business details */}
+          <div className="border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">GST / Business Details (optional)</p>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.gstRegistered}
+                onClick={() => field('gstRegistered', !form.gstRegistered)}
+                className={cn(
+                  'relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0',
+                  form.gstRegistered ? 'bg-indigo-600' : 'bg-gray-200'
+                )}
+              >
+                <span className={cn(
+                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+                  form.gstRegistered ? 'translate-x-[18px]' : 'translate-x-1'
+                )} />
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 -mt-2 mb-3">
+              Toggle on for corporate / GST-registered customers. Retail customers can leave this off.
+            </p>
+            {form.gstRegistered && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-indigo-50/40 border border-indigo-100 rounded-xl p-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cu-gstnum">GST Number</Label>
+                  <Input
+                    id="cu-gstnum"
+                    value={form.gstNumber}
+                    onChange={e => field('gstNumber', e.target.value.toUpperCase())}
+                    placeholder="e.g. 27AAAPL1234C1ZV"
+                    className="font-mono uppercase"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cu-company">Company Name</Label>
+                  <Input
+                    id="cu-company"
+                    value={form.companyName}
+                    onChange={e => field('companyName', e.target.value)}
+                    placeholder="e.g. Acme Pvt Ltd"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="cu-billing">Billing Address</Label>
+                  <Input
+                    id="cu-billing"
+                    value={form.billingAddress}
+                    onChange={e => field('billingAddress', e.target.value)}
+                    placeholder="Registered / billing address for invoices"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cu-state">State</Label>
+                  <Input
+                    id="cu-state"
+                    value={form.state}
+                    onChange={e => field('state', e.target.value)}
+                    placeholder="e.g. Maharashtra"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Documents section */}
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Documents (optional)</p>
@@ -245,7 +365,7 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
-          <Button size="sm" loading={saving} onClick={handleSave}>Add Customer</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>{isEdit ? 'Save Changes' : 'Add Customer'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -257,9 +377,11 @@ function NewCustomerDialog({ open, onClose }: NewCustomerDialogProps) {
 interface DrawerProps {
   customer: Customer;
   onClose:  () => void;
+  onEdit:   (c: Customer) => void;
+  onDelete: (c: Customer) => void;
 }
 
-function CustomerDrawer({ customer, onClose }: DrawerProps) {
+function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
   const trips    = useStore(s => s.trips);
   const payments = useStore(s => s.payments);
 
@@ -308,9 +430,25 @@ function CustomerDrawer({ customer, onClose }: DrawerProps) {
               <span className="text-[11px] text-gray-400 font-mono">{customer.id}</span>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/60 text-gray-400 hover:text-gray-700 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => onEdit(customer)}
+              className="p-1.5 rounded-lg hover:bg-white/60 text-gray-400 hover:text-indigo-600 transition-colors"
+              title="Edit customer"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onDelete(customer)}
+              className="p-1.5 rounded-lg hover:bg-white/60 text-gray-400 hover:text-red-500 transition-colors"
+              title="Delete customer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/60 text-gray-400 hover:text-gray-700 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
@@ -365,6 +503,40 @@ function CustomerDrawer({ customer, onClose }: DrawerProps) {
               )}
             </div>
           </div>
+
+          {/* GST / Business details */}
+          {customer.gstRegistered && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">GST / Business Details</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                    <Receipt className="w-2.5 h-2.5 inline -mt-0.5 mr-0.5" /> GST Registered
+                  </span>
+                </div>
+                {customer.companyName && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Building2 className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                    <div className="text-xs font-medium text-gray-800">{customer.companyName}</div>
+                  </div>
+                )}
+                {customer.gstNumber && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Hash className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <div className="text-xs font-medium text-gray-800 font-mono">GSTIN · {customer.gstNumber}</div>
+                  </div>
+                )}
+                {(customer.billingAddress || customer.state) && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <MapPin className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <div className="text-xs text-gray-700">
+                      {[customer.billingAddress, customer.state].filter(Boolean).join(', ')}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Documents */}
           {(customer.passportNo || customer.panNumber) && (
@@ -468,14 +640,65 @@ function CustomerDrawer({ customer, onClose }: DrawerProps) {
 // ─── Main Module ──────────────────────────────────────────────
 
 export default function Customers() {
-  const customers = useStore(s => s.customers);
-  const trips     = useStore(s => s.trips);
-  const payments  = useStore(s => s.payments);
+  const customers      = useStore(s => s.customers);
+  const trips          = useStore(s => s.trips);
+  const payments       = useStore(s => s.payments);
+  const deleteCustomer = useStore(s => s.deleteCustomer);
 
-  const [search,      setSearch]      = useState('');
-  const [segment,     setSegment]     = useState<Segment>('all');
-  const [selected,    setSelected]    = useState<Customer | null>(null);
-  const [newOpen,     setNewOpen]     = useState(false);
+  const [search,       setSearch]       = useState('');
+  const [segment,      setSegment]      = useState<Segment>('all');
+  const [selected,     setSelected]     = useState<Customer | null>(null);
+  const [formOpen,     setFormOpen]     = useState(false);
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [deletingId,   setDeletingId]   = useState<string | null>(null);
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditCustomer(null);
+  }
+
+  function openEdit(c: Customer) {
+    setSelected(null);
+    setEditCustomer(c);
+  }
+
+  async function handleDeleteCustomer(c: Customer) {
+    // Pre-check: warn early if linked to active trips/bookings before even
+    // showing the destructive confirm — avoids a confusing dead-end flow.
+    const activeTrips = trips.filter(t =>
+      (t.customerId === c.id || (c.tripIds ?? []).includes(t.id)) &&
+      !['completed', 'cancelled'].includes(t.status)
+    );
+    if (activeTrips.length > 0) {
+      toast.error(
+        'Cannot delete customer',
+        `${c.name} is linked to ${activeTrips.length} active trip${activeTrips.length > 1 ? 's' : ''}. Cancel or complete them first.`
+      );
+      return;
+    }
+
+    const ok = await confirm({
+      title:        `Delete customer ${c.name}?`,
+      description:  `This will permanently remove ${c.name} (${c.id}) from your records. This action cannot be undone.`,
+      confirmLabel: 'Delete Customer',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+
+    setDeletingId(c.id);
+    try {
+      const res = deleteCustomer(c.id);
+      if (res.ok) {
+        toast.success('Customer deleted', `${c.name} removed`);
+        setSelected(null);
+      } else {
+        toast.error('Cannot delete customer', res.reason);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // ── Stats ─────────────────────────────────────────────────
 
@@ -535,7 +758,7 @@ export default function Customers() {
           <h2 className="text-base font-bold text-gray-900 font-display">Customers</h2>
           <Badge variant="secondary">{customers.length} total</Badge>
         </div>
-        <Button size="sm" onClick={() => setNewOpen(true)} className="gap-1.5">
+        <Button size="sm" onClick={() => setFormOpen(true)} className="gap-1.5">
           <Plus className="w-3.5 h-3.5" /> New Customer
         </Button>
       </div>
@@ -624,7 +847,7 @@ export default function Customers() {
                 onClick={() => setSelected(c)}
                 className="bg-white rounded-2xl border border-gray-200 p-4 hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group"
               >
-                {/* Avatar + segment */}
+                {/* Avatar + segment + actions */}
                 <div className="flex items-start justify-between mb-3">
                   <div className={cn(
                     'w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold text-white bg-gradient-to-br flex-shrink-0',
@@ -632,9 +855,33 @@ export default function Customers() {
                   )}>
                     {initials(c.name)}
                   </div>
-                  <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', segCfg.class)}>
-                    {segCfg.label}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {c.gstRegistered && (
+                      <span title="GST Registered" className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                        <Receipt className="w-2.5 h-2.5" />
+                      </span>
+                    )}
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', segCfg.class)}>
+                      {segCfg.label}
+                    </span>
+                    <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => openEdit(c)}
+                        className="p-1 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                        title="Edit customer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCustomer(c)}
+                        disabled={deletingId === c.id}
+                        className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Delete customer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Name */}
@@ -704,10 +951,19 @@ export default function Customers() {
 
       {/* Customer detail drawer */}
       {selected && (
-        <CustomerDrawer customer={selected} onClose={() => setSelected(null)} />
+        <CustomerDrawer
+          customer={selected}
+          onClose={() => setSelected(null)}
+          onEdit={openEdit}
+          onDelete={handleDeleteCustomer}
+        />
       )}
 
-      <NewCustomerDialog open={newOpen} onClose={() => setNewOpen(false)} />
+      <CustomerFormDialog
+        open={formOpen || !!editCustomer}
+        customer={editCustomer}
+        onClose={closeForm}
+      />
     </div>
   );
 }

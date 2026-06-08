@@ -305,6 +305,13 @@ export interface Customer {
   address?: string;
   city?: string;
 
+  // GST / business details — OPTIONAL (retail customers don't need GST)
+  gstNumber?: string;
+  companyName?: string;
+  billingAddress?: string;
+  state?: string;
+  gstRegistered?: boolean;
+
   // Identity documents
   passportNo?: string;
   passportExpiry?: string;
@@ -346,6 +353,12 @@ export interface Booking {
   supplierPaid: number;
   gstRate: number;
   gstMode: GstMode;
+
+  // Ticket Booking Mode (flight/train/bus): when enabled, GST is charged
+  // ONLY on the convenience fee (sellingPrice - supplierCost), not the
+  // full ticket amount — matches real-world ticketing agency operations.
+  ticketBookingMode?: boolean;
+  convenienceFee?: number;
 
   // Computed financial (set by calcBookingFinance — stored as a cache on the entity)
   gstAmount: number;

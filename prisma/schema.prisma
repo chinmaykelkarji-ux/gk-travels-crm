@@ -35,6 +35,14 @@ model Customer {
   documents    Json     @default("[]")
   createdDate  String
   sourceLeadId String?
+
+  // GST / business details (optional — retail customers don't need these)
+  gstNumber      String?
+  companyName    String?
+  billingAddress String?
+  state          String?
+  gstRegistered  Boolean  @default(false)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -137,6 +145,11 @@ gstRate         Float    @default(0)
 gstMode         GstMode  @default(EXCLUDED)
 gstAmount       Float    @default(0)
 taxableAmount   Float    @default(0)
+
+// Ticket booking GST mode (flight/train/bus): GST applies only on the
+// convenience fee (sellingPrice - supplierCost), not the full ticket amount.
+ticketBookingMode Boolean @default(false)
+convenienceFee    Float   @default(0)
 
 totalPayable    Float?
 balanceDue      Float    @default(0)

@@ -123,6 +123,7 @@ interface StoreActions {
   // â”€â”€ Customers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createCustomer: (data: Partial<Customer>) => Customer;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
+  deleteCustomer: (id: string) => { ok: boolean; reason?: string };
 
   // â”€â”€ Bookings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createBooking:  (data: Partial<Booking>) => Booking;
@@ -566,18 +567,45 @@ export const useStore = create<GKStore>()(
         if (updated) void apiClient.put(`/customers/${id}`, updated).catch(onMutationError(''));
       },
 
+      deleteCustomer(id) {
+        const state = get();
+        const customer = state.customers.find(c => c.id === id);
+        if (!customer) return { ok: false, reason: 'Customer not found' };
+
+        const ACTIVE_TRIP_STATUSES: TripStatus[] = ['draft', 'quotation', 'confirmed', 'in_progress'];
+        const linkedTrips = state.trips.filter(t =>
+          (t.customerId === id || (customer.tripIds ?? []).includes(t.id)) &&
+          ACTIVE_TRIP_STATUSES.includes(t.status)
+        );
+        const linkedBookings = state.bookings.filter(b =>
+          b.customerId === id && !['completed', 'cancelled'].includes(b.status)
+        );
+        if (linkedTrips.length > 0 || linkedBookings.length > 0) {
+          const parts: string[] = [];
+          if (linkedTrips.length)    parts.push(`${linkedTrips.length} active trip${linkedTrips.length > 1 ? 's' : ''}`);
+          if (linkedBookings.length) parts.push(`${linkedBookings.length} active booking${linkedBookings.length > 1 ? 's' : ''}`);
+          return { ok: false, reason: `Cannot delete — customer is linked to ${parts.join(' and ')}. Cancel or complete them first.` };
+        }
+
+        set((s: GKStore) => ({ customers: s.customers.filter(c => c.id !== id) }));
+        void apiClient.delete(`/customers/${id}`).catch(onMutationError(''));
+        get().logActivity('customer_deleted', `Customer ${id} (${customer.name}) deleted`, 'customer', id);
+        return { ok: true };
+      },
+
       // â•â• Booking Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       createBooking(data) {
         const state = get();
         const id    = nextBookingId(state.bookings.map(b => b.id));
         const fin   = calcBookingFinance({
-          sellingPrice: data.sellingPrice ?? null,
-          gstRate:      data.gstRate      ?? 0,
-          gstMode:      data.gstMode      ?? 'EXCLUDED',
-          advance:      data.advance      ?? 0,
-          supplierCost: data.supplierCost ?? 0,
-          supplierPaid: data.supplierPaid ?? 0,
+          sellingPrice:      data.sellingPrice      ?? null,
+          gstRate:           data.gstRate           ?? 0,
+          gstMode:           data.gstMode           ?? 'EXCLUDED',
+          advance:           data.advance           ?? 0,
+          supplierCost:      data.supplierCost      ?? 0,
+          supplierPaid:      data.supplierPaid      ?? 0,
+          ticketBookingMode: data.ticketBookingMode ?? false,
         });
         const booking: Booking = {
           id,

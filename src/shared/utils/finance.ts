@@ -175,25 +175,29 @@ export function calcTripFinance(opts: {
 // ─── Booking Finance Calculation ─────────────────────────────
 
 export interface BookingFinanceResult {
-  gstMode:          GstMode;
-  gstAmount:        number;
-  taxableAmount:    number;
-  totalPayable:     number | null;
-  balanceDue:       number;
-  supplierPending:  number;
-  grossMargin:      number;
-  marginPct:        number;
+  gstMode:           GstMode;
+  gstAmount:         number;
+  taxableAmount:     number;
+  totalPayable:      number | null;
+  balanceDue:        number;
+  supplierPending:   number;
+  grossMargin:       number;
+  marginPct:         number;
+  // Ticket Booking Mode — GST is charged only on the convenience fee.
+  ticketBookingMode: boolean;
+  convenienceFee:    number;
   // Renamed from `status` to avoid colliding with Booking.status: BookingStatus
   financialStatus:  FinancialStatus;
 }
 
 export function calcBookingFinance(opts: {
-  sellingPrice:  number | null | undefined;
-  gstRate?:      number;
-  gstMode?:      GstMode;
-  advance?:      number;
-  supplierCost?: number;
-  supplierPaid?: number;
+  sellingPrice:       number | null | undefined;
+  gstRate?:           number;
+  gstMode?:           GstMode;
+  advance?:           number;
+  supplierCost?:      number;
+  supplierPaid?:      number;
+  ticketBookingMode?: boolean;
 }): BookingFinanceResult {
   const base         = opts.sellingPrice ?? null;
   const gstRate      = opts.gstRate      ?? 0;
@@ -201,7 +205,8 @@ export function calcBookingFinance(opts: {
   const advance      = opts.advance      ?? 0;
   const supplierCost = opts.supplierCost ?? 0;
   const supplierPaid = opts.supplierPaid ?? 0;
-  const supplierPending = Math.max(0, supplierCost - supplierPaid);
+  const supplierPending   = Math.max(0, supplierCost - supplierPaid);
+  const ticketBookingMode = opts.ticketBookingMode ?? false;
 
   if (base === null || base === 0) {
     return {
@@ -213,15 +218,42 @@ export function calcBookingFinance(opts: {
       supplierPending,
       grossMargin:     0,
       marginPct:       0,
+      ticketBookingMode,
+      convenienceFee:  0,
       financialStatus: 'unpriced',
     };
   }
 
-  const { taxableAmount, gstAmount, totalPayable } = calcGst(base, gstRate, gstMode);
-  const balanceDue      = Math.max(0, totalPayable - advance);
-  // Margin is based on the taxable amount (actual revenue, net of tax) in both modes.
-  const grossMargin     = taxableAmount - supplierCost;
-  const marginPct       = taxableAmount > 0 ? Math.round((grossMargin / taxableAmount) * 1000) / 10 : 0;
+  let taxableAmount: number;
+  let gstAmount:     number;
+  let totalPayable:  number;
+  let convenienceFee = 0;
+
+  if (ticketBookingMode) {
+    // Real-world ticketing rule: GST applies ONLY on the convenience/service
+    // fee (selling price − supplier cost), never on the full ticket amount.
+    convenienceFee = Math.max(0, base - supplierCost);
+    const feeGst   = calcGst(convenienceFee, gstRate, gstMode);
+    taxableAmount  = feeGst.taxableAmount;
+    gstAmount      = feeGst.gstAmount;
+    // EXCLUDED: GST on the fee is added on top of the ticket price the customer pays.
+    // INCLUDED: the fee (and its GST) is already baked into the selling price.
+    totalPayable   = gstMode === 'INCLUDED' ? base : base + gstAmount;
+  } else {
+    const fullGst  = calcGst(base, gstRate, gstMode);
+    taxableAmount  = fullGst.taxableAmount;
+    gstAmount      = fullGst.gstAmount;
+    totalPayable   = fullGst.totalPayable;
+  }
+
+  const balanceDue = Math.max(0, totalPayable - advance);
+  // Ticket mode: margin = convenience fee net of GST (the agency's actual earnings).
+  // Normal mode: margin = taxable revenue minus supplier cost.
+  const grossMargin = ticketBookingMode ? taxableAmount : taxableAmount - supplierCost;
+  // Ticket mode: margin % is expressed against the ticket's selling price (the
+  // figure the customer recognizes). Normal mode: against taxable revenue, as before.
+  const marginBase  = ticketBookingMode ? base : taxableAmount;
+  const marginPct   = marginBase > 0 ? Math.round((grossMargin / marginBase) * 1000) / 10 : 0;
   const financialStatus = getFinancialStatus(totalPayable, advance);
 
   return {
@@ -233,6 +265,8 @@ export function calcBookingFinance(opts: {
     supplierPending,
     grossMargin,
     marginPct,
+    ticketBookingMode,
+    convenienceFee,
     financialStatus,
   };
 }
