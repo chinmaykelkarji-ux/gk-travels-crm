@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../services/activityService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -15,13 +16,45 @@ router.get('/', async (_req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
+    const existed = await prisma.payment.findUnique({ where: { id: req.body.id }, select: { id: true } });
     const p = await prisma.payment.upsert({
       where:  { id: req.body.id },
       update: sanitize(req.body) as Parameters<typeof prisma.payment.update>[0]['data'],
       create: sanitize(req.body) as Parameters<typeof prisma.payment.create>[0]['data'],
     });
+
+    // Every newly recorded payment posts a financial transaction + activity
+    // entry — keeps the central ledger and activity feed reflecting reality
+    // even though the existing UI still owns balance recalculation client-side.
+    if (!existed) {
+      await prisma.financialTransaction.create({
+        data: {
+          type:            p.type === 'customer' ? 'PAYMENT_RECEIVED' : 'PAYMENT_SENT',
+          sourceType:      p.type === 'customer' ? 'trip' : 'vendor_payment',
+          sourceId:        p.tripId ?? p.bookingId ?? p.id,
+          customerId:      p.customerId ?? undefined,
+          tripId:          p.tripId ?? undefined,
+          bookingId:       p.bookingId ?? undefined,
+          amount:          p.amount,
+          description:     `${p.type === 'customer' ? 'Payment received' : 'Payment sent'} via ${p.method}${p.reference ? ` (Ref: ${p.reference})` : ''}`,
+          transactionDate: p.date,
+          paymentMode:     p.method,
+          reference:       p.reference ?? undefined,
+          createdBy:       req.userId,
+        },
+      });
+      await logActivity(prisma, {
+        type:       p.type === 'customer' ? 'payment_received' : 'payment_sent',
+        message:    `${p.type === 'customer' ? 'Payment of' : 'Supplier payment of'} ₹${p.amount.toLocaleString('en-IN')} ${p.type === 'customer' ? 'received from' : 'sent to'} ${p.customer ?? 'party'} via ${p.method}`,
+        entityType: 'payment',
+        entityId:   p.id,
+        userId:     req.userId,
+        after:      p,
+      });
+    }
+
     res.status(201).json(p);
   } catch (err) {
     console.error('[payments POST]', err);

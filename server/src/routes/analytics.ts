@@ -46,6 +46,7 @@ router.get('/overview', async (req, res) => {
       pendingReceivables,
       pendingPayables,
       quotationPipeline,
+      ledgerByType,
     ] = await Promise.all([
       // Trip counts + financial totals
       prisma.trip.aggregate({
@@ -81,7 +82,20 @@ router.get('/overview', async (req, res) => {
         _sum: { totalSelling: true, grossProfit: true },
         _count: { id: true },
       }),
+      // Central ledger — drives cash inflow + GST liability (Phase 4: dashboard
+      // must read these from FinancialTransaction, not re-derive them)
+      prisma.financialTransaction.groupBy({
+        by:   ['type'],
+        _sum: { amount: true, gstAmount: true },
+      }),
     ]);
+
+    const ledgerSum = (type: string) => ledgerByType.find(g => g.type === type)?._sum;
+    const cashInflow   = ledgerSum('PAYMENT_RECEIVED')?.amount ?? 0;
+    const cashOutflow  = ledgerSum('PAYMENT_SENT')?.amount ?? 0;
+    const gstOutput    = ledgerSum('RECEIVABLE')?.gstAmount ?? 0;
+    const gstInput     = ledgerSum('PAYABLE')?.gstAmount ?? 0;
+    const gstLiability = Math.round((gstOutput - gstInput) * 100) / 100;
 
     // Trip status breakdown
     const [activeTrips, completedTrips, cancelledTrips, draftTrips] = await Promise.all([
@@ -116,6 +130,9 @@ router.get('/overview', async (req, res) => {
       draftTrips,
       quotationPipeline:       quotationPipeline._sum.totalSelling  ?? 0,
       quotationCount:          quotationPipeline._count.id,
+      cashInflow,
+      cashOutflow,
+      gstLiability,
     });
   } catch (err) {
     console.error('[analytics/overview]', err);
@@ -178,20 +195,24 @@ router.get('/destinations', async (req, res) => {
       by:      ['destination'],
       where:   Object.keys(createdFilter).length ? { createdDate: createdFilter } : {},
       _count:  { id: true },
-      _sum:    { paidAmount: true, grossMargin: true, balanceDue: true, totalAmount: true },
+      _sum:    { paidAmount: true, grossMargin: true, balanceDue: true, totalAmount: true, supplierCost: true },
       orderBy: { _sum: { paidAmount: 'desc' } },
       take:    parseInt(limit, 10),
     });
 
     const rows = groups.map(g => {
-      const revenue = g._sum.paidAmount   ?? 0;
-      const profit  = g._sum.grossMargin  ?? 0;
-      const cost    = revenue - profit;
+      // Sum revenue/cost/profit independently from their own canonical fields
+      // (Trip.paidAmount/supplierCost/grossMargin — set via finance.ts'
+      // calcTripFinance) rather than back-deriving one from the others, which
+      // previously masked drift between cached fields.
+      const revenue = g._sum.paidAmount    ?? 0;
+      const cost    = g._sum.supplierCost  ?? 0;
+      const profit  = g._sum.grossMargin   ?? 0;
       return {
         destination: g.destination,
         tripCount:   g._count.id,
         revenue,
-        cost:        cost > 0 ? cost : 0,
+        cost,
         profit,
         balance:     g._sum.balanceDue ?? 0,
         marginPct:   revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : 0,

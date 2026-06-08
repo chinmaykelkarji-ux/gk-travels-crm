@@ -4,6 +4,8 @@ import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { calcGst }                        from '../../../src/shared/utils/finance.js';
 import { generateTasksFromCategories }    from '../../../src/shared/utils/taskEngine.js';
 import { nextTaskId }                      from '../../../src/shared/utils/id.js';
+import { createReceivable }                from '../services/financeService.js';
+import { logActivity }                     from '../services/activityService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -60,7 +62,7 @@ router.get('/:id', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
     const { items = [], ...body } = req.body as { items?: Record<string, unknown>[]; [k: string]: unknown };
 
@@ -81,6 +83,16 @@ router.post('/', async (req, res) => {
       },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
+
+    await logActivity(prisma, {
+      type:       'quotation_created',
+      message:    `Quotation ${q.id} created for ${q.customerName} (₹${q.totalSelling.toLocaleString('en-IN')})`,
+      entityType: 'quotation',
+      entityId:   q.id,
+      userId:     req.userId,
+      after:      q,
+    });
+
     res.status(201).json(q);
   } catch (err) {
     console.error('[quotations POST]', err);
@@ -152,6 +164,16 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
       data:    data as Parameters<typeof prisma.quotation.update>[0]['data'],
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
+
+    await logActivity(prisma, {
+      type:       'quotation_status_changed',
+      message:    `Quotation ${q.id} marked ${status} (${q.customerName})`,
+      entityType: 'quotation',
+      entityId:   q.id,
+      userId:     req.userId,
+      after:      { status },
+    });
+
     res.json(q);
   } catch (err) {
     console.error('[quotations status]', err);
@@ -254,9 +276,11 @@ router.post('/:id/convert-trip', async (req, res) => {
       return { id, ...t };
     });
 
-    // Create trip + tasks + mark quotation converted atomically
-    const [trip, , updated] = await prisma.$transaction([
-      prisma.trip.create({
+    // Create trip + tasks + mark quotation converted + raise the receivable
+    // + post to the activity feed — all atomically (Phase 1/2/5 automation:
+    // a converted quotation must immediately reflect in finance & activity).
+    const { trip, updated } = await prisma.$transaction(async (tx) => {
+      const trip = await tx.trip.create({
         data: {
           id:            tripId,
           customer:      q.customerName,
@@ -270,8 +294,10 @@ router.post('/:id/convert-trip', async (req, res) => {
           returnDate:    q.endDate       ?? undefined,
           status:        'confirmed',
           totalAmount:   totalAmount     ?? undefined,
+          totalPayable:  gst.totalPayable ?? undefined,
           gstRate:       q.gstRate,
           gstMode:       q.gstMode,
+          gstAmount:     gst.gstAmount,
           taxableAmount: gst.taxableAmount,
           notes:         q.notes         ?? '',
           createdDate:   today,
@@ -283,14 +309,44 @@ router.post('/:id/convert-trip', async (req, res) => {
             type:  'system',
           }],
         },
-      }),
-      prisma.task.createMany({ data: taskRows }),
-      prisma.quotation.update({
+      });
+
+      await tx.task.createMany({ data: taskRows });
+
+      const updated = await tx.quotation.update({
         where:   { id: q.id },
         data:    { convertedTripId: tripId, convertedAt: today },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
-      }),
-    ]);
+      });
+
+      if (gst.totalPayable && gst.totalPayable > 0) {
+        await createReceivable({
+          sourceType:    'quotation',
+          sourceId:      q.id,
+          tripId:        trip.id,
+          customerId:    trip.customerId,
+          customerName:  trip.customer,
+          amount:        gst.totalPayable,
+          gstAmount:     gst.gstAmount,
+          taxableAmount: gst.taxableAmount,
+          dueDate:       trip.departure ?? undefined,
+          description:   `Trip ${trip.id} — converted from Quotation ${q.id}`,
+          createdBy:     req.userId,
+        }, tx);
+      }
+
+      await logActivity(tx, {
+        type:       'quotation_converted',
+        message:    `Quotation ${q.id} converted to Trip ${trip.id} for ${trip.customer}`,
+        entityType: 'quotation',
+        entityId:   q.id,
+        userId:     req.userId,
+        before:     { status: q.status },
+        after:      { convertedTripId: tripId, convertedAt: today },
+      });
+
+      return { trip, updated };
+    });
 
     res.json({ quotation: updated, trip, tasksCreated: taskRows.length });
   } catch (err) {

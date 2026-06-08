@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../services/activityService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -24,12 +25,26 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req: AuthRequest, res) => {
   try {
+    const before = await prisma.task.findUnique({ where: { id: req.params.id }, select: { status: true } });
     const t = await prisma.task.update({
       where: { id: req.params.id },
       data:  sanitize(req.body) as Parameters<typeof prisma.task.update>[0]['data'],
     });
+
+    if (before && before.status !== 'completed' && t.status === 'completed') {
+      await logActivity(prisma, {
+        type:       'task_completed',
+        message:    `Task "${t.title}" marked completed`,
+        entityType: 'task',
+        entityId:   t.id,
+        userId:     req.userId,
+        before,
+        after:      { status: t.status },
+      });
+    }
+
     res.json(t);
   } catch (err) {
     console.error('[tasks PUT]', req.params.id, err);

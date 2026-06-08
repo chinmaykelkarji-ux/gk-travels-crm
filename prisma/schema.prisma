@@ -240,6 +240,44 @@ model ReceivableEntry {
   @@map("receivable_entries")
 }
 
+enum FinancialTransactionType {
+  RECEIVABLE
+  PAYMENT_RECEIVED
+  PAYABLE
+  PAYMENT_SENT
+  GST_OUTPUT
+  GST_INPUT
+  REFUND
+  ADJUSTMENT
+}
+
+model FinancialTransaction {
+  id              String                   @id @default(cuid())
+  type            FinancialTransactionType
+  sourceType      String
+  sourceId        String
+  customerId      String?
+  vendorId        String?
+  tripId          String?
+  bookingId       String?
+  amount          Float
+  gstAmount       Float                    @default(0)
+  taxableAmount   Float                    @default(0)
+  description     String                   @default("")
+  transactionDate String
+  paymentMode     String?
+  reference       String?
+  createdBy       String?
+  createdAt       DateTime                 @default(now())
+
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([tripId])
+  @@index([bookingId])
+  @@index([sourceType, sourceId])
+  @@map("financial_transactions")
+}
+
 model Task {
   id            String   @id
   title         String

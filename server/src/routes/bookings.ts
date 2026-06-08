@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { createReceivable } from '../services/financeService.js';
+import { logActivity } from '../services/activityService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -21,13 +23,42 @@ router.get('/', async (_req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
+    const existed = await prisma.booking.findUnique({ where: { id: req.body.id }, select: { id: true } });
     const b = await prisma.booking.upsert({
       where:  { id: req.body.id },
       update: sanitize(req.body) as Parameters<typeof prisma.booking.update>[0]['data'],
       create: sanitize(req.body) as Parameters<typeof prisma.booking.create>[0]['data'],
     });
+
+    // Brand-new priced booking → automatically raise its receivable + post to
+    // the activity feed, mirroring trip creation (Phase 1/2 automation).
+    if (!existed) {
+      if (b.totalPayable && b.totalPayable > 0) {
+        await createReceivable({
+          sourceType:    'booking',
+          sourceId:      b.id,
+          bookingId:     b.id,
+          customerId:    b.customerId,
+          customerName:  b.customerName,
+          amount:        b.totalPayable,
+          gstAmount:     b.gstAmount,
+          taxableAmount: b.taxableAmount,
+          description:   `Booking ${b.id} (${b.type})`,
+          createdBy:     req.userId,
+        });
+      }
+      await logActivity(prisma, {
+        type:       'booking_created',
+        message:    `Booking ${b.id} (${b.type}) created for ${b.customerName}`,
+        entityType: 'booking',
+        entityId:   b.id,
+        userId:     req.userId,
+        after:      b,
+      });
+    }
+
     res.status(201).json(b);
   } catch (err) {
     console.error('BOOKING API ERROR:', err);

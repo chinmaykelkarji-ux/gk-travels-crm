@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../services/activityService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -32,14 +33,27 @@ router.get('/:id', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req, res) => {
+router.post('/', async (req: AuthRequest, res) => {
   try {
     const data = strip(req.body as Record<string, unknown>);
+    const existed = await prisma.voucher.findUnique({ where: { id: String(data.id) }, select: { id: true } });
     const v    = await prisma.voucher.upsert({
       where:  { id: String(data.id) },
       update: data as Parameters<typeof prisma.voucher.update>[0]['data'],
       create: data as Parameters<typeof prisma.voucher.create>[0]['data'],
     });
+
+    if (!existed) {
+      await logActivity(prisma, {
+        type:       'voucher_issued',
+        message:    `Voucher ${v.id} issued (${v.type})`,
+        entityType: 'voucher',
+        entityId:   v.id,
+        userId:     req.userId,
+        after:      v,
+      });
+    }
+
     res.status(201).json(v);
   } catch (err) {
     console.error('[vouchers POST]', err);

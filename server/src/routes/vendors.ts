@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { logActivity } from '../services/activityService.js';
+import { today } from '../../../src/shared/utils/date.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -89,7 +91,7 @@ router.get('/payments/all', async (_req, res) => {
 });
 
 // POST /api/vendors/payments
-router.post('/payments', async (req, res) => {
+router.post('/payments', async (req: AuthRequest, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     const totalCost   = Number(body.totalCost   ?? 0);
@@ -104,11 +106,60 @@ router.post('/payments', async (req, res) => {
     };
 
     const { createdAt, updatedAt, vendor, ...clean } = data as Record<string, unknown>;
+    const existed = await prisma.vendorPayment.findUnique({ where: { id: String(clean.id) } });
     const payment = await prisma.vendorPayment.upsert({
       where:  { id: String(clean.id) },
       update: clean as Parameters<typeof prisma.vendorPayment.update>[0]['data'],
       create: clean as Parameters<typeof prisma.vendorPayment.create>[0]['data'],
     });
+
+    if (!existed) {
+      await prisma.financialTransaction.create({
+        data: {
+          type:            'PAYABLE',
+          sourceType:      'vendor_payment',
+          sourceId:        payment.id,
+          vendorId:        payment.vendorId,
+          tripId:          payment.tripId ?? undefined,
+          amount:          payment.totalCost,
+          description:     payment.description ?? `Payable to ${payment.vendorName}`,
+          transactionDate: today(),
+          createdBy:       req.userId,
+        },
+      });
+      await logActivity(prisma, {
+        type:       'payable_created',
+        message:    `Payable of ₹${payment.totalCost.toLocaleString('en-IN')} recorded for vendor ${payment.vendorName}`,
+        entityType: 'vendor_payment',
+        entityId:   payment.id,
+        userId:     req.userId,
+        after:      payment,
+      });
+    } else if (advancePaid > existed.advancePaid) {
+      const delta = advancePaid - existed.advancePaid;
+      await prisma.financialTransaction.create({
+        data: {
+          type:            'PAYMENT_SENT',
+          sourceType:      'vendor_payment',
+          sourceId:        payment.id,
+          vendorId:        payment.vendorId,
+          tripId:          payment.tripId ?? undefined,
+          amount:          delta,
+          description:     `Payment of ₹${delta.toLocaleString('en-IN')} recorded toward ${payment.vendorName}`,
+          transactionDate: today(),
+          createdBy:       req.userId,
+        },
+      });
+      await logActivity(prisma, {
+        type:       'vendor_payment_sent',
+        message:    `Payment of ₹${delta.toLocaleString('en-IN')} sent to vendor ${payment.vendorName}`,
+        entityType: 'vendor_payment',
+        entityId:   payment.id,
+        userId:     req.userId,
+        after:      payment,
+      });
+    }
+
     res.status(201).json(payment);
   } catch (err) {
     console.error('[vendor-payments POST]', err);
@@ -148,13 +199,42 @@ router.delete('/payments/:id', async (req, res) => {
 });
 
 // PUT /api/vendors/payments/:id/mark-paid
-router.put('/payments/:id/mark-paid', async (req, res) => {
+router.put('/payments/:id/mark-paid', async (req: AuthRequest, res) => {
   try {
     const { paidDate } = req.body as { paidDate?: string };
+    const date = paidDate ?? today();
+    const existing = await prisma.vendorPayment.findUniqueOrThrow({ where: { id: req.params.id } });
+    const remaining = Math.max(0, existing.totalCost - existing.advancePaid);
+
     const payment = await prisma.vendorPayment.update({
       where: { id: req.params.id },
-      data:  { isPaid: true, outstanding: 0, paidDate: paidDate ?? new Date().toISOString().split('T')[0] },
+      data:  { isPaid: true, outstanding: 0, advancePaid: existing.totalCost, paidDate: date },
     });
+
+    if (remaining > 0) {
+      await prisma.financialTransaction.create({
+        data: {
+          type:            'PAYMENT_SENT',
+          sourceType:      'vendor_payment',
+          sourceId:        payment.id,
+          vendorId:        payment.vendorId,
+          tripId:          payment.tripId ?? undefined,
+          amount:          remaining,
+          description:     `Final payment of ₹${remaining.toLocaleString('en-IN')} settled to ${payment.vendorName}`,
+          transactionDate: date,
+          createdBy:       req.userId,
+        },
+      });
+    }
+    await logActivity(prisma, {
+      type:       'vendor_payment_settled',
+      message:    `Vendor payment to ${payment.vendorName} marked fully paid`,
+      entityType: 'vendor_payment',
+      entityId:   payment.id,
+      userId:     req.userId,
+      after:      payment,
+    });
+
     res.json(payment);
   } catch (err) {
     res.status(500).json({ error: String(err) });
