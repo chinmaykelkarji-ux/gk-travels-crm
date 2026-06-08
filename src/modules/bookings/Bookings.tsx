@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Ticket, Search, Plus, Plane, Hotel, Car, Train, Bus,
   Shield, Activity, Package, HelpCircle, IndianRupee,
-  AlertTriangle, CheckCircle, Clock, Filter, X,
+  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Booking, BookingType, BookingStatus } from '@/shared/types';
@@ -24,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/shared/components/ui/select';
 import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 
 // ─── Type icon map ────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ interface BookingFormData {
   sellingPrice:  string;
   supplierCost:  string;
   advance:       string;
+  supplierPaid:  string;
   gstRate:       string;
   gstMode:       'INCLUDED' | 'EXCLUDED';
   status:        BookingStatus;
@@ -90,22 +92,53 @@ const DEFAULT_FORM: BookingFormData = {
   sellingPrice: '',
   supplierCost: '',
   advance:      '',
+  supplierPaid: '',
   gstRate:      '5',
   gstMode:      'EXCLUDED',
   status:       'pending',
   notes:        '',
 };
 
-interface NewBookingDialogProps {
-  open:    boolean;
-  onClose: () => void;
+function formFromBooking(b: Booking): BookingFormData {
+  return {
+    type:         b.type,
+    customerName: b.customerName,
+    refId:        b.refId ?? '',
+    sellingPrice: b.sellingPrice !== null ? String(b.sellingPrice) : '',
+    supplierCost: String(b.supplierCost ?? 0),
+    advance:      String(b.advance ?? 0),
+    supplierPaid: String(b.supplierPaid ?? 0),
+    gstRate:      String(b.gstRate ?? 5),
+    gstMode:      b.gstMode ?? 'EXCLUDED',
+    status:       b.status,
+    notes:        b.notes ?? '',
+  };
 }
 
-function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
+// Parses a numeric form field; returns null on blank (only meaningful for sellingPrice)
+function parseAmount(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  return parseFloat(trimmed);
+}
+
+interface BookingFormDialogProps {
+  open:     boolean;
+  onClose:  () => void;
+  booking?: Booking | null;
+}
+
+function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
   const trips         = useStore(s => s.trips);
   const createBooking = useStore(s => s.createBooking);
+  const updateBooking = useStore(s => s.updateBooking);
+  const isEdit        = !!booking;
   const [form, setForm] = useState<BookingFormData>(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) setForm(booking ? formFromBooking(booking) : DEFAULT_FORM);
+  }, [open, booking]);
 
   function set<K extends keyof BookingFormData>(key: K, val: BookingFormData[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -117,29 +150,67 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
   }
 
   function handleSave() {
-    if (!form.customerName.trim()) { toast.error('Customer name is required'); return; }
+    const name = form.customerName.trim();
+    if (!name) { toast.error('Customer name is required'); return; }
+
+    const selling = parseAmount(form.sellingPrice);
+    const cost    = parseAmount(form.supplierCost) ?? 0;
+    const adv     = parseAmount(form.advance)      ?? 0;
+    const paid    = parseAmount(form.supplierPaid) ?? 0;
+    const gst     = parseAmount(form.gstRate)      ?? 0;
+
+    if (selling !== null && (isNaN(selling) || selling < 0)) {
+      toast.error('Invalid selling price', 'Enter a valid non-negative amount'); return;
+    }
+    if (isNaN(cost) || cost < 0) {
+      toast.error('Invalid supplier cost', 'Enter a valid non-negative amount'); return;
+    }
+    if (isNaN(adv) || adv < 0) {
+      toast.error('Invalid advance amount', 'Enter a valid non-negative amount'); return;
+    }
+    if (isNaN(paid) || paid < 0) {
+      toast.error('Invalid supplier paid amount', 'Enter a valid non-negative amount'); return;
+    }
+    if (isNaN(gst) || gst < 0 || gst > 100) {
+      toast.error('Invalid GST rate', 'GST rate must be between 0% and 100%'); return;
+    }
+
     setSaving(true);
     try {
-      const selling = form.sellingPrice ? parseFloat(form.sellingPrice) : null;
-      const cost    = parseFloat(form.supplierCost  || '0');
-      const adv     = parseFloat(form.advance       || '0');
-      const gst     = parseFloat(form.gstRate       || '5');
+      const refId = form.refId && form.refId !== '__none__' ? form.refId : undefined;
 
-      createBooking({
-        type:         form.type,
-        customerName: form.customerName.trim(),
-        refId:        form.refId && form.refId !== '__none__' ? form.refId : undefined,
-        sellingPrice: selling,
-        supplierCost: cost,
-        advance:      adv,
-        supplierPaid: 0,
-        gstRate:      gst,
-        gstMode:      form.gstMode,
-        status:       form.status,
-        notes:        form.notes,
-        detail:       {},
-      });
-      toast.success('Booking created', `${form.type} booking for ${form.customerName}`);
+      if (booking) {
+        updateBooking(booking.id, {
+          type:         form.type,
+          customerName: name,
+          refId,
+          sellingPrice: selling,
+          supplierCost: cost,
+          advance:      adv,
+          supplierPaid: paid,
+          gstRate:      gst,
+          gstMode:      form.gstMode,
+          status:       form.status,
+          notes:        form.notes,
+        });
+        toast.success('Booking updated', `${form.type} booking for ${name}`);
+      } else {
+        createBooking({
+          type:         form.type,
+          customerName: name,
+          refId,
+          sellingPrice: selling,
+          supplierCost: cost,
+          advance:      adv,
+          supplierPaid: paid,
+          gstRate:      gst,
+          gstMode:      form.gstMode,
+          status:       form.status,
+          notes:        form.notes,
+          detail:       {},
+        });
+        toast.success('Booking created', `${form.type} booking for ${name}`);
+      }
       handleClose();
     } finally {
       setSaving(false);
@@ -150,7 +221,7 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
     <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>New Booking</DialogTitle>
+          <DialogTitle>{isEdit ? `Edit Booking — ${booking!.id}` : 'New Booking'}</DialogTitle>
         </DialogHeader>
         <DialogBody>
           {/* Type selector */}
@@ -242,6 +313,18 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
               />
             </div>
             <div className="space-y-1.5">
+              <Label htmlFor="bk-supplier-paid">Amount Paid to Supplier (₹)</Label>
+              <Input
+                id="bk-supplier-paid"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.supplierPaid}
+                onChange={e => set('supplierPaid', e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="bk-gst">GST Rate (%)</Label>
               <Select value={form.gstRate} onValueChange={v => set('gstRate', v)}>
                 <SelectTrigger id="bk-gst">
@@ -310,7 +393,7 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
-          <Button size="sm" loading={saving} onClick={handleSave}>Create Booking</Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>{isEdit ? 'Save Changes' : 'Create Booking'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -320,14 +403,40 @@ function NewBookingDialog({ open, onClose }: NewBookingDialogProps) {
 // ─── Main Module ──────────────────────────────────────────────
 
 export default function Bookings() {
-  const navigate = useNavigate();
-  const bookings = useStore(s => s.bookings);
-  const trips    = useStore(s => s.trips);
+  const navigate      = useNavigate();
+  const bookings      = useStore(s => s.bookings);
+  const trips         = useStore(s => s.trips);
+  const deleteBooking = useStore(s => s.deleteBooking);
 
   const [search,      setSearch]      = useState('');
   const [typeFilter,  setTypeFilter]  = useState<BookingType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
   const [formOpen,    setFormOpen]    = useState(false);
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  const [deletingId,  setDeletingId]  = useState<string | null>(null);
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditBooking(null);
+  }
+
+  async function handleDeleteBooking(b: Booking) {
+    const ok = await confirm({
+      title:        `Delete booking ${b.id}?`,
+      description:  `This will permanently delete the ${b.type} booking for ${b.customerName}. This action cannot be undone.`,
+      confirmLabel: 'Delete Booking',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeletingId(b.id);
+    try {
+      deleteBooking(b.id);
+      toast.success('Booking deleted', `${b.type} booking for ${b.customerName} removed`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // ── Stats ────────────────────────────────────────────────────
 
@@ -521,6 +630,7 @@ export default function Bookings() {
                       {h}
                     </th>
                   ))}
+                  <th className="text-right text-[11px] font-semibold text-gray-400 px-4 py-3 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -585,6 +695,25 @@ export default function Bookings() {
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                         {fmtDate(b.createdDate)}
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button
+                            onClick={() => setEditBooking(b)}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                            title="Edit booking"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBooking(b)}
+                            disabled={deletingId === b.id}
+                            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Delete booking"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -612,7 +741,11 @@ export default function Bookings() {
         </div>
       )}
 
-      <NewBookingDialog open={formOpen} onClose={() => setFormOpen(false)} />
+      <BookingFormDialog
+        open={formOpen || !!editBooking}
+        booking={editBooking}
+        onClose={closeForm}
+      />
     </div>
   );
 }
