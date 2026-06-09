@@ -809,6 +809,7 @@ export default function Customers() {
   const customers      = useStore(s => s.customers);
   const trips          = useStore(s => s.trips);
   const payments       = useStore(s => s.payments);
+  const allReceivables = useStore(s => s.receivables);
   const deleteCustomer = useStore(s => s.deleteCustomer);
 
   const [search,       setSearch]       = useState('');
@@ -915,6 +916,23 @@ export default function Customers() {
     return m;
   }, [payments]);
 
+  // ── Net balance map (from receivables) ────────────────────
+  // Positive = customer still owes us; Negative = we owe customer (advance/excess)
+
+  const balanceByCustomer = useMemo(() => {
+    const m: Record<string, { balanceDue: number; excessAmount: number }> = {};
+    for (const r of allReceivables) {
+      if (!r.customerId) continue;
+      const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries: r.entries });
+      const cur = m[r.customerId] ?? { balanceDue: 0, excessAmount: 0 };
+      m[r.customerId] = {
+        balanceDue:   cur.balanceDue   + fin.balanceDue,
+        excessAmount: cur.excessAmount + fin.excessAmount,
+      };
+    }
+    return m;
+  }, [allReceivables]);
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
 
@@ -1006,6 +1024,7 @@ export default function Customers() {
             const seg        = getSegment(c);
             const segCfg     = SEGMENT_BADGE[seg];
             const passportExpDays = c.passportExpiry ? daysUntil(c.passportExpiry) : null;
+            const custBalance = balanceByCustomer[c.id];
 
             return (
               <div
@@ -1098,12 +1117,22 @@ export default function Customers() {
                     <FileText className="w-3 h-3 text-gray-400" />
                     <strong>{tripCount}</strong> trip{tripCount !== 1 ? 's' : ''}
                   </div>
-                  {revenue > 0 && (
+                  {custBalance && custBalance.balanceDue > 0 && (
+                    <div className="text-xs font-semibold text-red-600" title="Balance due from customer">
+                      ₹{custBalance.balanceDue.toLocaleString('en-IN')} due
+                    </div>
+                  )}
+                  {custBalance && custBalance.excessAmount > 0 && custBalance.balanceDue === 0 && (
+                    <div className="text-xs font-semibold text-amber-600" title="Customer advance / excess payment">
+                      +₹{custBalance.excessAmount.toLocaleString('en-IN')} credit
+                    </div>
+                  )}
+                  {(!custBalance || (custBalance.balanceDue === 0 && custBalance.excessAmount === 0)) && revenue > 0 && (
                     <div className="text-xs font-semibold text-emerald-600">
                       {formatCurrency(revenue)}
                     </div>
                   )}
-                  {revenue === 0 && (
+                  {(!custBalance || (custBalance.balanceDue === 0 && custBalance.excessAmount === 0)) && revenue === 0 && (
                     <div className="text-[10px] text-gray-400">
                       Since {fmtDate(c.createdDate)}
                     </div>

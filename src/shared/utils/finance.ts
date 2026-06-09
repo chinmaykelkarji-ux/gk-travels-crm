@@ -495,6 +495,7 @@ export const RECEIVABLE_STATUS_CLASS: Record<ReceivableStatus, string> = {
 export interface ReceivableFinanceResult {
   totalReceived: number;
   balanceDue:    number;
+  excessAmount:  number;  // amount received beyond invoice — payable back to customer
   status:        ReceivableStatus;
 }
 
@@ -506,7 +507,9 @@ export function calcReceivableFinance(opts: {
 }): ReceivableFinanceResult {
   const asOf          = opts.asOf ?? today();
   const totalReceived = Math.round(opts.entries.reduce((sum, e) => sum + (e.amount || 0), 0) * 100) / 100;
-  const balanceDue    = Math.max(0, Math.round((opts.invoiceAmount - totalReceived) * 100) / 100);
+  const rawBalance    = Math.round((opts.invoiceAmount - totalReceived) * 100) / 100;
+  const balanceDue    = Math.max(0, rawBalance);
+  const excessAmount  = Math.max(0, -rawBalance);  // paid more than invoiced
 
   let status: ReceivableStatus;
   if (balanceDue <= 0) {
@@ -519,7 +522,7 @@ export function calcReceivableFinance(opts: {
     status = 'pending';
   }
 
-  return { totalReceived, balanceDue, status };
+  return { totalReceived, balanceDue, excessAmount, status };
 }
 
 /** @deprecated Use normalizeTripFinance() */

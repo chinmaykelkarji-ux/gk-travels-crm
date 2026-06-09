@@ -1493,14 +1493,30 @@ export const useStore = create<GKStore>()(
           notes:       entry.notes,
         };
 
-        set((s: GKStore) => ({
-          receivables: s.receivables.map(r => {
+        set((s: GKStore) => {
+          // Update receivable entries + recalculate totals
+          const newReceivables = s.receivables.map(r => {
             if (r.id !== receivableId) return r;
             const entries = [...r.entries, newEntry];
             const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries, dueDate: r.dueDate });
             return { ...r, entries, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
-          }),
-        }));
+          });
+          // Propagate received total into the linked trip so Trip.paidAmount stays in sync
+          const linkedRec = newReceivables.find(r => r.id === receivableId);
+          const tripId    = linkedRec?.tripId;
+          let newTrips    = s.trips;
+          if (tripId) {
+            const tripReceived = newReceivables
+              .filter(r => r.tripId === tripId)
+              .reduce((sum, r) => sum + r.totalReceived, 0);
+            newTrips = s.trips.map(t => {
+              if (t.id !== tripId) return t;
+              const newBalanceDue = Math.max(0, (t.totalPayable ?? 0) - tripReceived);
+              return { ...t, paidAmount: tripReceived, balanceDue: newBalanceDue };
+            });
+          }
+          return { receivables: newReceivables, trips: newTrips };
+        });
 
         get().logActivity(
           'receivable_payment_recorded',
@@ -1519,14 +1535,28 @@ export const useStore = create<GKStore>()(
       },
 
       deleteReceivableEntry(receivableId, entryId) {
-        set((s: GKStore) => ({
-          receivables: s.receivables.map(r => {
+        set((s: GKStore) => {
+          const newReceivables = s.receivables.map(r => {
             if (r.id !== receivableId) return r;
             const entries = r.entries.filter(e => e.id !== entryId);
             const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries, dueDate: r.dueDate });
             return { ...r, entries, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
-          }),
-        }));
+          });
+          const linkedRec = newReceivables.find(r => r.id === receivableId);
+          const tripId    = linkedRec?.tripId;
+          let newTrips    = s.trips;
+          if (tripId) {
+            const tripReceived = newReceivables
+              .filter(r => r.tripId === tripId)
+              .reduce((sum, r) => sum + r.totalReceived, 0);
+            newTrips = s.trips.map(t => {
+              if (t.id !== tripId) return t;
+              const newBalanceDue = Math.max(0, (t.totalPayable ?? 0) - tripReceived);
+              return { ...t, paidAmount: tripReceived, balanceDue: newBalanceDue };
+            });
+          }
+          return { receivables: newReceivables, trips: newTrips };
+        });
         void apiClient.delete(`/receivables/${receivableId}/entries/${entryId}`)
           .then(() => {
             const updated = get().receivables.find(r => r.id === receivableId);

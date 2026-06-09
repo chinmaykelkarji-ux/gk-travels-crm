@@ -13,12 +13,11 @@ import {
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
-import type { Receivable } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { Button } from '@/shared/components/ui/button';
 import { Separator } from '@/shared/components/ui/separator';
-import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
+import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 import { openWhatsApp, openGmail } from '@/shared/utils/email';
 import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG, DETAIL_FIELDS, getBookingPrimaryDate } from './bookingMeta';
@@ -78,10 +77,8 @@ export default function BookingDetail() {
   const logCommunication = useStore(s => s.logCommunication);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
-  const addReceivableEntry = useStore(s => s.addReceivableEntry);
 
   const [recEntryOpen, setRecEntryOpen]   = useState(false);
-  const [activeReceivable, setActiveReceivable] = useState<Receivable | null>(null);
   const [creatingReceivable, setCreatingReceivable] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(true);
 
@@ -154,30 +151,8 @@ export default function BookingDetail() {
   }
 
   function openRecordPayment() {
-    const existing = receivables.find(r => r.balanceDue > 0) ?? receivables[0];
-    if (existing) {
-      setActiveReceivable(existing);
-      setRecEntryOpen(true);
-      return;
-    }
-    if (!bk.totalPayable || bk.totalPayable <= 0) {
-      toast.error('Set a price first', 'Add a selling price before recording payments');
-      return;
-    }
-    setCreatingReceivable(true);
-    const created = createReceivable({
-      customerId:    bk.customerId,
-      customerName:  bk.customerName,
-      bookingId:     bk.id,
-      tripId:        bk.refId || undefined,
-      invoiceAmount: bk.totalPayable,
-      description:   `${bk.type} booking · ${bk.id}`,
-    });
-    setCreatingReceivable(false);
-    if (created) {
-      setActiveReceivable(created);
-      setRecEntryOpen(true);
-    }
+    // Open unified receipt form pre-set to the trip linked to this booking
+    setRecEntryOpen(true);
   }
 
   function handleWhatsApp() {
@@ -577,10 +552,10 @@ export default function BookingDetail() {
                       )}
                       {fin.balanceDue > 0 && (
                         <button
-                          onClick={() => { setActiveReceivable(r); setRecEntryOpen(true); }}
+                          onClick={() => setRecEntryOpen(true)}
                           className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 hover:text-emerald-700"
                         >
-                          <CheckCircle className="w-3 h-3" /> Record Payment
+                          <CheckCircle className="w-3 h-3" /> Record Receipt
                         </button>
                       )}
                     </div>
@@ -611,16 +586,11 @@ export default function BookingDetail() {
           />
         </div>
 
-        <ReceivableEntryForm
+        <RecordReceiptForm
           open={recEntryOpen}
-          onClose={() => { setRecEntryOpen(false); setActiveReceivable(null); }}
-          onSave={(data) => {
-            if (activeReceivable) addReceivableEntry(activeReceivable.id, data);
-            toast.success('Payment recorded');
-            setRecEntryOpen(false);
-            setActiveReceivable(null);
-          }}
-          receivable={activeReceivable}
+          onClose={() => setRecEntryOpen(false)}
+          defaultCustomerId={bk.customerId}
+          defaultTripId={bk.refId || undefined}
         />
       </div>
     </>

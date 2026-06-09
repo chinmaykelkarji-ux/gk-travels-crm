@@ -17,6 +17,7 @@ import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ReceivableForm } from '@/shared/components/ReceivableForm';
 import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
+import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -40,9 +41,10 @@ export default function Receivables() {
   const [statusTab, setStatusTab] = useState<ReceivableStatus | 'all'>('all');
   const [expanded,  setExpanded]  = useState<Set<string>>(new Set());
 
-  const [formOpen,  setFormOpen]  = useState(false);
-  const [editing,   setEditing]   = useState<Receivable | null>(null);
-  const [entryFor,  setEntryFor]  = useState<Receivable | null>(null);
+  const [formOpen,       setFormOpen]       = useState(false);
+  const [editing,        setEditing]        = useState<Receivable | null>(null);
+  const [entryFor,       setEntryFor]       = useState<Receivable | null>(null);
+  const [receiptFormOpen, setReceiptFormOpen] = useState(false);
 
   // Live status for every receivable — never persisted, always derived.
   const withStatus = useMemo(() => receivables.map(r => ({
@@ -143,9 +145,14 @@ export default function Receivables() {
           <h2 className="text-base font-bold text-gray-900 font-display">Receivables</h2>
           <Badge variant="secondary">{receivables.length} total</Badge>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={openCreate}>
-          <Plus className="w-3.5 h-3.5" /> Add Receivable
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => setReceiptFormOpen(true)}>
+            <IndianRupee className="w-3.5 h-3.5" /> Record Receipt
+          </Button>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={openCreate}>
+            <Plus className="w-3.5 h-3.5" /> New Invoice
+          </Button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -243,6 +250,10 @@ export default function Receivables() {
         onSave={handleSaveEntry}
         receivable={entryFor}
       />
+      <RecordReceiptForm
+        open={receiptFormOpen}
+        onClose={() => setReceiptFormOpen(false)}
+      />
     </div>
   );
 }
@@ -278,7 +289,19 @@ function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayme
         <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{linked}</td>
         <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatCurrency(r.invoiceAmount)}</td>
         <td className="px-4 py-3 text-emerald-600 font-medium whitespace-nowrap">{formatCurrency(r.totalReceived)}</td>
-        <td className="px-4 py-3 font-bold text-gray-900 whitespace-nowrap">{formatCurrency(r.balanceDue)}</td>
+        <td className="px-4 py-3 whitespace-nowrap">
+          {r.balanceDue > 0 && (
+            <span className="font-bold text-red-600">{formatCurrency(r.balanceDue)}</span>
+          )}
+          {r.balanceDue <= 0 && r.totalReceived > r.invoiceAmount && (
+            <span className="font-bold text-amber-600">
+              +{formatCurrency(r.totalReceived - r.invoiceAmount)} advance
+            </span>
+          )}
+          {r.balanceDue <= 0 && r.totalReceived <= r.invoiceAmount && (
+            <span className="font-semibold text-emerald-600">Settled</span>
+          )}
+        </td>
         <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{r.dueDate ? fmtDate(r.dueDate) : '—'}</td>
         <td className="px-4 py-3">
           <span className={cn('inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium', RECEIVABLE_STATUS_CLASS[status])}>

@@ -30,7 +30,7 @@ import { Separator } from '@/shared/components/ui/separator';
 import { TripForm } from './TripForm';
 import { PaymentForm } from '@/shared/components/PaymentForm';
 import { ReceivableForm } from '@/shared/components/ReceivableForm';
-import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
+import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
@@ -1099,16 +1099,22 @@ export default function TripDetail() {
               )}
             </div>
 
-            {/* Receivables */}
+            {/* Receivables — read-only; use Receivables page to record receipts */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-indigo-600" /> Receivables
                 </h3>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs"
-                  onClick={() => { setActiveReceivable(null); setRecFormOpen(true); }}>
-                  <Plus className="w-3 h-3" /> Add Receivable
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => setRecEntryOpen(true)}>
+                    <Plus className="w-3 h-3" /> Record Receipt
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs"
+                    onClick={() => setRecFormOpen(true)}>
+                    <Plus className="w-3 h-3" /> New Invoice
+                  </Button>
+                </div>
               </div>
               {receivables.length === 0 ? (
                 <p className="text-xs text-gray-400 py-4 text-center">No receivables linked to this trip</p>
@@ -1119,7 +1125,7 @@ export default function TripDetail() {
                       <tr className="border-b border-gray-100">
                         <th className="text-left pb-2 text-gray-500 font-semibold">Invoice</th>
                         <th className="text-left pb-2 text-gray-500 font-semibold">Received</th>
-                        <th className="text-left pb-2 text-gray-500 font-semibold">Balance</th>
+                        <th className="text-left pb-2 text-gray-500 font-semibold">Balance / Advance</th>
                         <th className="text-left pb-2 text-gray-500 font-semibold">Due</th>
                         <th className="text-left pb-2 text-gray-500 font-semibold">Status</th>
                         <th />
@@ -1132,7 +1138,11 @@ export default function TripDetail() {
                           <tr key={r.id} className="hover:bg-gray-50">
                             <td className="py-2 font-semibold text-gray-700 pr-3">{formatCurrency(r.invoiceAmount)}</td>
                             <td className="py-2 text-emerald-600 pr-3">{formatCurrency(fin.totalReceived)}</td>
-                            <td className="py-2 text-red-500 pr-3">{formatCurrency(fin.balanceDue)}</td>
+                            <td className="py-2 pr-3">
+                              {fin.balanceDue > 0 && <span className="text-red-500 font-semibold">{formatCurrency(fin.balanceDue)}</span>}
+                              {fin.excessAmount > 0 && <span className="text-amber-600 font-semibold">+{formatCurrency(fin.excessAmount)} advance</span>}
+                              {fin.balanceDue === 0 && fin.excessAmount === 0 && <span className="text-emerald-600">Settled</span>}
+                            </td>
                             <td className="py-2 text-gray-500 pr-3">{r.dueDate ? fmtDate(r.dueDate) : '—'}</td>
                             <td className="py-2 pr-3">
                               <span className={cn('px-1.5 py-0.5 rounded-full font-medium text-[10px]', RECEIVABLE_STATUS_CLASS[fin.status])}>
@@ -1140,30 +1150,19 @@ export default function TripDetail() {
                               </span>
                             </td>
                             <td className="py-2">
-                              <div className="flex items-center gap-1">
-                                {fin.balanceDue > 0 && (
-                                  <button
-                                    onClick={() => { setActiveReceivable(r); setRecEntryOpen(true); }}
-                                    className="p-1 rounded hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors"
-                                    title="Record Payment"
-                                  >
-                                    <CheckCircle className="w-3 h-3" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={async () => {
-                                    const ok = await confirm({
-                                      title: `Delete ${r.id}?`,
-                                      description: 'This will permanently remove this receivable and its payment history.',
-                                      confirmLabel: 'Delete', cancelLabel: 'Cancel', variant: 'destructive',
-                                    });
-                                    if (ok) { deleteReceivable(r.id); toast.success('Receivable deleted'); }
-                                  }}
-                                  className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
+                              <button
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: `Delete ${r.id}?`,
+                                    description: 'This will permanently remove this receivable and its payment history.',
+                                    confirmLabel: 'Delete', cancelLabel: 'Cancel', variant: 'destructive',
+                                  });
+                                  if (ok) { deleteReceivable(r.id); toast.success('Receivable deleted'); }
+                                }}
+                                className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
                             </td>
                           </tr>
                         );
@@ -1406,16 +1405,11 @@ export default function TripDetail() {
         defaults={{ customerId: trip.customerId, customerName: trip.customer, tripId: trip.id }}
       />
 
-      <ReceivableEntryForm
+      <RecordReceiptForm
         open={recEntryOpen}
-        onClose={() => { setRecEntryOpen(false); setActiveReceivable(null); }}
-        onSave={(data) => {
-          if (activeReceivable) addReceivableEntry(activeReceivable.id, data);
-          toast.success('Payment recorded');
-          setRecEntryOpen(false);
-          setActiveReceivable(null);
-        }}
-        receivable={activeReceivable}
+        onClose={() => setRecEntryOpen(false)}
+        defaultCustomerId={trip.customerId}
+        defaultTripId={trip.id}
       />
     </div>
   );
