@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { UserPlus } from 'lucide-react';
 import { tripFormSchema, type TripFormSchema } from '@/shared/schemas/trip';
 import type { Trip } from '@/shared/types';
+import { useStore } from '@/store';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
@@ -14,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogFooter, DialogBody,
 } from '@/shared/components/ui/dialog';
+import { CustomerQuickCreate } from '@/shared/components/CustomerQuickCreate';
 
 const TRIP_TYPES = [
   'Honeymoon Package', 'Family Vacation', 'Corporate Trip',
@@ -31,11 +34,15 @@ interface TripFormProps {
 }
 
 export function TripForm({ open, onClose, onSubmit, defaultValues, loading, title = 'New Trip File' }: TripFormProps) {
+  const customers = useStore(s => s.customers);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+
   const {
     register, handleSubmit, formState: { errors }, reset, setValue, watch,
   } = useForm<TripFormSchema>({
     resolver:      zodResolver(tripFormSchema),
     defaultValues: {
+      customerId:  '',
       customer:    '',
       phone:       '',
       destination: '',
@@ -49,11 +56,17 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
     },
   });
 
-  const tripType = watch('type');
+  const tripType   = watch('type');
+  const customerId = watch('customerId');
 
   useEffect(() => {
     if (!open) return;
+    const matchedId = defaultValues?.customerId ??
+      (defaultValues?.customer
+        ? customers.find(c => c.name === defaultValues.customer)?.id
+        : undefined) ?? '';
     reset({
+      customerId:  matchedId,
       customer:    defaultValues?.customer    ?? '',
       phone:       defaultValues?.phone       ?? '',
       destination: defaultValues?.destination ?? '',
@@ -74,14 +87,24 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
     onClose();
   }
 
-  // Inline error component
+  function handleCustomerSelect(id: string) {
+    const cust = customers.find(c => c.id === id);
+    if (!cust) return;
+    setValue('customerId', cust.id, { shouldValidate: true });
+    setValue('customer',   cust.name, { shouldValidate: true });
+    if (!watch('phone')) setValue('phone', cust.phone || '');
+  }
+
   function FieldError({ name }: { name: keyof typeof errors }) {
     const err = errors[name];
     if (!err) return null;
     return <p className="mt-1 text-xs text-red-500">{err.message as string}</p>;
   }
 
+  const sortedCustomers = [...customers].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent size="lg">
         <DialogHeader>
@@ -98,13 +121,32 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
             {/* Customer + Phone */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="customer" required>Customer Name</Label>
-                <Input
-                  id="customer"
-                  placeholder="Full name"
-                  error={errors.customer?.message}
-                  {...register('customer')}
-                />
+                <Label required>Customer Name</Label>
+                <div className="flex gap-2">
+                  <Select value={customerId ?? ''} onValueChange={handleCustomerSelect}>
+                    <SelectTrigger error={!!errors.customer} className="flex-1 min-w-0">
+                      <SelectValue placeholder="Select customer…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedCustomers.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-gray-400">No customers yet</div>
+                      )}
+                      {sortedCustomers.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Create new customer"
+                    onClick={() => setQuickCreateOpen(true)}
+                    className="px-2 flex-shrink-0"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                  </Button>
+                </div>
                 <FieldError name="customer" />
               </div>
               <div className="space-y-1.5">
@@ -250,7 +292,6 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
               />
             </div>
 
-            {/* Validation hint */}
             {Object.keys(errors).length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                 <p className="text-xs text-red-600 font-medium">
@@ -271,5 +312,16 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
         </form>
       </DialogContent>
     </Dialog>
+
+    <CustomerQuickCreate
+      open={quickCreateOpen}
+      onClose={() => setQuickCreateOpen(false)}
+      onCreated={cust => {
+        setValue('customerId', cust.id, { shouldValidate: true });
+        setValue('customer',   cust.name, { shouldValidate: true });
+        setValue('phone',      cust.phone || '');
+      }}
+    />
+    </>
   );
 }

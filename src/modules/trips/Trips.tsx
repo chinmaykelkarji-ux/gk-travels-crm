@@ -60,6 +60,7 @@ export default function Trips() {
     try {
       const trip = createTrip({
         customer:    data.customer,
+        customerId:  data.customerId,
         phone:       data.phone,
         destination: data.destination,
         pax:         data.pax,

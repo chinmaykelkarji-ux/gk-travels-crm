@@ -5,9 +5,11 @@ import { z } from 'zod';
 // Confirmed status blocked unless price is also present (handled in store action).
 
 export const tripFormSchema = z.object({
+  customerId: z.string().min(1, 'Please select a customer').optional(),
+
   customer: z
     .string()
-    .min(2, 'Customer name must be at least 2 characters')
+    .min(2, 'Please select a customer from the list')
     .max(100, 'Customer name is too long'),
 
   phone: z

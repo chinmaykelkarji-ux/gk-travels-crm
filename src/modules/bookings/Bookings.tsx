@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Ticket, Search, Plus, HelpCircle, IndianRupee, Package,
-  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt, Eye,
+  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt, Eye, UserPlus,
 } from 'lucide-react';
+import { CustomerQuickCreate } from '@/shared/components/CustomerQuickCreate';
 import { useStore } from '@/store';
 import type { Booking, BookingType, BookingStatus } from '@/shared/types';
 import { Badge } from '@/shared/components/ui/badge';
@@ -39,6 +40,7 @@ const BOOKING_TYPES: BookingType[] = [
 
 interface BookingFormData {
   type:              BookingType;
+  customerId:        string;
   customerName:      string;
   refId:             string;
   sellingPrice:      string;
@@ -56,6 +58,7 @@ interface BookingFormData {
 
 const DEFAULT_FORM: BookingFormData = {
   type:              'flight',
+  customerId:        '',
   customerName:      '',
   refId:             '',
   sellingPrice:      '',
@@ -99,6 +102,7 @@ function strToDetail(detailStr: Record<string, string>): Record<string, unknown>
 function formFromBooking(b: Booking): BookingFormData {
   return {
     type:              b.type,
+    customerId:        b.customerId ?? '',
     customerName:      b.customerName,
     refId:             b.refId ?? '',
     sellingPrice:      b.sellingPrice !== null ? String(b.sellingPrice) : '',
@@ -130,6 +134,7 @@ interface BookingFormDialogProps {
 
 function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
   const trips         = useStore(s => s.trips);
+  const customers     = useStore(s => s.customers);
   const createBooking = useStore(s => s.createBooking);
   const updateBooking = useStore(s => s.updateBooking);
   const allReceivables   = useStore(s => s.receivables);
@@ -138,6 +143,12 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
   const [form, setForm] = useState<BookingFormData>(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
   const [recFormOpen, setRecFormOpen] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+
+  const sortedCustomers = useMemo(
+    () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
+    [customers]
+  );
 
   const bookingReceivables = booking ? allReceivables.filter(r => r.bookingId === booking.id) : [];
 
@@ -159,7 +170,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
 
   function handleSave() {
     const name = form.customerName.trim();
-    if (!name) { toast.error('Customer name is required'); return; }
+    if (!name || !form.customerId) { toast.error('Please select a customer from the list'); return; }
 
     const selling = parseAmount(form.sellingPrice);
     const cost    = parseAmount(form.supplierCost)   ?? 0;
@@ -203,6 +214,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
       if (booking) {
         updateBooking(booking.id, {
           type:           form.type,
+          customerId:     form.customerId || undefined,
           customerName:   name,
           refId,
           sellingPrice:   sellingForSave,
@@ -221,6 +233,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
       } else {
         createBooking({
           type:           form.type,
+          customerId:     form.customerId || undefined,
           customerName:   name,
           refId,
           sellingPrice:   sellingForSave,
@@ -353,13 +366,39 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="bk-customer" required>Customer Name</Label>
-              <Input
-                id="bk-customer"
-                value={form.customerName}
-                onChange={e => set('customerName', e.target.value)}
-                placeholder="e.g. Rajesh Kumar"
-              />
+              <Label required>Customer Name</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={form.customerId}
+                  onValueChange={id => {
+                    const cust = customers.find(c => c.id === id);
+                    if (!cust) return;
+                    setForm(f => ({ ...f, customerId: cust.id, customerName: cust.name }));
+                  }}
+                >
+                  <SelectTrigger className="flex-1 min-w-0">
+                    <SelectValue placeholder="Select customer…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortedCustomers.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-gray-400">No customers yet</div>
+                    )}
+                    {sortedCustomers.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  title="Create new customer"
+                  onClick={() => setQuickCreateOpen(true)}
+                  className="px-2 flex-shrink-0"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bk-trip">Linked Trip (optional)</Label>
@@ -668,6 +707,14 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
         }}
       />
     )}
+
+    <CustomerQuickCreate
+      open={quickCreateOpen}
+      onClose={() => setQuickCreateOpen(false)}
+      onCreated={cust => {
+        setForm(f => ({ ...f, customerId: cust.id, customerName: cust.name }));
+      }}
+    />
     </>
   );
 }
