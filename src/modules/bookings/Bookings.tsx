@@ -28,7 +28,8 @@ import {
 } from '@/shared/components/ui/select';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
-import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG } from './bookingMeta';
+import { Textarea } from '@/shared/components/ui/textarea';
+import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG, DETAIL_FIELDS } from './bookingMeta';
 
 const BOOKING_TYPES: BookingType[] = [
   'flight', 'hotel', 'cab', 'train', 'bus', 'visa', 'insurance', 'activity', 'other',
@@ -50,6 +51,7 @@ interface BookingFormData {
   serviceMarginMode: boolean;
   status:            BookingStatus;
   notes:             string;
+  detailStr:         Record<string, string>;
 }
 
 const DEFAULT_FORM: BookingFormData = {
@@ -66,6 +68,7 @@ const DEFAULT_FORM: BookingFormData = {
   serviceMarginMode: false,
   status:            'pending',
   notes:             '',
+  detailStr:         {},
 };
 
 // Service Margin Mode applies to bookings where suppliers/vendors are paid
@@ -74,6 +77,24 @@ const DEFAULT_FORM: BookingFormData = {
 // affect package or tour booking calculations driven by selling price.
 const SERVICE_MARGIN_TYPES: BookingType[] = ['flight', 'train', 'bus', 'hotel', 'cab', 'activity'];
 const SERVICE_FEE_GST_RATES = ['18', '5'];
+
+function detailToStr(detail: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(detail)) {
+    if (v !== null && v !== undefined && !Array.isArray(v) && typeof v !== 'object') {
+      out[k] = String(v);
+    }
+  }
+  return out;
+}
+
+function strToDetail(detailStr: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(detailStr)) {
+    if (v.trim() !== '') out[k] = v.trim();
+  }
+  return out;
+}
 
 function formFromBooking(b: Booking): BookingFormData {
   return {
@@ -90,6 +111,7 @@ function formFromBooking(b: Booking): BookingFormData {
     serviceMarginMode: b.serviceMarginMode ?? false,
     status:            b.status,
     notes:             b.notes ?? '',
+    detailStr:         detailToStr(b.detail as Record<string, unknown>),
   };
 }
 
@@ -176,6 +198,8 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
       const sellingForSave    = serviceMarginMode ? null : selling;
       const feeForSave        = serviceMarginMode ? fee  : 0;
 
+      const detail = strToDetail(form.detailStr);
+
       if (booking) {
         updateBooking(booking.id, {
           type:           form.type,
@@ -191,6 +215,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           serviceMarginMode,
           status:         form.status,
           notes:          form.notes,
+          detail,
         });
         toast.success('Booking updated', `${form.type} booking for ${name}`);
       } else {
@@ -208,7 +233,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
           serviceMarginMode,
           status:         form.status,
           notes:          form.notes,
-          detail:         {},
+          detail,
         });
         toast.success('Booking created', `${form.type} booking for ${name}`);
       }
@@ -274,7 +299,7 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => set('type', t)}
+                    onClick={() => setForm(f => ({ ...f, type: t, detailStr: {} }))}
                     className={cn(
                       'flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-medium transition-all capitalize',
                       form.type === t
@@ -463,10 +488,48 @@ function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
                 id="bk-notes"
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
-                placeholder="PNR, confirmation number, special instructions…"
+                placeholder="Additional instructions, remarks…"
               />
             </div>
           </div>
+
+          {/* ── Type-specific detail fields ─────────────────── */}
+          {(DETAIL_FIELDS[form.type]?.length ?? 0) > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider px-2 capitalize">
+                  {form.type} Details
+                </span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {DETAIL_FIELDS[form.type]!.map(field => (
+                  <div key={field.key} className={cn('space-y-1.5', field.span === 'full' && 'sm:col-span-2')}>
+                    <Label htmlFor={`detail-${field.key}`}>{field.label}</Label>
+                    {field.type === 'textarea' ? (
+                      <Textarea
+                        id={`detail-${field.key}`}
+                        value={form.detailStr[field.key] ?? ''}
+                        onChange={e => set('detailStr', { ...form.detailStr, [field.key]: e.target.value })}
+                        placeholder={field.placeholder}
+                        rows={3}
+                        className="text-sm"
+                      />
+                    ) : (
+                      <Input
+                        id={`detail-${field.key}`}
+                        type={field.type}
+                        value={form.detailStr[field.key] ?? ''}
+                        onChange={e => set('detailStr', { ...form.detailStr, [field.key]: e.target.value })}
+                        placeholder={field.placeholder}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Financial summary preview — driven by calcBookingFinance(), the
               single source of truth. Switches layout for Service Margin Mode

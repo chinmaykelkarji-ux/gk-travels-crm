@@ -669,42 +669,93 @@ export default function TripDetail() {
 
         {/* Bookings Tab */}
         <TabsContent value="bookings">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">{bookings.length} booking{bookings.length !== 1 ? 's' : ''} linked</p>
+              <button
+                onClick={() => navigate('/bookings/new')}
+                className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> Add Booking
+              </button>
+            </div>
+
             {bookings.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm">
+              <div className="bg-white rounded-xl border border-gray-200 text-center py-10 text-gray-400 text-sm">
                 No bookings linked to this trip yet.
                 <br />
-                <button
-                  onClick={() => navigate('/bookings')}
-                  className="mt-3 text-blue-600 hover:text-blue-700 font-medium text-xs"
-                >
+                <button onClick={() => navigate('/bookings')} className="mt-3 text-blue-600 hover:text-blue-700 font-medium text-xs">
                   Go to Bookings →
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {bookings.map(b => (
+              bookings.map(b => {
+                const finStatus = getFinancialStatus(b.totalPayable, b.advance);
+                const detail    = (b.detail ?? {}) as Record<string, unknown>;
+
+                // Extract a 1–3 line summary of filled detail fields
+                const summaryPairs: Array<{ label: string; value: string }> = [];
+                const SUMMARY_FIELDS: Record<string, string[]> = {
+                  flight:   ['airline', 'pnr', 'origin', 'destination', 'departDate'],
+                  hotel:    ['hotelName', 'city', 'checkIn', 'checkOut'],
+                  cab:      ['pickup', 'drop', 'pickupDate'],
+                  train:    ['trainName', 'pnr', 'fromStation', 'toStation', 'departure'],
+                  visa:     ['country', 'visaType', 'passportNumber'],
+                  activity: ['activityName', 'date', 'location'],
+                };
+                const fieldLabels: Record<string, string> = {
+                  airline: 'Airline', pnr: 'PNR', origin: 'From', destination: 'To', departDate: 'Depart',
+                  hotelName: 'Hotel', city: 'City', checkIn: 'Check-In', checkOut: 'Check-Out',
+                  pickup: 'Pickup', drop: 'Drop', pickupDate: 'Date',
+                  trainName: 'Train', fromStation: 'From', toStation: 'To', departure: 'Depart',
+                  country: 'Country', visaType: 'Visa', passportNumber: 'Passport',
+                  activityName: 'Activity', date: 'Date', location: 'Location',
+                };
+                for (const key of (SUMMARY_FIELDS[b.type] ?? [])) {
+                  const v = detail[key];
+                  if (v && String(v).trim()) summaryPairs.push({ label: fieldLabels[key] ?? key, value: String(v) });
+                  if (summaryPairs.length >= 3) break;
+                }
+
+                return (
                   <div
                     key={b.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
+                    className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all"
+                    onClick={() => navigate(`/bookings/${b.id}`)}
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800 capitalize">{b.type} booking</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{b.id} · {b.customerName}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-800">
-                        {b.totalPayable !== null ? formatCurrency(b.totalPayable) : '—'}
-                      </p>
-                      <span className={cn('text-[11px] font-medium', FINANCIAL_STATUS_CLASS[
-                        getFinancialStatus(b.totalPayable, b.advance)
-                      ])}>
-                        {FINANCIAL_STATUS_LABEL[getFinancialStatus(b.totalPayable, b.advance)]}
-                      </span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5')}>
+                          {/* inline icon with type color */}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-gray-800 capitalize">{b.type} Booking</p>
+                            <span className="text-[10px] font-mono text-gray-400">{b.id}</span>
+                          </div>
+                          {summaryPairs.length > 0 && (
+                            <div className="flex flex-wrap gap-3 mt-1">
+                              {summaryPairs.map(({ label, value }) => (
+                                <span key={label} className="text-xs text-gray-500">
+                                  <span className="font-medium text-gray-700">{label}:</span>{' '}{value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 space-y-1">
+                        <p className="text-sm font-bold text-gray-800">
+                          {b.totalPayable !== null ? formatCurrency(b.totalPayable) : <span className="text-gray-300">—</span>}
+                        </p>
+                        <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-full', FINANCIAL_STATUS_CLASS[finStatus])}>
+                          {FINANCIAL_STATUS_LABEL[finStatus]}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })
             )}
           </div>
         </TabsContent>

@@ -23,6 +23,7 @@ import {
 } from '@/shared/utils/finance';
 import { ReceivableForm } from '@/shared/components/ReceivableForm';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
+import { TYPE_ICON as BOOKING_TYPE_ICON, TYPE_COLOR as BOOKING_TYPE_COLOR, STATUS_CONFIG as BOOKING_STATUS_CONFIG, getBookingPrimaryDate } from '@/modules/bookings/bookingMeta';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogFooter, DialogBody,
@@ -387,13 +388,21 @@ interface DrawerProps {
 }
 
 function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
+  const navigate = useNavigate();
   const trips    = useStore(s => s.trips);
   const payments = useStore(s => s.payments);
+  const allBookings    = useStore(s => s.bookings);
   const activityLog    = useStore(s => s.activityLog);
   const communications = useStore(s => s.communications);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
   const [recFormOpen, setRecFormOpen] = useState(false);
+
+  const customerBookings = useMemo(
+    () => allBookings.filter(b => b.customerId === customer.id || b.customerName === customer.name)
+           .sort((a, b) => (b.createdDate ?? '').localeCompare(a.createdDate ?? '')),
+    [allBookings, customer]
+  );
 
   const customerTrips = useMemo(
     () => trips.filter(t => t.customerId === customer.id || (customer.tripIds ?? []).includes(t.id)),
@@ -698,6 +707,57 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
               </div>
             )}
           </div>
+
+          {/* Bookings */}
+          {customerBookings.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Bookings ({customerBookings.length})
+              </h4>
+              <div className="space-y-2">
+                {customerBookings.slice(0, 6).map(b => {
+                  const BIcon = BOOKING_TYPE_ICON[b.type];
+                  const typeClr = BOOKING_TYPE_COLOR[b.type];
+                  const statusCfg = BOOKING_STATUS_CONFIG[b.status];
+                  const primaryDate = getBookingPrimaryDate(b);
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 cursor-pointer hover:bg-gray-100 transition-colors"
+                      onClick={() => navigate(`/bookings/${b.id}`)}
+                    >
+                      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', typeClr)}>
+                        <BIcon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 capitalize truncate">{b.type} Booking</p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                          {b.id}
+                          {primaryDate && ` · ${fmtDate(primaryDate)}`}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', statusCfg.class)}>
+                          {statusCfg.label}
+                        </span>
+                        {b.totalPayable !== null && (
+                          <span className="text-[10px] font-semibold text-gray-700">{formatCurrency(b.totalPayable)}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {customerBookings.length > 6 && (
+                  <button
+                    onClick={() => navigate('/bookings')}
+                    className="w-full text-xs text-indigo-600 hover:text-indigo-700 font-medium text-center py-1"
+                  >
+                    View all {customerBookings.length} bookings →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Activity */}
           <div>

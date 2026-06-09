@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
   AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
-  ClipboardCheck, ListChecks,
+  ClipboardCheck, ListChecks, Ticket,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
@@ -17,6 +17,7 @@ import {
   calcReceivableFinance,
 } from '@/shared/utils/finance';
 import { APPROVAL_STATUS_LABEL, APPROVAL_STATUS_CLASS } from '@/shared/types';
+import { getBookingPrimaryDate, TYPE_ICON as BOOKING_TYPE_ICON, STATUS_CONFIG as BOOKING_STATUS_CONFIG } from '@/modules/bookings/bookingMeta';
 import type { ReceivableStatus } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, daysUntil, isThisMonth, isLastMonth, today } from '@/shared/utils/date';
@@ -96,6 +97,7 @@ export default function Dashboard() {
   const itineraries       = useStore(s => s.itineraries);
   const vouchers          = useStore(s => s.vouchers);
   const receivables       = useStore(s => s.receivables);
+  const bookings          = useStore(s => s.bookings);
   const tasks             = useStore(s => s.tasks);
 
   // Quotation KPIs
@@ -219,6 +221,20 @@ export default function Dashboard() {
     return { pendingApprovals, todaysActivity, tasksDueToday };
   }, [quotations, activityLog, tasks]);
 
+  // Booking departure / check-in alerts (next 7 days, not cancelled/completed)
+  const bookingAlerts = useMemo(() => {
+    const todayStr = today();
+    return bookings
+      .filter(b => b.status !== 'cancelled' && b.status !== 'completed')
+      .map(b => ({ booking: b, date: getBookingPrimaryDate(b) }))
+      .filter(({ date }) => {
+        if (!date) return false;
+        const d = daysUntil(date);
+        return d !== null && d >= 0 && d <= 7;
+      })
+      .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+  }, [bookings]);
+
   // Activity feed
   const recentActivity = useMemo(
     () => activityLog.slice(0, 15),
@@ -255,6 +271,45 @@ export default function Dashboard() {
                 <span className="font-bold text-red-700">{formatCurrency(t.balanceDue)} overdue</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Upcoming Booking Alerts ────────────────────── */}
+      {bookingAlerts.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3.5">
+          <div className="flex items-center gap-2 mb-2">
+            <Ticket className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            <span className="text-sm font-semibold text-blue-800">
+              {bookingAlerts.length} booking{bookingAlerts.length > 1 ? 's' : ''} departing / checking in within 7 days
+            </span>
+          </div>
+          <div className="space-y-1">
+            {bookingAlerts.slice(0, 5).map(({ booking: b, date }) => {
+              const d = date ? daysUntil(date) : null;
+              const BIcon = BOOKING_TYPE_ICON[b.type];
+              const statusCfg = BOOKING_STATUS_CONFIG[b.status];
+              return (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between text-xs cursor-pointer hover:text-blue-700 transition-colors"
+                  onClick={() => navigate(`/bookings/${b.id}`)}
+                >
+                  <span className="flex items-center gap-2 text-blue-700">
+                    <BIcon className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-semibold">{b.customerName}</span>
+                    <span className="text-blue-500 capitalize">{b.type}</span>
+                    <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-medium', statusCfg.class)}>
+                      {statusCfg.label}
+                    </span>
+                  </span>
+                  <span className="font-bold text-blue-700">
+                    {d === 0 ? 'Today' : `${d}d`} · {fmtDate(date!)}
+                    {b.balanceDue > 0 && <span className="ml-2 text-red-600">· ₹{b.balanceDue.toLocaleString('en-IN')} due</span>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

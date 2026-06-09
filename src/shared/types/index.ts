@@ -206,41 +206,89 @@ export interface FlightLeg {
 }
 
 export interface FlightDetail {
-  pnr: string;
+  airline?: string;
+  pnr?: string;
   returnPnr?: string;
-  airline: string;
-  flightNumber: string;
-  origin: string;
-  destination: string;
-  departDate: string;
-  departTime: string;
-  arrivalDate: string;
-  arrivalTime: string;
+  flightNumber?: string;
+  origin?: string;
+  destination?: string;
+  departDate?: string;
+  departTime?: string;
+  arrivalDate?: string;
+  arrivalTime?: string;
   terminal?: string;
   baggageAllowance?: string;
-  legs: FlightLeg[];
+  passengerNames?: string;
+  legs?: FlightLeg[];
 }
 
 export interface HotelDetail {
-  hotelName: string;
-  city: string;
-  checkIn: string;
-  checkOut: string;
-  roomType: string;
-  nights: number;
+  hotelName?: string;
+  city?: string;
+  checkIn?: string;
+  checkOut?: string;
+  roomType?: string;
+  rooms?: number;
+  guests?: number;
+  guestNames?: string;
+  nights?: number;
+  confirmationNumber?: string;
+}
+
+export interface CabDetail {
+  pickup?: string;
+  drop?: string;
+  pickupDate?: string;
+  pickupTime?: string;
+  vehicleType?: string;
+  driverName?: string;
+  driverPhone?: string;
+  cabNumber?: string;
+}
+
+export interface TrainDetail {
+  trainName?: string;
+  trainNumber?: string;
+  pnr?: string;
+  fromStation?: string;
+  toStation?: string;
+  departure?: string;
+  departureTime?: string;
+  arrival?: string;
+  arrivalTime?: string;
+  travelClass?: string;
+  seatNumbers?: string;
+}
+
+export interface ActivityDetail {
+  activityName?: string;
+  date?: string;
+  time?: string;
+  pax?: number;
+  location?: string;
+  provider?: string;
   confirmationNumber?: string;
 }
 
 export interface VisaDetail {
-  country: string;
-  visaType: string;
+  country?: string;
+  visaType?: string;
+  passportNumber?: string;
   applicationDate?: string;
+  appointmentDate?: string;
   expectedDate?: string;
   approvalDate?: string;
   rejectionReason?: string;
 }
 
-export type BookingDetail = FlightDetail | HotelDetail | VisaDetail | Record<string, unknown>;
+export type BookingDetail =
+  | FlightDetail
+  | HotelDetail
+  | CabDetail
+  | TrainDetail
+  | ActivityDetail
+  | VisaDetail
+  | Record<string, unknown>;
 
 // ─── Core Entities ──────────────────────────────────────────
 

@@ -9,6 +9,26 @@ export function openWhatsApp(opts: { phone: string; message: string }) {
 }
 
 export const whatsapp = {
+  booking(opts: {
+    phone: string;
+    customerName: string;
+    bookingType: string;
+    bookingId: string;
+    details: string;
+    totalAmount?: number;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `Your *${opts.bookingType} Booking* has been confirmed! 🎉\n\n` +
+        opts.details +
+        (opts.totalAmount ? `\n💰 Total Amount: ₹${opts.totalAmount.toLocaleString('en-IN')}` : '') +
+        `\n\n📋 Booking Ref: ${opts.bookingId}\n\n` +
+        `Please keep this confirmation handy. Contact us for any changes.\n\nBest regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
+
   quotation(opts: {
     phone: string; customerName: string; destination: string;
     quotationNumber: string; totalSelling: number;
@@ -178,6 +198,31 @@ export const gmail = {
         (opts.destination ? `📍 Destination : ${opts.destination}\n` : '') +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
         `Please keep this voucher accessible at the time of service. Contact us immediately for any changes or queries.\n\n` +
+        `Best regards,\nGK Travels Team\n📧 ${FROM}`,
+    });
+  },
+
+  booking(opts: {
+    email: string;
+    customerName: string;
+    bookingType: string;
+    bookingId: string;
+    details: string;
+    totalAmount?: number;
+  }) {
+    openGmail({
+      to:      opts.email,
+      subject: `${opts.bookingType} Booking Confirmation — ${opts.bookingId} — GK Travels`,
+      body:
+        `Dear ${opts.customerName},\n\n` +
+        `Your ${opts.bookingType} booking has been confirmed. Please find the details below.\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📋 Booking Ref  : ${opts.bookingId}\n` +
+        `📌 Type         : ${opts.bookingType}\n` +
+        (opts.totalAmount ? `💰 Total Amount : ₹${opts.totalAmount.toLocaleString('en-IN')}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        opts.details +
+        `\n\nFor any queries please reply to this email or contact us directly.\n\n` +
         `Best regards,\nGK Travels Team\n📧 ${FROM}`,
     });
   },
