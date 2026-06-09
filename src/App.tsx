@@ -2,7 +2,7 @@
 // GK TRAVELS CRM — Application Root
 // ============================================================
 
-import { useState, useEffect, Suspense, lazy } from 'react';
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
@@ -13,6 +13,7 @@ import { shouldRetry, STALE_TIME }      from '@/backend/api/apiError';
 
 import { Sidebar }           from '@/shared/components/Sidebar';
 import { Header }            from '@/shared/components/Header';
+import { GlobalSearch }      from '@/modules/search/GlobalSearch';
 import { Toaster }           from '@/shared/components/Toaster';
 import { ConfirmDialog }     from '@/shared/components/ConfirmDialog';
 import { DashboardSkeleton } from '@/shared/components/LoadingSkeleton';
@@ -48,6 +49,8 @@ const Receivables       = lazy(() => import('@/modules/receivables/Receivables')
 const Vouchers          = lazy(() => import('@/modules/vouchers/Vouchers'));
 const VoucherFormPage   = lazy(() => import('@/modules/vouchers/VoucherForm'));
 const VoucherDetail     = lazy(() => import('@/modules/vouchers/VoucherDetail'));
+const Passengers        = lazy(() => import('@/modules/passengers/Passengers'));
+const DailyOps          = lazy(() => import('@/modules/ops/DailyOps'));
 const Settings          = lazy(() => import('@/modules/settings/Settings'));
 
 // ─── QueryClient ─────────────────────────────────────────────
@@ -79,7 +82,23 @@ function PageSpinner() {
 function AppShell() {
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [tripFormOpen, setTripFormOpen] = useState(false);
+  const [searchOpen,   setSearchOpen]   = useState(false);
   const [creating,     setCreating]     = useState(false);
+
+  const openSearch  = useCallback(() => setSearchOpen(true),  []);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+
+  // Ctrl+K / Cmd+K global shortcut
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(s => !s);
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   const createTrip  = useStore(s => s.createTrip);
   const fetchAll    = useStore(s => s.fetchAll);
@@ -126,6 +145,7 @@ function AppShell() {
         <Header
           onMenuToggle={() => setSidebarOpen(o => !o)}
           onNewTrip={() => setTripFormOpen(true)}
+          onSearchOpen={openSearch}
         />
 
         {/* Non-blocking 2 px progress bar while Zustand store hydrates */}
@@ -173,6 +193,7 @@ function AppShell() {
         loading={creating}
       />
 
+      <GlobalSearch open={searchOpen} onClose={closeSearch} />
       <Toaster />
       <ConfirmDialog />
     </div>
@@ -228,6 +249,8 @@ export default function App() {
                 <Route path="/vouchers/:id/edit"     element={<VoucherFormPage />} />
                 <Route path="/finance"               element={<Finance />} />
                 <Route path="/receivables"           element={<Receivables />} />
+                <Route path="/passengers"            element={<Passengers />} />
+                <Route path="/daily-ops"             element={<DailyOps />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />
               </Route>

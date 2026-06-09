@@ -20,22 +20,24 @@ const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
   '/quotations':   { title: 'Quotations',   subtitle: 'Proposals · Pricing · Conversion'     },
   '/itineraries':  { title: 'Itineraries',  subtitle: 'Day-wise Plans · Hotels · Activities'      },
   '/vouchers':     { title: 'Vouchers',     subtitle: 'Hotel · Transfer · Activity · Flight'     },
+  '/passengers':   { title: 'Passengers',   subtitle: 'Passport · Visa · Travel Profiles' },
+  '/daily-ops':    { title: 'Daily Ops',    subtitle: "Today's Departures · Check-Ins · Payments" },
   '/settings':     { title: 'Settings',     subtitle: 'Company · Integrations · Users'            },
 };
 
 interface HeaderProps {
-  onMenuToggle: () => void;
-  onNewTrip:    () => void;
+  onMenuToggle:  () => void;
+  onNewTrip:     () => void;
+  onSearchOpen?: () => void;
 }
 
-export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
+export function Header({ onMenuToggle, onNewTrip, onSearchOpen }: HeaderProps) {
   const location         = useLocation();
   const navigate         = useNavigate();
   const pendingReminders = useStore(selectors.pendingReminders);
   const trips            = useStore(s => s.trips);
   const [notifOpen, setNotifOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const meta = ROUTE_META[location.pathname] ?? { title: 'GK Travels', subtitle: '' };
 
@@ -71,17 +73,15 @@ export function Header({ onMenuToggle, onNewTrip }: HeaderProps) {
       {/* Right: Search · Bell · Quick Add */}
       <div className="flex items-center gap-2">
 
-        {/* Search */}
-        <div className="hidden sm:flex items-center gap-2 rounded-xl px-3 py-2 w-52 lg:w-64 bg-slate-50 border border-slate-200 hover:border-slate-300 transition-colors">
+        {/* Search trigger */}
+        <button
+          onClick={onSearchOpen}
+          className="hidden sm:flex items-center gap-2 rounded-xl px-3 py-2 w-52 lg:w-64 bg-slate-50 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-left"
+        >
           <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <input
-            type="text"
-            placeholder="Search trips, customers…"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="bg-transparent text-xs text-gray-600 outline-none w-full placeholder:text-slate-400"
-          />
-        </div>
+          <span className="flex-1 text-xs text-slate-400">Search trips, customers…</span>
+          <kbd className="text-[10px] text-slate-400 bg-white border border-slate-200 rounded px-1 py-0.5 font-mono hidden lg:block">⌘K</kbd>
+        </button>
 
         {/* Notifications */}
         <div className="relative">

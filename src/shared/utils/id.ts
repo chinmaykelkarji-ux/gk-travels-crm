@@ -104,3 +104,9 @@ export function nextReceivableEntryId(existingIds: string[]): string {
   }, 0) + 1;
   return `RCE-${String(seq).padStart(3, '0')}`;
 }
+
+export function nextPassengerId(existingIds: string[]): string {
+  const year = new Date().getFullYear();
+  const seq  = maxSeq(existingIds, 'PAX', 2) + 1;
+  return `PAX-${year}-${String(seq).padStart(4, '0')}`;
+}

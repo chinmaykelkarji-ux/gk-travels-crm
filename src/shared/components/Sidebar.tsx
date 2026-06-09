@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
-  FileText, Map, FileCheck, BarChart2, LogOut, Receipt,
+  FileText, Map, FileCheck, BarChart2, LogOut, Receipt, UsersRound, CalendarClock,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
@@ -30,18 +30,20 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CRM',
     items: [
-      { path: '/leads',     label: 'Leads',     icon: Users      },
-      { path: '/customers', label: 'Customers', icon: UserCircle },
-      { path: '/trips',     label: 'Trips',     icon: FolderOpen },
+      { path: '/leads',      label: 'Leads',      icon: Users       },
+      { path: '/customers',  label: 'Customers',  icon: UserCircle  },
+      { path: '/passengers', label: 'Passengers', icon: UsersRound  },
+      { path: '/trips',      label: 'Trips',      icon: FolderOpen  },
     ],
   },
   {
     label: 'OPERATIONS',
     items: [
-      { path: '/bookings',    label: 'Bookings',    icon: Ticket    },
-      { path: '/quotations',  label: 'Quotations',  icon: FileText  },
-      { path: '/itineraries', label: 'Itineraries', icon: Map       },
-      { path: '/vouchers',    label: 'Vouchers',    icon: FileCheck },
+      { path: '/daily-ops',   label: 'Daily Ops',   icon: CalendarClock },
+      { path: '/bookings',    label: 'Bookings',    icon: Ticket        },
+      { path: '/quotations',  label: 'Quotations',  icon: FileText      },
+      { path: '/itineraries', label: 'Itineraries', icon: Map           },
+      { path: '/vouchers',    label: 'Vouchers',    icon: FileCheck     },
       { path: '/operations',  label: 'Operations',  icon: Activity, badge: 'reminders' },
     ],
   },

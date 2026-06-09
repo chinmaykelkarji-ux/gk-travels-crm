@@ -116,6 +116,7 @@ model Trip {
   timeline            Json      @default("[]")
   itinerary           Json      @default("[]")
   documents           Json      @default("[]")
+  passengerIds        Json      @default("[]")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   payments            Payment[]
@@ -165,6 +166,7 @@ grossMargin     Float    @default(0)
 marginPct       Float    @default(0)
 
 detail          Json     @default("{}")
+passengerIds    Json     @default("[]")
 notes           String   @default("")
 
 createdDate     String
@@ -483,6 +485,7 @@ model Itinerary {
   notes            String?
   emergencyContact String?
   template         String?
+  passengerIds     Json           @default("[]")
   createdDate      String
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -575,6 +578,7 @@ model Voucher {
   gstAmount        Float    @default(0)
   taxableAmount    Float    @default(0)
   totalPayable     Float?
+  passengerIds     Json     @default("[]")
   notes            String?
   emergencyContact String?
   internalNotes    String?
@@ -587,6 +591,45 @@ model Voucher {
   @@index([status])
   @@index([type])
   @@map("vouchers")
+}
+
+model Passenger {
+  id                    String   @id
+  customerId            String?
+
+  firstName             String
+  lastName              String
+  displayName           String?
+  dateOfBirth           String?
+  nationality           String?
+  gender                String?
+
+  passportNumber        String?
+  passportIssueDate     String?
+  passportExpiry        String?
+  placeOfIssue          String?
+
+  visaStatus            String?
+  visaExpiry            String?
+  visaCountry           String?
+  visaType              String?
+
+  frequentFlyerNumber   String?
+  mealPreference        String?
+  seatPreference        String?
+
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyRelation     String?
+
+  notes                 String?
+  createdDate           String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([passportNumber])
+  @@map("passengers")
 }
 
 enum Role {

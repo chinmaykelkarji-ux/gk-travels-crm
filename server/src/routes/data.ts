@@ -7,11 +7,12 @@ const router = Router();
 
 router.get('/all', requireAuth, async (_req, res) => {
   try {
-    const [trips, leads, customers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers, receivables, communications] =
+    const [trips, leads, customers, passengers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers, receivables, communications] =
       await Promise.all([
         prisma.trip.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.lead.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.customer.findMany({ orderBy: { createdAt: 'desc' } }),
+        prisma.passenger.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.booking.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.payment.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.task.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -39,6 +40,7 @@ router.get('/all', requireAuth, async (_req, res) => {
       trips,
       leads,
       customers,
+      passengers,
       bookings,
       tasks,
       reminders,

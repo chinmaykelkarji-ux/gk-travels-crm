@@ -28,6 +28,7 @@ import vouchersRouter    from './routes/vouchers.js';
 import receivablesRouter from './routes/receivables.js';
 import analyticsRouter   from './routes/analytics.js';
 import communicationsRouter from './routes/communications.js';
+import passengersRouter     from './routes/passengers.js';
 
 const app = express();
 
@@ -88,6 +89,7 @@ app.use('/api/vouchers',    vouchersRouter);
 app.use('/api/receivables', receivablesRouter);
 app.use('/api/analytics',   analyticsRouter);
 app.use('/api/communications', communicationsRouter);
+app.use('/api/passengers',    passengersRouter);
 
 // ── 404 ────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@
 import { create } from 'zustand';
 import apiClient from '@/lib/apiClient';
 import type {
-  Trip, Lead, Customer, Booking, Payment, Task, Reminder,
+  Trip, Lead, Customer, Passenger, Booking, Payment, Task, Reminder,
   ActivityLog, Staff, GKStoreState, TripStatus, LeadStatus,
   ActivityEntityType, Vendor, VendorPayment,
   Quotation, QuotationItem, QuotationStatus,
@@ -23,7 +23,7 @@ import type {
 import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
 import { getApiErrorMessage } from '@/shared/utils/error';
 import {
-  nextTripId, nextLeadId, nextCustomerId, nextBookingId,
+  nextTripId, nextLeadId, nextCustomerId, nextBookingId, nextPassengerId,
   nextTaskId, nextPayId, nextVendorId, nextVendorPaymentId,
   nextQuotationId, nextItineraryId, nextVoucherId, uid, reminderUid, activityUid,
   nextReceivableId, nextReceivableEntryId,
@@ -91,6 +91,7 @@ const defaultState: GKStoreState = {
   trips:          [],
   leads:          [],
   customers:      [],
+  passengers:     [],
   bookings:       [],
   tasks:          [],
   reminders:      [],
@@ -130,6 +131,11 @@ interface StoreActions {
   createCustomer: (data: Partial<Customer>) => Customer;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
   deleteCustomer: (id: string) => { ok: boolean; reason?: string };
+
+  // â”€â”€ Passengers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  createPassenger: (data: Partial<Passenger>) => Passenger;
+  updatePassenger: (id: string, data: Partial<Passenger>) => void;
+  deletePassenger: (id: string) => void;
 
   // â”€â”€ Bookings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createBooking:  (data: Partial<Booking>) => Booking;
@@ -628,6 +634,53 @@ export const useStore = create<GKStore>()(
       },
 
       // â•â• Booking Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+      createPassenger(data) {
+        const state = get();
+        const id    = nextPassengerId(state.passengers.map(p => p.id));
+        const passenger = {
+          id,
+          customerId:            data.customerId,
+          firstName:             data.firstName             ?? '',
+          lastName:              data.lastName              ?? '',
+          displayName:           data.displayName,
+          dateOfBirth:           data.dateOfBirth,
+          nationality:           data.nationality,
+          gender:                data.gender,
+          passportNumber:        data.passportNumber,
+          passportIssueDate:     data.passportIssueDate,
+          passportExpiry:        data.passportExpiry,
+          placeOfIssue:          data.placeOfIssue,
+          visaStatus:            data.visaStatus,
+          visaExpiry:            data.visaExpiry,
+          visaCountry:           data.visaCountry,
+          visaType:              data.visaType,
+          frequentFlyerNumber:   data.frequentFlyerNumber,
+          mealPreference:        data.mealPreference,
+          seatPreference:        data.seatPreference,
+          emergencyContactName:  data.emergencyContactName,
+          emergencyContactPhone: data.emergencyContactPhone,
+          emergencyRelation:     data.emergencyRelation,
+          notes:                 data.notes,
+          createdDate:           today(),
+        };
+        set((s) => ({ passengers: [passenger, ...s.passengers] }));
+        void apiClient.post('/passengers', passenger).catch(onMutationError(''));
+        return passenger;
+      },
+
+      updatePassenger(id, data) {
+        set((s) => ({
+          passengers: s.passengers.map(p => p.id === id ? { ...p, ...data } : p),
+        }));
+        const updated = get().passengers.find(p => p.id === id);
+        if (updated) void apiClient.put('/passengers/' + id, updated).catch(onMutationError(''));
+      },
+
+      deletePassenger(id) {
+        set((s) => ({ passengers: s.passengers.filter(p => p.id !== id) }));
+        void apiClient.delete('/passengers/' + id).catch(onMutationError(''));
+      },
 
       createBooking(data) {
         const state = get();
@@ -1505,6 +1558,7 @@ export const useStore = create<GKStore>()(
               trips:          Trip[];
               leads:          Lead[];
               customers:      Customer[];
+              passengers:     Passenger[];
               bookings:       Booking[];
               tasks:          Task[];
               reminders:      Reminder[];
@@ -1523,6 +1577,7 @@ export const useStore = create<GKStore>()(
               trips:          Array.isArray(d.trips)          ? d.trips          : [],
               leads:          Array.isArray(d.leads)          ? d.leads          : [],
               customers:      Array.isArray(d.customers)      ? d.customers      : [],
+              passengers:     Array.isArray(d.passengers)     ? d.passengers     : [],
               bookings:       Array.isArray(d.bookings)       ? d.bookings       : [],
               tasks:          Array.isArray(d.tasks)          ? d.tasks          : [],
               reminders:      Array.isArray(d.reminders)      ? d.reminders      : [],
@@ -1582,7 +1637,25 @@ export const selectors = {
   tripById:     (id: string) => (s: GKStore) => s.trips.find(t => t.id === id),
   leadById:     (id: string) => (s: GKStore) => s.leads.find(l => l.id === id),
   customerById: (id: string) => (s: GKStore) => s.customers.find(c => c.id === id),
-  bookingById:  (id: string) => (s: GKStore) => s.bookings.find(b => b.id === id),
+  bookingById:   (id: string) => (s: GKStore) => s.bookings.find(b => b.id === id),
+  passengerById: (id: string) => (s: GKStore) => s.passengers.find(p => p.id === id),
+
+  passengersForCustomer: (customerId: string) => (s: GKStore) =>
+    s.passengers.filter(p => p.customerId === customerId),
+
+  passengersForTrip: (tripId: string) => (s: GKStore) => {
+    const trip = s.trips.find(t => t.id === tripId);
+    if (!trip) return [] as typeof s.passengers;
+    const ids = (trip.passengerIds ?? []) as string[];
+    return s.passengers.filter(p => ids.includes(p.id));
+  },
+
+  passengersForBooking: (bookingId: string) => (s: GKStore) => {
+    const booking = s.bookings.find(b => b.id === bookingId);
+    if (!booking) return [] as typeof s.passengers;
+    const ids = (booking.passengerIds ?? []) as string[];
+    return s.passengers.filter(p => ids.includes(p.id));
+  },
 
   activeTrips:     (s: GKStore) => s.trips.filter(t => ['confirmed', 'in_progress'].includes(t.status)),
   pendingReminders: (s: GKStore) => s.reminders.filter(r => !r.sent),

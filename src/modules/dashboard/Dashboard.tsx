@@ -390,22 +390,6 @@ export default function Dashboard() {
           onClick={() => navigate('/receivables')}
         />
         <KpiCard
-          title="Net Cash Flow"
-          value={formatCurrencyShort(stats.netCashFlow)}
-          sub={`This month · ${stats.netCashFlow >= 0 ? 'positive' : 'negative'}`}
-          icon={stats.netCashFlow >= 0 ? TrendingUp : TrendingDown}
-          color={stats.netCashFlow >= 0 ? 'green' : 'red'}
-          onClick={() => navigate('/finance')}
-        />
-        <KpiCard
-          title="Quotation Pipeline"
-          value={quotationKpis.pipeline > 0 ? formatCurrencyShort(quotationKpis.pipeline) : String(quotationKpis.total)}
-          sub={`${quotationKpis.acceptanceRate}% acceptance rate`}
-          icon={FileText}
-          color="purple"
-          onClick={() => navigate('/quotations')}
-        />
-        <KpiCard
           title="Itineraries"
           value={String(itineraries.length)}
           sub={`${itineraries.filter(i => i.status === 'finalized').length} finalized`}
@@ -760,33 +744,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-gray-500" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 space-y-0">
-            {recentActivity.length === 0 ? (
-              <p className="text-xs text-gray-400 py-4 text-center">No activity yet</p>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {recentActivity.slice(0, 8).map(a => (
-                  <div key={a.id} className="py-2">
-                    <p className="text-xs text-gray-700 leading-snug">{a.description}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {new Date(a.timestamp).toLocaleTimeString('en-IN', {
-                        hour: '2-digit', minute: '2-digit', hour12: true,
-                      })} · {a.date}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* ── Recent Receivable Payments ─────────────────── */}

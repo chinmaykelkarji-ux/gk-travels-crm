@@ -360,12 +360,13 @@ export interface Trip {
   convertedBy?: string;
 
   // Nested collections
-  timeline: TimelineEvent[];
-  itinerary: TripItineraryDay[];
-  documents: TravelDocument[];
-  flights?: FlightDetail[];
-  hotels?: HotelDetail[];
-  activities?: unknown[];
+  timeline:     TimelineEvent[];
+  itinerary:    TripItineraryDay[];
+  documents:    TravelDocument[];
+  passengerIds?: string[];  // PAX-YYYY-NNNN IDs, defaults to []
+  flights?:     FlightDetail[];
+  hotels?:      HotelDetail[];
+  activities?:  unknown[];
 }
 
 export interface Lead {
@@ -480,9 +481,10 @@ export interface Booking {
   // financialStatus is SEPARATE from status (BookingStatus) — never overwrite status with it
   financialStatus?: FinancialStatus;
 
-  detail: BookingDetail;
-  createdDate: string;
-  notes: string;
+  detail:       BookingDetail;
+  passengerIds?: string[];
+  createdDate:  string;
+  notes:        string;
 }
 
 export interface Payment {
@@ -695,6 +697,43 @@ export interface VendorPayment {
   createdDate:  string;
 }
 
+// ─── Passenger Master ────────────────────────────────────────
+
+export type PassengerVisaStatus = 'none' | 'applied' | 'approved' | 'rejected' | 'expired';
+
+export interface Passenger {
+  id:                    string;   // PAX-YYYY-NNNN
+  customerId?:           string;
+
+  firstName:             string;
+  lastName:              string;
+  displayName?:          string;
+  dateOfBirth?:          string;
+  nationality?:          string;
+  gender?:               string;
+
+  passportNumber?:       string;
+  passportIssueDate?:    string;
+  passportExpiry?:       string;
+  placeOfIssue?:         string;
+
+  visaStatus?:           PassengerVisaStatus | string;
+  visaExpiry?:           string;
+  visaCountry?:          string;
+  visaType?:             string;
+
+  frequentFlyerNumber?:  string;
+  mealPreference?:       string;
+  seatPreference?:       string;
+
+  emergencyContactName?:  string;
+  emergencyContactPhone?: string;
+  emergencyRelation?:     string;
+
+  notes?:                string;
+  createdDate:           string;
+}
+
 // ─── Itinerary ───────────────────────────────────────────────
 
 export type ItineraryStatus   = 'draft' | 'finalized';
@@ -735,6 +774,7 @@ export interface Itinerary {
   notes?:           string;
   emergencyContact?: string;
   template?:        ItineraryTemplate;
+  passengerIds?:    string[];
   createdDate:      string;
   days:             ItineraryDay[];
 }
@@ -821,6 +861,7 @@ export interface Voucher {
   pax:              number;
   notes?:           string;
   emergencyContact?: string;
+  passengerIds?:    string[];
   internalNotes?:   string;
   createdDate:      string;
 }
@@ -831,6 +872,7 @@ export interface GKStoreState {
   trips:           Trip[];
   leads:           Lead[];
   customers:       Customer[];
+  passengers:      Passenger[];
   bookings:        Booking[];
   tasks:           Task[];
   reminders:       Reminder[];
