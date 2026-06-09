@@ -343,32 +343,42 @@ export const useStore = create<GKStore>()(
       },
 
       updateTrip(id, data) {
-        set((s: GKStore) => ({
-          trips: s.trips.map(t => {
+        set((s: GKStore) => {
+          const newTrips = s.trips.map(t => {
             if (t.id !== id) return t;
             const updated = { ...t, ...data };
             const totals  = supplierTotalsForTrip(s, id);
             const fin     = calcTripFinance({ ...updated, ...totals });
             return {
               ...updated,
-              gstAmount:   fin.gstAmount,
+              gstAmount:    fin.gstAmount,
               taxableAmount: fin.taxableAmount,
               totalPayable: fin.totalPayable,
-              paidAmount:  fin.paidAmount,
-              balanceDue:  fin.balanceDue,
+              paidAmount:   fin.paidAmount,
+              balanceDue:   fin.balanceDue,
               supplierCost: fin.supplierCost,
-              grossMargin: fin.grossMargin,
-              marginPct:   fin.marginPct,
+              grossMargin:  fin.grossMargin,
+              marginPct:    fin.marginPct,
             };
-          }),
-        }));
+          });
+          const newPayable = newTrips.find(t => t.id === id)?.totalPayable ?? null;
+          const newReceivables = s.receivables.map(r => {
+            if (r.tripId !== id || newPayable === null) return r;
+            const fin = calcReceivableFinance({ invoiceAmount: newPayable, entries: r.entries, dueDate: r.dueDate });
+            return { ...r, invoiceAmount: newPayable, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue, status: fin.status };
+          });
+          return { trips: newTrips, receivables: newReceivables };
+        });
         const updated = get().trips.find(t => t.id === id);
         if (updated) void apiClient.put(`/trips/${id}`, updated).catch(onMutationError(''));
         get().refreshAllReminders();
       },
 
       deleteTrip(id) {
-        set((s: GKStore) => ({ trips: s.trips.filter(t => t.id !== id) }));
+        set((s: GKStore) => ({
+          trips:       s.trips.filter(t => t.id !== id),
+          receivables: s.receivables.filter(r => r.tripId !== id),
+        }));
         void apiClient.delete(`/trips/${id}`).catch(onMutationError(''));
       },
 
@@ -719,14 +729,21 @@ export const useStore = create<GKStore>()(
       },
 
       updateBooking(id, data) {
-        set((s: GKStore) => ({
-          bookings: s.bookings.map(b => {
+        set((s: GKStore) => {
+          const newBookings = s.bookings.map(b => {
             if (b.id !== id) return b;
             const updated = { ...b, ...data };
             const fin     = calcBookingFinance(updated);
             return { ...updated, ...fin };
-          }),
-        }));
+          });
+          const newPayable = newBookings.find(b => b.id === id)?.totalPayable ?? null;
+          const newReceivables = s.receivables.map(r => {
+            if (r.bookingId !== id || newPayable === null) return r;
+            const fin = calcReceivableFinance({ invoiceAmount: newPayable, entries: r.entries, dueDate: r.dueDate });
+            return { ...r, invoiceAmount: newPayable, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue, status: fin.status };
+          });
+          return { bookings: newBookings, receivables: newReceivables };
+        });
         const booking = get().bookings.find(b => b.id === id);
         if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(onMutationError(''));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
@@ -734,7 +751,10 @@ export const useStore = create<GKStore>()(
 
       deleteBooking(id) {
         const booking = get().bookings.find(b => b.id === id);
-        set((s: GKStore) => ({ bookings: s.bookings.filter(b => b.id !== id) }));
+        set((s: GKStore) => ({
+          bookings:    s.bookings.filter(b => b.id !== id),
+          receivables: s.receivables.filter(r => r.bookingId !== id),
+        }));
         void apiClient.delete(`/bookings/${id}`).catch(onMutationError(''));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
