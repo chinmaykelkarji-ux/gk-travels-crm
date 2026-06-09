@@ -751,8 +751,13 @@ window.BookingsModule = {
     const b = window.GKData.bookings.find(x => x.id === id);
     if (!b) return;
     if (!confirm(`Delete ${b.type} booking ${b.id} for ${b.customerName}? This cannot be undone.`)) return;
-    window.GKData.bookings = window.GKData.bookings.filter(x => x.id !== id);
+    window.GKData.bookings  = window.GKData.bookings.filter(x => x.id !== id);
     window.GKData.reminders = window.GKData.reminders.filter(r => r.bookingId !== id);
+    // Recalculate linked trip's supplier cost now that this booking is gone
+    if (b.refId) {
+      const trip = window.GKData.trips.find(t => t.id === b.refId);
+      if (trip) window.GKData.calcTripFinance(trip);
+    }
     window.GKData.save();
     this.backToList();
   },

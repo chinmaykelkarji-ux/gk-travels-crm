@@ -88,12 +88,13 @@ window.CustomersModule = {
   },
 
   customerCard(c) {
-    const spend    = this.calcSpend(c.id);
-    const bookings = this.getCustomerBookings(c.id);
-    const trips    = this.getCustomerTrips(c.id);
-    const initials = (c.name || 'GK').split(' ').map(w => w[0]).join('').substr(0, 2).toUpperCase();
-    const colors   = ['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-teal-500'];
-    const colorClass = colors[c.name ? c.name.charCodeAt(0) % colors.length : 0];
+    const spend       = this.calcSpend(c.id);
+    const outstanding = this.calcOutstanding(c.id);
+    const bookings    = this.getCustomerBookings(c.id);
+    const trips       = this.getCustomerTrips(c.id);
+    const initials    = (c.name || 'GK').split(' ').map(w => w[0]).join('').substr(0, 2).toUpperCase();
+    const colors      = ['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-teal-500'];
+    const colorClass  = colors[c.name ? c.name.charCodeAt(0) % colors.length : 0];
 
     return `
 <div class="gk-card cursor-pointer hover:border-accent transition-colors" onclick="CustomersModule.openCustomer('${c.id}')">
@@ -108,7 +109,9 @@ window.CustomersModule = {
   <div class="flex items-center gap-3 text-xs text-gray-500 pt-2 border-t border-border">
     <span><i data-lucide="folder-open" class="w-3 h-3 inline-block mr-1"></i>${trips.length} trip${trips.length !== 1 ? 's' : ''}</span>
     <span><i data-lucide="ticket" class="w-3 h-3 inline-block mr-1"></i>${bookings.length} booking${bookings.length !== 1 ? 's' : ''}</span>
-    ${spend > 0 ? `<span class="ml-auto text-green-500 font-semibold">₹${this.fmtAmt(spend)}</span>` : ''}
+    ${outstanding > 0
+      ? `<span class="ml-auto text-orange-400 font-semibold">₹${this.fmtAmt(outstanding)} due</span>`
+      : spend > 0 ? `<span class="ml-auto text-green-500 font-semibold">₹${this.fmtAmt(spend)} paid</span>` : ''}
   </div>
 </div>`;
   },
@@ -129,10 +132,11 @@ window.CustomersModule = {
       { key: 'documents',  label: 'Documents',  icon: 'file-text' },
       { key: 'preferences',label: 'Preferences',icon: 'settings' }
     ];
-    const initials = (c.name || 'GK').split(' ').map(w => w[0]).join('').substr(0, 2).toUpperCase();
-    const spend     = this.calcSpend(c.id);
-    const bookings  = this.getCustomerBookings(c.id);
-    const trips     = this.getCustomerTrips(c.id);
+    const initials      = (c.name || 'GK').split(' ').map(w => w[0]).join('').substr(0, 2).toUpperCase();
+    const spend         = this.calcSpend(c.id);
+    const outstanding   = this.calcOutstanding(c.id);
+    const bookings      = this.getCustomerBookings(c.id);
+    const trips         = this.getCustomerTrips(c.id);
 
     return `
 <div class="p-6 lg:p-8 space-y-6">
@@ -166,7 +170,8 @@ window.CustomersModule = {
       <div class="flex gap-4 text-center">
         <div><div class="text-xl font-bold text-green-400">${trips.length}</div><div class="text-xs text-gray-500">Trips</div></div>
         <div><div class="text-xl font-bold text-blue-400">${bookings.length}</div><div class="text-xs text-gray-500">Bookings</div></div>
-        <div><div class="text-xl font-bold" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(spend)}</div><div class="text-xs text-gray-500">Total Spend</div></div>
+        <div><div class="text-xl font-bold" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(spend)}</div><div class="text-xs text-gray-500">Total Paid</div></div>
+        ${outstanding > 0 ? `<div><div class="text-xl font-bold text-orange-400" style="font-family:'Manrope',sans-serif;">₹${this.fmtAmt(outstanding)}</div><div class="text-xs text-gray-500">Outstanding</div></div>` : ''}
       </div>
     </div>
   </div>
@@ -264,7 +269,7 @@ window.CustomersModule = {
     if (!trips.length) return `<div class="gk-card text-center py-12"><i data-lucide="folder-open" class="w-10 h-10 mx-auto text-gray-600 mb-3"></i><p class="text-gray-400">No trips yet.</p></div>`;
     return `<div class="gk-card overflow-hidden">
 <table class="gk-table w-full">
-  <thead><tr><th>Trip ID</th><th>Destination</th><th>Type</th><th>Departure</th><th>Status</th><th>Amount</th><th></th></tr></thead>
+  <thead><tr><th>Trip ID</th><th>Destination</th><th>Type</th><th>Departure</th><th>Status</th><th>Amount</th><th>Balance Due</th><th></th></tr></thead>
   <tbody>
     ${trips.map(t => `<tr>
       <td class="trip-id">${t.id}</td>
@@ -273,6 +278,7 @@ window.CustomersModule = {
       <td class="text-sm">${this.fmtDate(t.departure)}</td>
       <td><span class="badge ${this.tripStatusColor(t.status)}">${t.status||'—'}</span></td>
       <td class="font-semibold">₹${this.fmt(t.totalAmount||0)}</td>
+      <td class="text-sm ${(t.balanceDue||0) > 0 ? 'text-orange-400 font-semibold' : 'text-gray-500'}">₹${this.fmt(t.balanceDue||0)}</td>
       <td><button onclick="GKApp.openTrip('${t.id}')" class="btn-icon"><i data-lucide="external-link" class="w-3.5 h-3.5"></i></button></td>
     </tr>`).join('')}
   </tbody>
@@ -532,6 +538,18 @@ window.CustomersModule = {
       .filter(b => b.customerId === custId || b.customerName === c.name)
       .reduce((s, b) => s + (b.advance || 0), 0);
     return tripPaid + bookingPaid;
+  },
+
+  calcOutstanding(custId) {
+    const c = window.GKData.customers.find(x => x.id === custId);
+    if (!c) return 0;
+    const tripBal = window.GKData.trips
+      .filter(t => t.customerId === custId || t.customer === c.name)
+      .reduce((s, t) => s + (t.balanceDue || 0), 0);
+    const bookBal = window.GKData.bookings
+      .filter(b => b.customerId === custId || b.customerName === c.name)
+      .reduce((s, b) => s + (b.balanceDue || 0), 0);
+    return tripBal + bookBal;
   },
 
   bookingDesc(b) {

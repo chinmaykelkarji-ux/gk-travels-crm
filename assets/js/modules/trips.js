@@ -97,8 +97,9 @@ window.TripsModule = {
 
   deleteTrip(id) {
     if (!confirm('Delete this trip file? This cannot be undone.')) return;
-    window.GKData.trips = window.GKData.trips.filter(t => t.id !== id);
-    // Remove related tasks, payments, reminders
+    window.GKData.trips    = window.GKData.trips.filter(t => t.id !== id);
+    // Remove all records linked to this trip
+    window.GKData.bookings = window.GKData.bookings.filter(b => b.refId !== id);
     window.GKData.tasks    = window.GKData.tasks.filter(t => t.tripId !== id);
     window.GKData.payments.customerPayments = window.GKData.payments.customerPayments.filter(p => p.tripId !== id);
     window.GKData.payments.supplierPayments = window.GKData.payments.supplierPayments.filter(p => p.tripId !== id);
