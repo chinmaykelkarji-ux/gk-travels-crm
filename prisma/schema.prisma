@@ -23,33 +23,25 @@ model User {
 
 model Customer {
   id             String   @id
-  // Sequential, human-facing display number ("Customer #N"). DB-generated
-  // only — never accepted from the client. Backed by its own Postgres
-  // sequence so values are atomic, gap-free under concurrency, and never
-  // reused even after a delete.
-  customerNumber Int      @unique @default(autoincrement())
-  name         String
-  phone        String
-  altPhone     String?
-  email        String?
-  address      String?
-  city         String?
-  preferences  Json     @default("{}")
-  notes        String?
-  tripIds      Json     @default("[]")
-  documents    Json     @default("[]")
-  createdDate  String
-  sourceLeadId String?
-
-  // GST / business details (optional — retail customers don't need these)
-  gstNumber      String?
-  companyName    String?
+  name           String
+  phone          String
+  altPhone       String?
+  email          String?
+  address        String?
+  city           String?
+  preferences    Json     @default("{}")
+  notes          String?
+  tripIds        Json     @default("[]")
+  documents      Json     @default("[]")
+  createdDate    String
+  sourceLeadId   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   billingAddress String?
-  state          String?
+  companyName    String?
+  gstNumber      String?
   gstRegistered  Boolean  @default(false)
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  state          String?
 
   @@map("customers")
 }
@@ -84,11 +76,6 @@ model Lead {
 
 model Trip {
   id                  String    @id
-  // Sequential, human-facing display number ("Trip #N"). DB-generated only —
-  // never accepted from the client. Backed by its own Postgres sequence so
-  // values are atomic, gap-free under concurrency, and never reused even
-  // after a delete.
-  tripNumber          Int       @unique @default(autoincrement())
   customer            String
   phone               String    @default("")
   email               String?
@@ -101,8 +88,6 @@ model Trip {
   status              String    @default("draft")
   totalAmount         Float?
   gstRate             Float     @default(5)
-  gstMode             GstMode   @default(EXCLUDED)
-  taxableAmount       Float     @default(0)
   discount            Float     @default(0)
   gstAmount           Float     @default(0)
   totalPayable        Float?
@@ -126,9 +111,11 @@ model Trip {
   timeline            Json      @default("[]")
   itinerary           Json      @default("[]")
   documents           Json      @default("[]")
-  passengerIds        Json      @default("[]")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+  gstMode             GstMode   @default(EXCLUDED)
+  taxableAmount       Float     @default(0)
+  passengerIds        Json      @default("[]")
   payments            Payment[]
   tasks               Task[]
 
@@ -136,53 +123,36 @@ model Trip {
 }
 
 model Booking {
-id              String   @id
-type            String
-status          String   @default("pending")
-
-financialStatus String   @default("unpaid")
-
-customerName    String
-customerId      String?
-refId           String?
-
-sellingPrice    Float?
-supplierCost    Float    @default(0)
-
-advance         Float    @default(0)
-supplierPaid    Float    @default(0)
-
-gstRate         Float    @default(0)
-gstMode         GstMode  @default(EXCLUDED)
-gstAmount       Float    @default(0)
-taxableAmount   Float    @default(0)
-
-// Service Margin Mode (flight/train/bus/hotel/cab/activity & other vendor-
-// arranged services): Convenience Fee is a manually entered service charge;
-// GST applies ONLY on it — never on the full supplier/vendor amount.
-// Invoice Total = Supplier Cost + Convenience Fee (+ GST on fee when
-// EXCLUDED). taxableFee/gstOnFee are the GST breakdown of the convenience fee.
-serviceMarginMode Boolean @default(false)
-convenienceFee    Float   @default(0)
-taxableFee        Float   @default(0)
-gstOnFee          Float   @default(0)
-
-totalPayable    Float?
-balanceDue      Float    @default(0)
-
-supplierPending Float    @default(0)
-
-grossMargin     Float    @default(0)
-marginPct       Float    @default(0)
-
-detail          Json     @default("{}")
-passengerIds    Json     @default("[]")
-notes           String   @default("")
-
-createdDate     String
-
-createdAt       DateTime @default(now())
-updatedAt       DateTime @updatedAt
+  id                String   @id
+  type              String
+  status            String   @default("pending")
+  customerName      String
+  customerId        String?
+  refId             String?
+  sellingPrice      Float?
+  supplierCost      Float    @default(0)
+  advance           Float    @default(0)
+  supplierPaid      Float    @default(0)
+  gstRate           Float    @default(0)
+  gstAmount         Float    @default(0)
+  totalPayable      Float?
+  balanceDue        Float    @default(0)
+  supplierPending   Float    @default(0)
+  grossMargin       Float    @default(0)
+  marginPct         Float    @default(0)
+  detail            Json     @default("{}")
+  notes             String   @default("")
+  createdDate       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  gstMode           GstMode  @default(EXCLUDED)
+  taxableAmount     Float    @default(0)
+  convenienceFee    Float    @default(0)
+  financialStatus   String   @default("unpaid")
+  gstOnFee          Float    @default(0)
+  taxableFee        Float    @default(0)
+  serviceMarginMode Boolean  @default(false)
+  passengerIds      Json     @default("[]")
 
   @@map("bookings")
 }
@@ -209,26 +179,20 @@ model Payment {
 }
 
 model Receivable {
-  id            String   @id
+  id            String            @id
   customerId    String?
   customerName  String
   bookingId     String?
   tripId        String?
   invoiceAmount Float
-  description   String   @default("")
+  description   String            @default("")
   dueDate       String?
-
-  // Cached aggregates — pure numeric derivations of entries, recalculated on
-  // every entry change (mirrors Booking.financialStatus pattern). Status
-  // ('pending'/'partial'/'paid'/'overdue') is intentionally NOT stored here:
-  // 'overdue' depends on today's date and is always derived live.
-  totalReceived Float    @default(0)
-  balanceDue    Float    @default(0)
-
-  notes         String   @default("")
+  totalReceived Float             @default(0)
+  balanceDue    Float             @default(0)
+  notes         String            @default("")
   createdDate   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
   entries       ReceivableEntry[]
 
   @@index([customerId])
@@ -240,27 +204,16 @@ model Receivable {
 model ReceivableEntry {
   id           String     @id
   receivableId String
-  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
   amount       Float
   paymentDate  String
   paymentMode  String
   reference    String?
   notes        String?
   createdAt    DateTime   @default(now())
+  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
 
   @@index([receivableId])
   @@map("receivable_entries")
-}
-
-enum FinancialTransactionType {
-  RECEIVABLE
-  PAYMENT_RECEIVED
-  PAYABLE
-  PAYMENT_SENT
-  GST_OUTPUT
-  GST_INPUT
-  REFUND
-  ADJUSTMENT
 }
 
 model FinancialTransaction {
@@ -313,17 +266,17 @@ model Task {
 model ActivityLog {
   id          String   @id @default(cuid())
   action      String
-  title       String?
   description String
   entityType  String
   entityId    String
   userId      String?
-  metadata    Json?
   timestamp   String
   date        String
   before      Json?
   after       Json?
   createdAt   DateTime @default(now())
+  metadata    Json?
+  title       String?
 
   @@index([entityType, entityId])
   @@index([date])
@@ -333,7 +286,7 @@ model ActivityLog {
 
 model Communication {
   id         String   @id @default(cuid())
-  type       String   // 'whatsapp' | 'email'
+  type       String
   recipient  String
   subject    String?
   entityType String
@@ -420,22 +373,9 @@ model Quotation {
   endDate         String?
   pax             Int             @default(1)
   status          String          @default("draft")
-  approvalStatus  String          @default("DRAFT")
-  approvalComment String?
-  submittedBy     String?
-  submittedAt     String?
-  approvedBy      String?
-  approvedAt      String?
   notes           String?
   termsAndConds   String?
   validUntil      String?
-  inclusions      String?
-  exclusions      String?
-  paymentPolicy   String?
-  gstRate         Float           @default(0)
-  gstMode         GstMode         @default(EXCLUDED)
-  gstAmount       Float           @default(0)
-  taxableAmount   Float           @default(0)
   totalCost       Float           @default(0)
   totalSelling    Float           @default(0)
   grossProfit     Float           @default(0)
@@ -448,6 +388,19 @@ model Quotation {
   rejectedAt      String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
+  gstMode         GstMode         @default(EXCLUDED)
+  taxableAmount   Float           @default(0)
+  exclusions      String?
+  gstAmount       Float           @default(0)
+  gstRate         Float           @default(0)
+  inclusions      String?
+  paymentPolicy   String?
+  approvalComment String?
+  approvalStatus  String          @default("DRAFT")
+  approvedAt      String?
+  approvedBy      String?
+  submittedAt     String?
+  submittedBy     String?
   items           QuotationItem[]
 
   @@index([status])
@@ -495,10 +448,10 @@ model Itinerary {
   notes            String?
   emergencyContact String?
   template         String?
-  passengerIds     Json           @default("[]")
   createdDate      String
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  passengerIds     Json           @default("[]")
   days             ItineraryDay[]
 
   @@index([tripId])
@@ -583,18 +536,18 @@ model Voucher {
   vendorPhone      String?
   vendorEmail      String?
   pax              Int      @default(1)
-  gstRate          Float    @default(0)
-  gstMode          GstMode  @default(EXCLUDED)
-  gstAmount        Float    @default(0)
-  taxableAmount    Float    @default(0)
-  totalPayable     Float?
-  passengerIds     Json     @default("[]")
   notes            String?
   emergencyContact String?
   internalNotes    String?
   createdDate      String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  gstAmount        Float    @default(0)
+  gstMode          GstMode  @default(EXCLUDED)
+  gstRate          Float    @default(0)
+  taxableAmount    Float    @default(0)
+  totalPayable     Float?
+  passengerIds     Json     @default("[]")
 
   @@index([tripId])
   @@index([vendorId])
@@ -606,32 +559,26 @@ model Voucher {
 model Passenger {
   id                    String   @id
   customerId            String?
-
   firstName             String
   lastName              String
   displayName           String?
   dateOfBirth           String?
   nationality           String?
   gender                String?
-
   passportNumber        String?
   passportIssueDate     String?
   passportExpiry        String?
   placeOfIssue          String?
-
   visaStatus            String?
   visaExpiry            String?
   visaCountry           String?
   visaType              String?
-
   frequentFlyerNumber   String?
   mealPreference        String?
   seatPreference        String?
-
   emergencyContactName  String?
   emergencyContactPhone String?
   emergencyRelation     String?
-
   notes                 String?
   createdDate           String
   createdAt             DateTime @default(now())
@@ -640,6 +587,17 @@ model Passenger {
   @@index([customerId])
   @@index([passportNumber])
   @@map("passengers")
+}
+
+enum FinancialTransactionType {
+  RECEIVABLE
+  PAYMENT_RECEIVED
+  PAYABLE
+  PAYMENT_SENT
+  GST_OUTPUT
+  GST_INPUT
+  REFUND
+  ADJUSTMENT
 }
 
 enum Role {
