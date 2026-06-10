@@ -76,6 +76,7 @@ model Lead {
 
 model Trip {
   id                  String    @id
+  invoiceId           String?
   customer            String
   phone               String    @default("")
   email               String?
@@ -124,6 +125,7 @@ model Trip {
 
 model Booking {
   id                String   @id
+  invoiceId         String?
   type              String
   status            String   @default("pending")
   customerName      String
@@ -184,6 +186,7 @@ model Receivable {
   customerName  String
   bookingId     String?
   tripId        String?
+  invoiceId     String?
   invoiceAmount Float
   description   String            @default("")
   dueDate       String?
@@ -198,6 +201,7 @@ model Receivable {
   @@index([customerId])
   @@index([bookingId])
   @@index([tripId])
+  @@index([invoiceId])
   @@map("receivables")
 }
 
@@ -587,6 +591,258 @@ model Passenger {
   @@index([customerId])
   @@index([passportNumber])
   @@map("passengers")
+}
+
+// ============================================================
+// GST INVOICING — Company Master, Numbering, Invoices, CN/DN
+// ============================================================
+
+// Singleton row (id = "default") holding the agency's GST/legal/bank
+// details. Printed on Invoices, Credit/Debit Notes, Quotations, Vouchers.
+model CompanySettings {
+  id                  String   @id @default("default")
+  companyName         String   @default("GK Travels")
+  legalName           String?
+  gstin               String?
+  pan                 String?
+  addressLine1        String?
+  addressLine2        String?
+  city                String?
+  state               String?
+  stateCode           String?
+  pincode             String?
+  phone               String?
+  email               String?
+  website             String?
+  logoUrl             String?
+  bankName            String?
+  bankAccountName     String?
+  bankAccountNumber   String?
+  bankIfsc            String?
+  bankBranch          String?
+  invoicePrefix       String   @default("GK")
+  invoiceTerms        String?
+  authorizedSignatory String?
+  signatureUrl        String?
+  // GST returns filed up to this date (inclusive) — invoices/CN/DN dated on
+  // or before this date are frozen (no edit/cancel/delete).
+  gstFrozenUntil      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// Per (docType, financialYear) running counter for sequential, gap-free
+// document numbering (GK/2026-27/01, CN/2026-27/0001, DN/2026-27/0001).
+model NumberingSequence {
+  id            String   @id
+  docType       String
+  financialYear String
+  lastNumber    Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  @@unique([docType, financialYear])
+  @@map("numbering_sequences")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum DocStatus {
+  ISSUED
+  CANCELLED
+}
+
+enum GstType {
+  INTRA
+  INTER
+}
+
+model Invoice {
+  id                String          @id
+  invoiceNumber     String          @unique
+  financialYear     String
+  sequenceNumber    Int
+  status            InvoiceStatus   @default(ISSUED)
+  invoiceDate       String
+  dueDate           String?
+
+  // Customer / billing snapshot
+  customerId        String?
+  customerName      String
+  customerAddress   String?
+  customerGstin     String?
+  customerStateCode String?
+  placeOfSupply     String?
+
+  // Company snapshot at time of issue (immutable even if Company Master changes later)
+  companyName       String
+  companyAddress    String?
+  companyGstin      String?
+  companyStateCode  String?
+
+  // GST breakdown
+  gstType           GstType         @default(INTRA)
+  taxableAmount     Float           @default(0)
+  cgstAmount        Float           @default(0)
+  sgstAmount        Float           @default(0)
+  igstAmount        Float           @default(0)
+  totalGstAmount    Float           @default(0)
+  totalAmount       Float           @default(0)
+
+  notes             String?
+  termsAndConds     String?
+
+  // Source bookings/trips this invoice was generated from (locked once invoiced)
+  bookingIds        Json            @default("[]")
+  tripIds           Json            @default("[]")
+  receivableId      String?
+
+  createdDate       String
+  createdBy         String?
+  cancelledAt       String?
+  cancelledBy       String?
+  cancelReason      String?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  items             InvoiceLineItem[]
+  creditNotes       CreditNote[]
+  debitNotes        DebitNote[]
+
+  @@index([customerId])
+  @@index([financialYear])
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  hsnSac      String?
+  serviceType String?
+  bookingId   String?
+  quantity    Float   @default(1)
+  rate        Float   @default(0)
+  amount      Float   @default(0)
+  gstRate     Float   @default(0)
+  gstAmount   Float   @default(0)
+  totalAmount Float   @default(0)
+  sortOrder   Int     @default(0)
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
+}
+
+model CreditNote {
+  id               String              @id
+  creditNoteNumber String              @unique
+  financialYear    String
+  sequenceNumber   Int
+  status           DocStatus           @default(ISSUED)
+  date             String
+  invoiceId        String
+  invoice          Invoice             @relation(fields: [invoiceId], references: [id])
+  customerId       String?
+  customerName     String
+  reason           String
+  reasonDetails    String?
+  taxableAmount    Float               @default(0)
+  cgstAmount       Float               @default(0)
+  sgstAmount       Float               @default(0)
+  igstAmount       Float               @default(0)
+  totalGstAmount   Float               @default(0)
+  totalAmount      Float               @default(0)
+  notes            String?
+  createdDate      String
+  createdBy        String?
+  cancelledAt      String?
+  cancelledBy      String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  items            CreditNoteLineItem[]
+
+  @@index([invoiceId])
+  @@index([financialYear])
+  @@index([customerId])
+  @@map("credit_notes")
+}
+
+model CreditNoteLineItem {
+  id           String     @id @default(cuid())
+  creditNoteId String
+  description  String
+  hsnSac       String?
+  quantity     Float      @default(1)
+  rate         Float      @default(0)
+  amount       Float      @default(0)
+  gstRate      Float      @default(0)
+  gstAmount    Float      @default(0)
+  totalAmount  Float      @default(0)
+  sortOrder    Int        @default(0)
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+
+  @@index([creditNoteId])
+  @@map("credit_note_line_items")
+}
+
+model DebitNote {
+  id              String             @id
+  debitNoteNumber String             @unique
+  financialYear   String
+  sequenceNumber  Int
+  status          DocStatus          @default(ISSUED)
+  date            String
+  invoiceId       String
+  invoice         Invoice            @relation(fields: [invoiceId], references: [id])
+  customerId      String?
+  customerName    String
+  reason          String
+  reasonDetails   String?
+  taxableAmount   Float              @default(0)
+  cgstAmount      Float              @default(0)
+  sgstAmount      Float              @default(0)
+  igstAmount      Float              @default(0)
+  totalGstAmount  Float              @default(0)
+  totalAmount     Float              @default(0)
+  notes           String?
+  createdDate     String
+  createdBy       String?
+  cancelledAt     String?
+  cancelledBy     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  items           DebitNoteLineItem[]
+
+  @@index([invoiceId])
+  @@index([financialYear])
+  @@index([customerId])
+  @@map("debit_notes")
+}
+
+model DebitNoteLineItem {
+  id          String    @id @default(cuid())
+  debitNoteId String
+  description String
+  hsnSac      String?
+  quantity    Float     @default(1)
+  rate        Float     @default(0)
+  amount      Float     @default(0)
+  gstRate     Float     @default(0)
+  gstAmount   Float     @default(0)
+  totalAmount Float     @default(0)
+  sortOrder   Int       @default(0)
+  debitNote   DebitNote @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
+
+  @@index([debitNoteId])
+  @@map("debit_note_line_items")
 }
 
 enum FinancialTransactionType {

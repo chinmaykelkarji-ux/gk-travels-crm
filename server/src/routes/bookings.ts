@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { createReceivable } from '../services/financeService.js';
 import { logActivity } from '../lib/activity.js';
 
 const router = Router();
@@ -32,23 +31,10 @@ router.post('/', async (req: AuthRequest, res) => {
       create: sanitize(req.body) as Parameters<typeof prisma.booking.create>[0]['data'],
     });
 
-    // Brand-new priced booking → automatically raise its receivable + post to
-    // the activity feed, mirroring trip creation (Phase 1/2 automation).
+    // Brand-new booking → post to the activity feed. Receivables are now
+    // raised exclusively from GST Invoices (see invoiceService.createInvoice),
+    // not automatically on booking creation.
     if (!existed) {
-      if (b.totalPayable && b.totalPayable > 0) {
-        await createReceivable({
-          sourceType:    'booking',
-          sourceId:      b.id,
-          bookingId:     b.id,
-          customerId:    b.customerId,
-          customerName:  b.customerName,
-          amount:        b.totalPayable,
-          gstAmount:     b.gstAmount,
-          taxableAmount: b.taxableAmount,
-          description: `Booking ${b.id} (${b.type})`,
-          createdBy:     req.userId,
-        });
-      }
       await logActivity(prisma, {
         action:      'booking_created',
         description: `Booking ${b.id} (${b.type}) created for ${b.customerName}`,

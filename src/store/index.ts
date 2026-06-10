@@ -19,6 +19,9 @@ import type {
   Voucher, VoucherStatus,
   Receivable, ReceivableEntry,
   Communication,
+  Invoice, CreditNote, DebitNote, CompanySettings,
+  CreateInvoiceInput, UpdateInvoiceInput,
+  CreateCreditNoteInput, CreateDebitNoteInput,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
 import { getApiErrorMessage } from '@/shared/utils/error';
@@ -105,6 +108,10 @@ const defaultState: GKStoreState = {
   vouchers:       [],
   receivables:    [],
   staff:          defaultStaff,
+  invoices:        [],
+  creditNotes:     [],
+  debitNotes:      [],
+  companySettings: null,
   dataLoading:    true,
   dataError:      null,
 };
@@ -226,6 +233,25 @@ interface StoreActions {
   addReceivableEntry:    (receivableId: string, entry: Partial<ReceivableEntry>) => ReceivableEntry | null;
   deleteReceivableEntry: (receivableId: string, entryId: string) => void;
   updateReceivableEntry: (receivableId: string, entryId: string, data: Partial<ReceivableEntry>) => void;
+
+  // â”€â”€ Invoices (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Server computes numbering, GST splits, and receivable linkage —
+  // these calls are NOT optimistic; the store updates from the response.
+  createInvoice: (data: CreateInvoiceInput) => Promise<{ ok: boolean; invoice?: Invoice; reason?: string }>;
+  updateInvoice: (id: string, data: UpdateInvoiceInput) => Promise<{ ok: boolean; invoice?: Invoice; reason?: string }>;
+  cancelInvoice: (id: string, reason: string) => Promise<{ ok: boolean; invoice?: Invoice; reason?: string }>;
+  deleteInvoice: (id: string) => Promise<{ ok: boolean; reason?: string }>;
+
+  // â”€â”€ Credit Notes (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  createCreditNote: (data: CreateCreditNoteInput) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
+  cancelCreditNote: (id: string) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
+
+  // â”€â”€ Debit Notes (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  createDebitNote: (data: CreateDebitNoteInput) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
+  cancelDebitNote: (id: string) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
+
+  // â”€â”€ Company Master â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  updateCompanySettings: (data: Partial<CompanySettings>) => Promise<{ ok: boolean; settings?: CompanySettings; reason?: string }>;
 
   // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clearAll:    () => void;
@@ -1643,6 +1669,120 @@ export const useStore = create<GKStore>()(
           .catch(onMutationError(''));
       },
 
+      // â•â• Invoice Actions (GST) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+      async createInvoice(data) {
+        try {
+          const res = await apiClient.post('/invoices', data);
+          const invoice = res.data as Invoice;
+          set((s: GKStore) => ({ invoices: [invoice, ...s.invoices] }));
+          await get().fetchAll();
+          return { ok: true, invoice };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Invoice creation failed') };
+        }
+      },
+
+      async updateInvoice(id, data) {
+        try {
+          const res = await apiClient.put(`/invoices/${id}`, data);
+          const invoice = res.data as Invoice;
+          set((s: GKStore) => ({ invoices: s.invoices.map(i => i.id === id ? invoice : i) }));
+          await get().fetchAll();
+          return { ok: true, invoice };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Invoice update failed') };
+        }
+      },
+
+      async cancelInvoice(id, reason) {
+        try {
+          const res = await apiClient.post(`/invoices/${id}/cancel`, { reason });
+          const invoice = res.data as Invoice;
+          set((s: GKStore) => ({ invoices: s.invoices.map(i => i.id === id ? invoice : i) }));
+          await get().fetchAll();
+          return { ok: true, invoice };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Invoice cancellation failed') };
+        }
+      },
+
+      async deleteInvoice(id) {
+        try {
+          await apiClient.delete(`/invoices/${id}`);
+          set((s: GKStore) => ({ invoices: s.invoices.filter(i => i.id !== id) }));
+          await get().fetchAll();
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Invoice deletion failed') };
+        }
+      },
+
+      // â•â• Credit Note Actions (GST) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+      async createCreditNote(data) {
+        try {
+          const res = await apiClient.post('/credit-notes', data);
+          const creditNote = res.data as CreditNote;
+          set((s: GKStore) => ({ creditNotes: [creditNote, ...s.creditNotes] }));
+          await get().fetchAll();
+          return { ok: true, creditNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Credit note creation failed') };
+        }
+      },
+
+      async cancelCreditNote(id) {
+        try {
+          const res = await apiClient.post(`/credit-notes/${id}/cancel`);
+          const creditNote = res.data as CreditNote;
+          set((s: GKStore) => ({ creditNotes: s.creditNotes.map(c => c.id === id ? creditNote : c) }));
+          await get().fetchAll();
+          return { ok: true, creditNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Credit note cancellation failed') };
+        }
+      },
+
+      // â•â• Debit Note Actions (GST) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+      async createDebitNote(data) {
+        try {
+          const res = await apiClient.post('/debit-notes', data);
+          const debitNote = res.data as DebitNote;
+          set((s: GKStore) => ({ debitNotes: [debitNote, ...s.debitNotes] }));
+          await get().fetchAll();
+          return { ok: true, debitNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Debit note creation failed') };
+        }
+      },
+
+      async cancelDebitNote(id) {
+        try {
+          const res = await apiClient.post(`/debit-notes/${id}/cancel`);
+          const debitNote = res.data as DebitNote;
+          set((s: GKStore) => ({ debitNotes: s.debitNotes.map(d => d.id === id ? debitNote : d) }));
+          await get().fetchAll();
+          return { ok: true, debitNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Debit note cancellation failed') };
+        }
+      },
+
+      // â•â• Company Master â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+      async updateCompanySettings(data) {
+        try {
+          const res = await apiClient.put('/company-settings', data);
+          const settings = res.data as CompanySettings;
+          set({ companySettings: settings });
+          return { ok: true, settings };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Company settings update failed') };
+        }
+      },
+
       clearAll() {
         set({ ...defaultState, dataLoading: false, dataError: null });
       },
@@ -1679,6 +1819,10 @@ export const useStore = create<GKStore>()(
               vouchers:       Voucher[];
               receivables:    Receivable[];
               communications: Communication[];
+              invoices:        Invoice[];
+              creditNotes:     CreditNote[];
+              debitNotes:      DebitNote[];
+              companySettings: CompanySettings | null;
             };
 
             set({
@@ -1698,6 +1842,10 @@ export const useStore = create<GKStore>()(
               vouchers:       Array.isArray(d.vouchers)       ? d.vouchers       : [],
               receivables:    Array.isArray(d.receivables)    ? d.receivables    : [],
               communications: Array.isArray(d.communications) ? d.communications : [],
+              invoices:        Array.isArray(d.invoices)        ? d.invoices        : [],
+              creditNotes:     Array.isArray(d.creditNotes)     ? d.creditNotes     : [],
+              debitNotes:      Array.isArray(d.debitNotes)      ? d.debitNotes      : [],
+              companySettings: d.companySettings ?? null,
               dataLoading:    false,
               dataError:      null,
             });
@@ -1747,6 +1895,9 @@ export const selectors = {
   customerById: (id: string) => (s: GKStore) => s.customers.find(c => c.id === id),
   bookingById:   (id: string) => (s: GKStore) => s.bookings.find(b => b.id === id),
   passengerById: (id: string) => (s: GKStore) => s.passengers.find(p => p.id === id),
+  invoiceById:    (id: string) => (s: GKStore) => s.invoices.find(i => i.id === id),
+  creditNoteById: (id: string) => (s: GKStore) => s.creditNotes.find(c => c.id === id),
+  debitNoteById:  (id: string) => (s: GKStore) => s.debitNotes.find(d => d.id === id),
 
   passengersForCustomer: (customerId: string) => (s: GKStore) =>
     s.passengers.filter(p => p.customerId === customerId),

@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
 import {
   Settings as SettingsIcon, Database, Trash2,
   Users, Plus, Edit2, KeyRound, Shield, CheckCircle, XCircle,
+  Building2, Save,
 } from 'lucide-react';
 import { useStore } from '@/store';
-import { useAuth } from '@/backend/auth/AuthContext';
+import { useAuth, usePermission } from '@/backend/auth/AuthContext';
+import { PERMISSIONS } from '@/backend/auth/permissions';
 import apiClient from '@/lib/apiClient';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -19,6 +21,7 @@ import { confirm } from '@/shared/hooks/useConfirm';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/utils/cn';
 import { getApiErrorMessage } from '@/shared/utils/error';
+import type { CompanySettings } from '@/shared/types';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -408,6 +411,239 @@ function UsersTab() {
   );
 }
 
+// ─── Company Master tab ────────────────────────────────────────
+
+type CompanyForm = Omit<CompanySettings, 'id'>;
+
+const EMPTY_COMPANY_FORM: CompanyForm = {
+  companyName:         '',
+  legalName:           '',
+  gstin:               '',
+  pan:                 '',
+  addressLine1:        '',
+  addressLine2:        '',
+  city:                '',
+  state:               '',
+  stateCode:           '',
+  pincode:             '',
+  phone:               '',
+  email:               '',
+  website:             '',
+  logoUrl:             '',
+  bankName:            '',
+  bankAccountName:     '',
+  bankAccountNumber:   '',
+  bankIfsc:            '',
+  bankBranch:          '',
+  invoicePrefix:       'GK',
+  invoiceTerms:        '',
+  authorizedSignatory: '',
+  signatureUrl:        '',
+  gstFrozenUntil:      null,
+};
+
+function toFormValue(v: string | null | undefined): string {
+  return v ?? '';
+}
+
+function CompanyMasterTab() {
+  const companySettings       = useStore(s => s.companySettings);
+  const updateCompanySettings = useStore(s => s.updateCompanySettings);
+  const [form,   setForm]   = useState<CompanyForm>(EMPTY_COMPANY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!companySettings) return;
+    const { id: _id, ...rest } = companySettings;
+    setForm({
+      ...EMPTY_COMPANY_FORM,
+      ...rest,
+      gstFrozenUntil: rest.gstFrozenUntil ?? null,
+    });
+  }, [companySettings]);
+
+  function field<K extends keyof CompanyForm>(key: K) {
+    return {
+      value: toFormValue(form[key] as string | null | undefined),
+      onChange: (e: ChangeEvent<HTMLInputElement>) =>
+        setForm(prev => ({ ...prev, [key]: e.target.value })),
+    };
+  }
+
+  async function handleSave() {
+    if (!form.companyName.trim()) { toast.error('Company name is required'); return; }
+    setSaving(true);
+    try {
+      const res = await updateCompanySettings({
+        ...form,
+        legalName:           form.legalName || null,
+        gstin:               form.gstin || null,
+        pan:                 form.pan || null,
+        addressLine1:        form.addressLine1 || null,
+        addressLine2:        form.addressLine2 || null,
+        city:                form.city || null,
+        state:               form.state || null,
+        stateCode:           form.stateCode || null,
+        pincode:             form.pincode || null,
+        phone:               form.phone || null,
+        email:               form.email || null,
+        website:             form.website || null,
+        logoUrl:             form.logoUrl || null,
+        bankName:            form.bankName || null,
+        bankAccountName:     form.bankAccountName || null,
+        bankAccountNumber:   form.bankAccountNumber || null,
+        bankIfsc:            form.bankIfsc || null,
+        bankBranch:          form.bankBranch || null,
+        invoicePrefix:       form.invoicePrefix.trim() || 'GK',
+        invoiceTerms:        form.invoiceTerms || null,
+        authorizedSignatory: form.authorizedSignatory || null,
+        signatureUrl:        form.signatureUrl || null,
+      });
+      if (res.ok) {
+        toast.success('Company Master updated', 'These details will appear on invoices, quotations, receipts and vouchers.');
+      } else {
+        toast.error('Update failed', res.reason ?? 'Could not save company details');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Company identity */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-indigo-600" /> Company Identity
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-name" required>Company Name</Label>
+            <Input id="cs-name" placeholder="GK Travels" {...field('companyName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-legal">Legal Name</Label>
+            <Input id="cs-legal" placeholder="GK Travels Pvt. Ltd." {...field('legalName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-gstin">GSTIN</Label>
+            <Input id="cs-gstin" placeholder="27ABCDE1234F1Z5" className="uppercase" {...field('gstin')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-pan">PAN</Label>
+            <Input id="cs-pan" placeholder="ABCDE1234F" className="uppercase" {...field('pan')} />
+          </div>
+        </div>
+      </div>
+
+      {/* Address */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">Registered Address</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="cs-addr1">Address Line 1</Label>
+            <Input id="cs-addr1" placeholder="Office / Building, Street" {...field('addressLine1')} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="cs-addr2">Address Line 2</Label>
+            <Input id="cs-addr2" placeholder="Area, Landmark" {...field('addressLine2')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-city">City</Label>
+            <Input id="cs-city" placeholder="Mumbai" {...field('city')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-state">State</Label>
+            <Input id="cs-state" placeholder="Maharashtra" {...field('state')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-statecode">State Code</Label>
+            <Input id="cs-statecode" placeholder="27" {...field('stateCode')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-pincode">PIN Code</Label>
+            <Input id="cs-pincode" placeholder="400001" {...field('pincode')} />
+          </div>
+        </div>
+      </div>
+
+      {/* Contact */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">Contact Details</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-phone">Phone</Label>
+            <Input id="cs-phone" placeholder="+91 98765 43210" {...field('phone')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-email">Email</Label>
+            <Input id="cs-email" type="email" placeholder="info@gktravels.com" {...field('email')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-website">Website</Label>
+            <Input id="cs-website" placeholder="www.gktravels.com" {...field('website')} />
+          </div>
+        </div>
+      </div>
+
+      {/* Invoice settings */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">Invoice Settings</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-prefix" required>Invoice Number Prefix</Label>
+            <Input id="cs-prefix" placeholder="GK" className="uppercase" {...field('invoicePrefix')} />
+            <p className="text-[11px] text-gray-400">
+              Invoices are numbered as <span className="font-mono">{(form.invoicePrefix || 'GK').toUpperCase()}/2026-27/01</span>
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-signatory">Authorized Signatory</Label>
+            <Input id="cs-signatory" placeholder="Name / Designation" {...field('authorizedSignatory')} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="cs-terms">Default Terms &amp; Conditions</Label>
+            <Input id="cs-terms" placeholder="e.g. Payment due within 7 days of invoice date" {...field('invoiceTerms')} />
+          </div>
+        </div>
+      </div>
+
+      {/* Bank details */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">Bank Details</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-bankname">Bank Name</Label>
+            <Input id="cs-bankname" placeholder="HDFC Bank" {...field('bankName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-bankaccname">Account Holder Name</Label>
+            <Input id="cs-bankaccname" placeholder="GK Travels" {...field('bankAccountName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-bankaccno">Account Number</Label>
+            <Input id="cs-bankaccno" placeholder="000123456789" {...field('bankAccountNumber')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-ifsc">IFSC Code</Label>
+            <Input id="cs-ifsc" placeholder="HDFC0001234" className="uppercase" {...field('bankIfsc')} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="cs-branch">Branch</Label>
+            <Input id="cs-branch" placeholder="Andheri West, Mumbai" {...field('bankBranch')} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button size="sm" className="gap-1.5" loading={saving} onClick={handleSave}>
+          <Save className="w-3.5 h-3.5" /> Save Company Details
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Settings page ───────────────────────────────────────
 
 export default function Settings() {
@@ -415,6 +651,7 @@ export default function Settings() {
   const trips     = useStore(s => s.trips);
   const leads     = useStore(s => s.leads);
   const customers = useStore(s => s.customers);
+  const canEditOrg = usePermission(PERMISSIONS.SETTINGS_ORG);
 
   async function handleClearAll() {
     const ok = await confirm({
@@ -437,6 +674,11 @@ export default function Settings() {
           <TabsTrigger value="users" className="gap-1.5">
             <Users className="w-3.5 h-3.5" /> User Management
           </TabsTrigger>
+          {canEditOrg && (
+            <TabsTrigger value="company" className="gap-1.5">
+              <Building2 className="w-3.5 h-3.5" /> Company Master
+            </TabsTrigger>
+          )}
           <TabsTrigger value="data" className="gap-1.5">
             <Database className="w-3.5 h-3.5" /> Data
           </TabsTrigger>
@@ -446,6 +688,13 @@ export default function Settings() {
         <TabsContent value="users">
           <UsersTab />
         </TabsContent>
+
+        {/* Company Master tab */}
+        {canEditOrg && (
+          <TabsContent value="company">
+            <CompanyMasterTab />
+          </TabsContent>
+        )}
 
         {/* Data tab */}
         <TabsContent value="data">

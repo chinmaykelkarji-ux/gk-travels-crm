@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { createReceivable } from '../services/financeService.js';
 import { logActivity } from '../lib/activity.js';
 
 const router = Router();
@@ -36,24 +35,10 @@ router.post('/', async (req: AuthRequest, res) => {
       create: data,
     });
 
-    // Brand-new priced trip → automatically raise its receivable + post to
-    // the activity feed (Phase 1/2: every operational action reflects in finance).
+    // Brand-new trip → post to the activity feed. Receivables are now raised
+    // exclusively from GST Invoices (see invoiceService.createInvoice), not
+    // automatically on trip creation.
     if (!existed) {
-      if (trip.totalPayable && trip.totalPayable > 0) {
-        await createReceivable({
-          sourceType:    'trip',
-          sourceId:      trip.id,
-          tripId:        trip.id,
-          customerId:    trip.customerId,
-          customerName:  trip.customer,
-          amount:        trip.totalPayable,
-          gstAmount:     trip.gstAmount,
-          taxableAmount: trip.taxableAmount,
-          dueDate:       trip.departure ?? undefined,
-          description: `Trip ${trip.id} — ${trip.destination}`,
-          createdBy:     req.userId,
-        });
-      }
       await logActivity(prisma, {
         action:      'trip_created',
         description: `Trip ${trip.id} created for ${trip.customer} (${trip.destination})`,

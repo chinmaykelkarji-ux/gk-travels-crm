@@ -5,7 +5,6 @@ import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.j
 import { calcGst }                        from '../../../src/shared/utils/finance.js';
 import { generateTasksFromCategories }    from '../../../src/shared/utils/taskEngine.js';
 import { nextTaskId }                      from '../../../src/shared/utils/id.js';
-import { createReceivable }                from '../services/financeService.js';
 import { logActivity }                     from '../lib/activity.js';
 
 const router = Router();
@@ -461,23 +460,11 @@ router.post('/:id/convert-trip', async (req, res) => {
         include: { items: { orderBy: { sortOrder: 'asc' } } },
       });
 
-      if (gst.totalPayable && gst.totalPayable > 0) {
-        await createReceivable({
-          sourceType:    'quotation',
-          sourceId:      q.id,
-          tripId:        trip.id,
-          customerId:    trip.customerId,
-          customerName:  trip.customer,
-          amount:        gst.totalPayable,
-          gstAmount:     gst.gstAmount,
-          taxableAmount: gst.taxableAmount,
-          dueDate:       trip.departure ?? undefined,
-          description: `Trip ${trip.id} — converted from Quotation ${q.id}`,
-          createdBy:     req.userId,
-        }, tx);
-      }
+      // Receivables are now raised exclusively from GST Invoices (see
+      // invoiceService.createInvoice) — converting a quotation to a trip no
+      // longer auto-creates a receivable.
 
-      // Auto-create follow-up reminders alongside the trip/tasks/receivable —
+      // Auto-create follow-up reminders alongside the trip/tasks —
       // same automation moment, mirroring the task-generation step above.
       const reminderRows: Prisma.ReminderCreateManyInput[] = [];
       if (gst.totalPayable && gst.totalPayable > 0 && trip.departure) {

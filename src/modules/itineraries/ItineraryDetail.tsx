@@ -33,6 +33,7 @@ export default function ItineraryDetail() {
   const logCommunication  = useStore(s => s.logCommunication);
   const linkedTrip        = useStore(s => itinerary?.tripId ? s.trips.find(t => t.id === itinerary.tripId) : undefined);
   const linkedQuotation   = useStore(s => itinerary?.quotationId ? s.quotations.find(q => q.id === itinerary.quotationId) : undefined);
+  const companySettings   = useStore(s => s.companySettings);
 
   const [deleting, setDeleting] = useState(false);
 
@@ -318,7 +319,7 @@ export default function ItineraryDetail() {
         {/* Cover page */}
         <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', background: '#0F172A', color: 'white', pageBreakAfter: 'always' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 14, letterSpacing: '0.3em', color: '#94A3B8', marginBottom: 32, textTransform: 'uppercase' }}>GK Travels · Premium Itinerary</div>
+            <div style={{ fontSize: 14, letterSpacing: '0.3em', color: '#94A3B8', marginBottom: 32, textTransform: 'uppercase' }}>{companySettings?.companyName || 'GK Travels'} · Premium Itinerary</div>
             <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 12, fontFamily: 'sans-serif', lineHeight: 1.2 }}>{itinerary.title}</h1>
             <p style={{ fontSize: 18, color: '#94A3B8', marginBottom: 40 }}>{itinerary.destination}</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 400, margin: '0 auto', textAlign: 'left' }}>
@@ -443,8 +444,8 @@ export default function ItineraryDetail() {
               </div>
             )}
             <div style={{ marginTop: 48, textAlign: 'center', fontSize: 11, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
-              <p>GK Travels · gktravels8249@gmail.com</p>
-              <p style={{ marginTop: 4 }}>Thank you for choosing GK Travels. Wishing you a wonderful journey! ✈️</p>
+              <p>{companySettings?.companyName || 'GK Travels'} · {companySettings?.email || 'gktravels8249@gmail.com'}</p>
+              <p style={{ marginTop: 4 }}>Thank you for choosing {companySettings?.companyName || 'GK Travels'}. Wishing you a wonderful journey! ✈️</p>
             </div>
           </div>
         )}

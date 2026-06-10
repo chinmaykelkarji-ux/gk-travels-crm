@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/all', requireAuth, async (_req, res) => {
   try {
-    const [trips, leads, customers, passengers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers, receivables, communications] =
+    const [trips, leads, customers, passengers, bookings, allPayments, tasks, activityLog, reminders, vendors, vendorPayments, quotations, itineraries, vouchers, receivables, communications, invoices, creditNotes, debitNotes, companySettings] =
       await Promise.all([
         prisma.trip.findMany({ orderBy: { createdAt: 'desc' } }),
         prisma.lead.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -34,6 +34,19 @@ router.get('/all', requireAuth, async (_req, res) => {
           include: { entries: { orderBy: { createdAt: 'desc' } } },
         }),
         prisma.communication.findMany({ orderBy: { createdAt: 'desc' }, take: 500 }),
+        prisma.invoice.findMany({
+          orderBy: { createdAt: 'desc' },
+          include: { items: { orderBy: { sortOrder: 'asc' } } },
+        }),
+        prisma.creditNote.findMany({
+          orderBy: { createdAt: 'desc' },
+          include: { items: { orderBy: { sortOrder: 'asc' } } },
+        }),
+        prisma.debitNote.findMany({
+          orderBy: { createdAt: 'desc' },
+          include: { items: { orderBy: { sortOrder: 'asc' } } },
+        }),
+        prisma.companySettings.upsert({ where: { id: 'default' }, create: { id: 'default' }, update: {} }),
       ]);
 
     res.json({
@@ -51,6 +64,10 @@ router.get('/all', requireAuth, async (_req, res) => {
       vouchers,
       receivables,
       communications,
+      invoices,
+      creditNotes,
+      debitNotes,
+      companySettings,
       activityLog: activityLog.map(a => ({
         ...a,
         date:      a.date,

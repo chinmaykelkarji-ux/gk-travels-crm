@@ -33,6 +33,7 @@ export default function VoucherDetail() {
   const logCommunication  = useStore(s => s.logCommunication);
   const linkedTrip        = useStore(s => voucher?.tripId ? s.trips.find(t => t.id === voucher.tripId) : undefined);
   const linkedCustomer    = useStore(s => voucher?.customerId ? s.customers.find(c => c.id === voucher.customerId) : undefined);
+  const companySettings   = useStore(s => s.companySettings);
 
   const [deleting, setDeleting] = useState(false);
 
@@ -331,8 +332,14 @@ export default function VoucherDetail() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '3px solid #4F46E5', paddingBottom: 16, marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#1E1B4B', marginBottom: 2 }}>GK TRAVELS</div>
-            <div style={{ fontSize: 11, color: '#6B7280' }}>gktravels8249@gmail.com</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: '#1E1B4B', marginBottom: 2 }}>{companySettings?.companyName || 'GK TRAVELS'}</div>
+            {companySettings?.addressLine1 && (
+              <div style={{ fontSize: 11, color: '#6B7280', maxWidth: 280 }}>
+                {[companySettings.addressLine1, companySettings.addressLine2, companySettings.city, companySettings.state, companySettings.pincode].filter(Boolean).join(', ')}
+              </div>
+            )}
+            {companySettings?.gstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>GSTIN: {companySettings.gstin}</div>}
+            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{companySettings?.email || 'gktravels8249@gmail.com'}{companySettings?.phone ? ` · ${companySettings.phone}` : ''}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{typeMeta?.emoji} {typeMeta?.label} Voucher</div>
@@ -447,7 +454,7 @@ export default function VoucherDetail() {
 
         {/* Footer */}
         <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-          <span>GK Travels · gktravels8249@gmail.com</span>
+          <span>{companySettings?.companyName || 'GK Travels'} · {companySettings?.email || 'gktravels8249@gmail.com'}</span>
           <span>{voucher.voucherNumber} · {voucher.createdDate}</span>
         </div>
       </div>

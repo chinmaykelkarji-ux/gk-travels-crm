@@ -99,6 +99,10 @@ export type ActivityEntityType =
   | 'vendor'
   | 'vendor_payment'
   | 'financial_transaction'
+  | 'invoice'
+  | 'credit_note'
+  | 'debit_note'
+  | 'company_settings'
   | 'system';
 
 // ─── Timeline & Audit ───────────────────────────────────────
@@ -309,6 +313,10 @@ export interface Trip {
   returnDate: string | null;
   status: TripStatus;
 
+  // Set once this trip has been included on a GST Invoice — locks it from
+  // being invoiced again (cleared only if that Invoice is deleted).
+  invoiceId?: string | null;
+
   // Financial (null = price not set — NEVER default to 0 to avoid false "paid")
   totalAmount: number | null;
   gstRate: number;
@@ -456,6 +464,10 @@ export interface Booking {
   customerId?: string;
   refId?: string;  // linked trip ID
 
+  // Set once this booking has been included on a GST Invoice — locks it from
+  // being invoiced again (cleared only if that Invoice is deleted).
+  invoiceId?: string | null;
+
   // Financial (null = not priced)
   sellingPrice: number | null;
   supplierCost: number;
@@ -530,6 +542,7 @@ export interface Receivable {
   customerName: string;
   bookingId?: string;
   tripId?: string;
+  invoiceId?: string;
   invoiceAmount: number;
   description: string;
   dueDate?: string;
@@ -874,6 +887,175 @@ export interface Voucher {
   createdDate:      string;
 }
 
+// ─── Company Master ───────────────────────────────────────────
+// Singleton (id = "default") — GST/legal/bank details printed on
+// Invoices, Credit/Debit Notes, Quotations and Vouchers.
+
+export interface CompanySettings {
+  id:                  string;
+  companyName:         string;
+  legalName?:          string | null;
+  gstin?:              string | null;
+  pan?:                string | null;
+  addressLine1?:       string | null;
+  addressLine2?:       string | null;
+  city?:               string | null;
+  state?:              string | null;
+  stateCode?:          string | null;
+  pincode?:            string | null;
+  phone?:              string | null;
+  email?:              string | null;
+  website?:            string | null;
+  logoUrl?:            string | null;
+  bankName?:           string | null;
+  bankAccountName?:    string | null;
+  bankAccountNumber?:  string | null;
+  bankIfsc?:           string | null;
+  bankBranch?:         string | null;
+  invoicePrefix:       string;
+  invoiceTerms?:       string | null;
+  authorizedSignatory?: string | null;
+  signatureUrl?:       string | null;
+  /** GST returns filed up to this date (inclusive) — invoices/CN/DN dated
+   *  on or before this date are frozen (no edit/cancel/delete). */
+  gstFrozenUntil?:     string | null;
+}
+
+// ─── GST Invoicing — Invoice / Credit Note / Debit Note ───────
+
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'CANCELLED';
+export type CreditDebitStatus = 'ISSUED' | 'CANCELLED';
+export type GstSplitType = 'INTRA' | 'INTER';
+
+export interface InvoiceLineItem {
+  id:          string;
+  invoiceId?:  string;
+  description: string;
+  hsnSac?:     string;
+  serviceType?: string;
+  bookingId?:  string | null;
+  quantity:    number;
+  rate:        number;
+  amount:      number;   // taxable value (qty * rate)
+  gstRate:     number;
+  gstAmount:   number;
+  totalAmount: number;
+  sortOrder:   number;
+}
+
+export interface Invoice {
+  id:                string;       // INV-... internal id
+  invoiceNumber:     string;       // GK/2026-27/01 — immutable once issued
+  financialYear:     string;       // "2026-27"
+  sequenceNumber:    number;
+  status:            InvoiceStatus;
+  invoiceDate:       string;
+  dueDate?:          string | null;
+
+  // Customer / billing snapshot
+  customerId?:       string | null;
+  customerName:      string;
+  customerAddress?:  string | null;
+  customerGstin?:    string | null;
+  customerStateCode?: string | null;
+  placeOfSupply?:    string | null;
+
+  // Company snapshot at time of issue
+  companyName:       string;
+  companyAddress?:   string | null;
+  companyGstin?:     string | null;
+  companyStateCode?: string | null;
+
+  // GST breakdown
+  gstType:           GstSplitType;
+  taxableAmount:     number;
+  cgstAmount:        number;
+  sgstAmount:        number;
+  igstAmount:        number;
+  totalGstAmount:    number;
+  totalAmount:       number;
+
+  notes?:            string | null;
+  termsAndConds?:    string | null;
+
+  bookingIds:        string[];
+  tripIds:           string[];
+  receivableId?:     string | null;
+
+  createdDate:       string;
+  createdBy?:        string | null;
+  cancelledAt?:      string | null;
+  cancelledBy?:      string | null;
+  cancelReason?:     string | null;
+
+  items:             InvoiceLineItem[];
+}
+
+export interface CreditDebitLineItem {
+  id:           string;
+  description:  string;
+  hsnSac?:      string;
+  quantity:     number;
+  rate:         number;
+  amount:       number;
+  gstRate:      number;
+  gstAmount:    number;
+  totalAmount:  number;
+  sortOrder:    number;
+}
+
+export interface CreditNote {
+  id:               string;
+  creditNoteNumber: string;   // CN/2026-27/0001
+  financialYear:    string;
+  sequenceNumber:   number;
+  status:           CreditDebitStatus;
+  date:             string;
+  invoiceId:        string;
+  customerId?:      string | null;
+  customerName:     string;
+  reason:           string;
+  reasonDetails?:   string | null;
+  taxableAmount:    number;
+  cgstAmount:       number;
+  sgstAmount:       number;
+  igstAmount:       number;
+  totalGstAmount:   number;
+  totalAmount:      number;
+  notes?:           string | null;
+  createdDate:      string;
+  createdBy?:       string | null;
+  cancelledAt?:     string | null;
+  cancelledBy?:     string | null;
+  items:            CreditDebitLineItem[];
+}
+
+export interface DebitNote {
+  id:              string;
+  debitNoteNumber: string;   // DN/2026-27/0001
+  financialYear:   string;
+  sequenceNumber:  number;
+  status:          CreditDebitStatus;
+  date:            string;
+  invoiceId:       string;
+  customerId?:     string | null;
+  customerName:    string;
+  reason:          string;
+  reasonDetails?:  string | null;
+  taxableAmount:   number;
+  cgstAmount:      number;
+  sgstAmount:      number;
+  igstAmount:      number;
+  totalGstAmount:  number;
+  totalAmount:     number;
+  notes?:          string | null;
+  createdDate:     string;
+  createdBy?:      string | null;
+  cancelledAt?:    string | null;
+  cancelledBy?:    string | null;
+  items:           CreditDebitLineItem[];
+}
+
 // ─── Store Root Shape ────────────────────────────────────────
 
 export interface GKStoreState {
@@ -897,9 +1079,82 @@ export interface GKStoreState {
   vouchers:        Voucher[];
   receivables:     Receivable[];
   staff:           Staff[];
+  invoices:        Invoice[];
+  creditNotes:     CreditNote[];
+  debitNotes:      DebitNote[];
+  companySettings: CompanySettings | null;
   // Data-load lifecycle — used by AppShell to render loading/error UI
   dataLoading:     boolean;
   dataError:       string | null;
+}
+
+// ─── Invoice / Credit Note / Debit Note — request payloads ─────
+// Sent to the server, which computes GST splits, document numbers,
+// and receivable adjustments. See server/src/services/invoiceService.ts.
+
+export interface InvoiceLineItemInput {
+  description:  string;
+  hsnSac?:      string | null;
+  serviceType?: string | null;
+  bookingId?:   string | null;
+  quantity?:    number;
+  rate:         number;
+  gstRate:      number;
+}
+
+export interface CreditDebitLineItemInput {
+  description: string;
+  hsnSac?:     string | null;
+  quantity?:   number;
+  rate:        number;
+  gstRate:     number;
+}
+
+export interface CreateInvoiceInput {
+  invoiceDate:             string;
+  dueDate?:                string | null;
+  customerId?:             string | null;
+  customerName:            string;
+  customerAddress?:        string | null;
+  customerGstin?:          string | null;
+  placeOfSupply?:          string | null;
+  placeOfSupplyStateCode?: string | null;
+  notes?:                  string | null;
+  termsAndConds?:          string | null;
+  bookingIds?:             string[];
+  tripIds?:                string[];
+  items:                   InvoiceLineItemInput[];
+}
+
+export interface UpdateInvoiceInput {
+  invoiceDate?:             string;
+  dueDate?:                 string | null;
+  customerName?:            string;
+  customerAddress?:         string | null;
+  customerGstin?:           string | null;
+  placeOfSupply?:           string | null;
+  placeOfSupplyStateCode?:  string | null;
+  notes?:                   string | null;
+  termsAndConds?:           string | null;
+  items?:                   InvoiceLineItemInput[];
+}
+
+export interface CreateCreditNoteInput {
+  invoiceId:      string;
+  date:           string;
+  reason:         string;
+  reasonDetails?: string | null;
+  notes?:         string | null;
+  items:          CreditDebitLineItemInput[];
+}
+
+export interface CreateDebitNoteInput {
+  invoiceId:      string;
+  date:           string;
+  reason:         string;
+  reasonDetails?: string | null;
+  notes?:         string | null;
+  items:          CreditDebitLineItemInput[];
 }
 
 // ─── Form Shapes (subset of entities, used by React Hook Form) ─

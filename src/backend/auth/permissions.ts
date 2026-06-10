@@ -38,6 +38,14 @@ export const PERMISSIONS = {
   FINANCE_EXPORT:      'finance:export',
   FINANCE_DELETE_PAYMENT: 'finance:delete_payment',
 
+  // Invoices / Credit & Debit Notes / GST — ACCOUNTS + ADMIN only
+  INVOICES_VIEW:       'invoices:view',
+  INVOICES_CREATE:     'invoices:create',
+  INVOICES_EDIT:       'invoices:edit',
+  INVOICES_CANCEL:     'invoices:cancel',
+  INVOICES_DELETE:     'invoices:delete',
+  GST_REPORTS_VIEW:    'gst:reports',
+
   // Customers
   CUSTOMERS_VIEW:      'customers:view',
   CUSTOMERS_CREATE:    'customers:create',
@@ -125,6 +133,12 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     PERMISSIONS.FINANCE_REPORTS,
     PERMISSIONS.FINANCE_EXPORT,
     PERMISSIONS.FINANCE_DELETE_PAYMENT,
+    PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.INVOICES_CREATE,
+    PERMISSIONS.INVOICES_EDIT,
+    PERMISSIONS.INVOICES_CANCEL,
+    PERMISSIONS.INVOICES_DELETE,
+    PERMISSIONS.GST_REPORTS_VIEW,
     PERMISSIONS.BOOKINGS_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
   ],

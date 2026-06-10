@@ -78,6 +78,7 @@ export default function BookingDetail() {
   const logCommunication = useStore(s => s.logCommunication);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
+  const companySettings  = useStore(s => s.companySettings);
 
   const [recEntryOpen, setRecEntryOpen]   = useState(false);
   const [creatingReceivable, setCreatingReceivable] = useState(false);
@@ -213,7 +214,7 @@ export default function BookingDetail() {
         <div className="print-show border border-gray-300 rounded-xl p-6 mb-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">GK Travels</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{companySettings?.companyName || 'GK Travels'}</h1>
               <p className="text-sm text-gray-500">Booking Confirmation</p>
             </div>
             <div className="text-right">

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
   AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
-  ClipboardCheck, ListChecks, Ticket,
+  ClipboardCheck, ListChecks, Ticket, FileMinus, FilePlus, Percent,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
@@ -99,6 +99,9 @@ export default function Dashboard() {
   const receivables       = useStore(s => s.receivables);
   const bookings          = useStore(s => s.bookings);
   const tasks             = useStore(s => s.tasks);
+  const invoices          = useStore(s => s.invoices);
+  const creditNotes       = useStore(s => s.creditNotes);
+  const debitNotes        = useStore(s => s.debitNotes);
 
   // Quotation KPIs
   const quotationKpis = useMemo(() => {
@@ -200,6 +203,32 @@ export default function Dashboard() {
       recentPayments: recentPayments.slice(0, 8),
     };
   }, [receivables]);
+
+  // Invoicing / GST KPIs
+  const invoiceStats = useMemo(() => {
+    const issuedInvoices = invoices.filter(i => i.status === 'ISSUED');
+    const issuedCredit   = creditNotes.filter(c => c.status === 'ISSUED');
+    const issuedDebit    = debitNotes.filter(d => d.status === 'ISSUED');
+
+    const totalInvoiced = issuedInvoices.reduce((s, i) => s + i.totalAmount, 0);
+    const gstCollected  = issuedInvoices.reduce((s, i) => s + i.totalGstAmount, 0)
+      - issuedCredit.reduce((s, c) => s + c.totalGstAmount, 0)
+      + issuedDebit.reduce((s, d) => s + d.totalGstAmount, 0);
+    const monthlySales = issuedInvoices
+      .filter(i => isThisMonth(i.invoiceDate))
+      .reduce((s, i) => s + i.totalAmount, 0);
+
+    return {
+      invoiceCount:    issuedInvoices.length,
+      totalInvoiced,
+      gstCollected,
+      monthlySales,
+      creditNoteCount: issuedCredit.length,
+      creditNoteTotal: issuedCredit.reduce((s, c) => s + c.totalAmount, 0),
+      debitNoteCount:  issuedDebit.length,
+      debitNoteTotal:  issuedDebit.reduce((s, d) => s + d.totalAmount, 0),
+    };
+  }, [invoices, creditNotes, debitNotes]);
 
   // Operations widgets — pending approvals, today's activity, tasks due today
   const opsStats = useMemo(() => {
@@ -404,6 +433,38 @@ export default function Dashboard() {
           icon={FileCheck}
           color="green"
           onClick={() => navigate('/vouchers')}
+        />
+        <KpiCard
+          title="Total Invoiced"
+          value={formatCurrencyShort(invoiceStats.totalInvoiced)}
+          sub={`${invoiceStats.invoiceCount} invoice${invoiceStats.invoiceCount !== 1 ? 's' : ''} issued`}
+          icon={Receipt}
+          color="blue"
+          onClick={() => navigate('/invoices')}
+        />
+        <KpiCard
+          title="GST Collected"
+          value={formatCurrencyShort(invoiceStats.gstCollected)}
+          sub={`This month: ${formatCurrency(invoiceStats.monthlySales)} sales`}
+          icon={Percent}
+          color="purple"
+          onClick={() => navigate('/gst-reports')}
+        />
+        <KpiCard
+          title="Credit Notes Issued"
+          value={formatCurrencyShort(invoiceStats.creditNoteTotal)}
+          sub={`${invoiceStats.creditNoteCount} credit note${invoiceStats.creditNoteCount !== 1 ? 's' : ''}`}
+          icon={FileMinus}
+          color="orange"
+          onClick={() => navigate('/credit-notes')}
+        />
+        <KpiCard
+          title="Debit Notes Issued"
+          value={formatCurrencyShort(invoiceStats.debitNoteTotal)}
+          sub={`${invoiceStats.debitNoteCount} debit note${invoiceStats.debitNoteCount !== 1 ? 's' : ''}`}
+          icon={FilePlus}
+          color="blue"
+          onClick={() => navigate('/debit-notes')}
         />
       </div>
 

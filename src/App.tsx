@@ -52,6 +52,14 @@ const VoucherDetail     = lazy(() => import('@/modules/vouchers/VoucherDetail'))
 const Passengers        = lazy(() => import('@/modules/passengers/Passengers'));
 const DailyOps          = lazy(() => import('@/modules/ops/DailyOps'));
 const Settings          = lazy(() => import('@/modules/settings/Settings'));
+const Invoices          = lazy(() => import('@/modules/invoices/Invoices'));
+const InvoiceBuilder    = lazy(() => import('@/modules/invoices/InvoiceBuilder'));
+const InvoiceDetail     = lazy(() => import('@/modules/invoices/InvoiceDetail'));
+const CreditNotes       = lazy(() => import('@/modules/invoices/CreditNotes'));
+const DebitNotes        = lazy(() => import('@/modules/invoices/DebitNotes'));
+const CreditDebitNoteForm   = lazy(() => import('@/modules/invoices/CreditDebitNoteForm'));
+const CreditDebitNoteDetail = lazy(() => import('@/modules/invoices/CreditDebitNoteDetail'));
+const GstReports        = lazy(() => import('@/modules/invoices/GstReports'));
 
 // ─── QueryClient ─────────────────────────────────────────────
 
@@ -247,6 +255,17 @@ export default function App() {
                 <Route path="/vouchers/new"          element={<VoucherFormPage />} />
                 <Route path="/vouchers/:id"          element={<VoucherDetail />} />
                 <Route path="/vouchers/:id/edit"     element={<VoucherFormPage />} />
+                <Route path="/invoices"              element={<Invoices />} />
+                <Route path="/invoices/new"          element={<InvoiceBuilder />} />
+                <Route path="/invoices/:id"          element={<InvoiceDetail />} />
+                <Route path="/invoices/:id/edit"     element={<InvoiceBuilder />} />
+                <Route path="/credit-notes"          element={<CreditNotes />} />
+                <Route path="/credit-notes/new"      element={<CreditDebitNoteForm kind="credit" />} />
+                <Route path="/credit-notes/:id"      element={<CreditDebitNoteDetail kind="credit" />} />
+                <Route path="/debit-notes"           element={<DebitNotes />} />
+                <Route path="/debit-notes/new"       element={<CreditDebitNoteForm kind="debit" />} />
+                <Route path="/debit-notes/:id"       element={<CreditDebitNoteDetail kind="debit" />} />
+                <Route path="/gst-reports"           element={<GstReports />} />
                 <Route path="/finance"               element={<Finance />} />
                 <Route path="/receivables"           element={<Receivables />} />
                 <Route path="/passengers"            element={<Passengers />} />

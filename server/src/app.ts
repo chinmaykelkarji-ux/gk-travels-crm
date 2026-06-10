@@ -29,6 +29,11 @@ import receivablesRouter from './routes/receivables.js';
 import analyticsRouter   from './routes/analytics.js';
 import communicationsRouter from './routes/communications.js';
 import passengersRouter     from './routes/passengers.js';
+import companySettingsRouter from './routes/companySettings.js';
+import invoicesRouter       from './routes/invoices.js';
+import creditNotesRouter    from './routes/creditNotes.js';
+import debitNotesRouter     from './routes/debitNotes.js';
+import gstReportsRouter     from './routes/gstReports.js';
 
 const app = express();
 
@@ -90,6 +95,11 @@ app.use('/api/receivables', receivablesRouter);
 app.use('/api/analytics',   analyticsRouter);
 app.use('/api/communications', communicationsRouter);
 app.use('/api/passengers',    passengersRouter);
+app.use('/api/company-settings', companySettingsRouter);
+app.use('/api/invoices',      invoicesRouter);
+app.use('/api/credit-notes',  creditNotesRouter);
+app.use('/api/debit-notes',   debitNotesRouter);
+app.use('/api/gst-reports',   gstReportsRouter);
 
 // ── 404 ────────────────────────────────────────────────────────
 

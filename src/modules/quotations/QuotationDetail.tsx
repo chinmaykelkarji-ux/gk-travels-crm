@@ -73,6 +73,7 @@ export default function QuotationDetail() {
   const communications     = useStore(s => s.communications);
   const allReceivables     = useStore(s => s.receivables);
   const addReceivableEntry = useStore(s => s.addReceivableEntry);
+  const companySettings    = useStore(s => s.companySettings);
 
   const [converting, setConverting] = useState(false);
   const [deletingId,  setDeletingId] = useState(false);
@@ -533,8 +534,8 @@ export default function QuotationDetail() {
               )}
             </div>
             <div className="text-right">
-              <div className="text-lg font-bold text-gray-900 font-display">GK Travels</div>
-              <div className="text-xs text-gray-500">gktravels8249@gmail.com</div>
+              <div className="text-lg font-bold text-gray-900 font-display">{companySettings?.companyName || 'GK Travels'}</div>
+              <div className="text-xs text-gray-500">{companySettings?.email || 'gktravels8249@gmail.com'}</div>
             </div>
           </div>
 
@@ -777,8 +778,14 @@ export default function QuotationDetail() {
         {/* Company header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '3px solid #4F46E5', paddingBottom: 20, marginBottom: 28 }}>
           <div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#1E1B4B', letterSpacing: '-0.5px', lineHeight: 1 }}>GK TRAVELS</div>
-            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>gktravels8249@gmail.com</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: '#1E1B4B', letterSpacing: '-0.5px', lineHeight: 1 }}>{companySettings?.companyName?.toUpperCase() || 'GK TRAVELS'}</div>
+            {companySettings?.addressLine1 && (
+              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4, maxWidth: 280 }}>
+                {[companySettings.addressLine1, companySettings.addressLine2, companySettings.city, companySettings.state, companySettings.pincode].filter(Boolean).join(', ')}
+              </div>
+            )}
+            {companySettings?.gstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>GSTIN: {companySettings.gstin}</div>}
+            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>{companySettings?.email || 'gktravels8249@gmail.com'}{companySettings?.phone ? ` · ${companySettings.phone}` : ''}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Quotation</div>
@@ -933,7 +940,7 @@ export default function QuotationDetail() {
 
         {/* Footer */}
         <div style={{ marginTop: 40, borderTop: '2px solid #E5E7EB', paddingTop: 14, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-          <span>GK Travels · gktravels8249@gmail.com · This is a computer generated document</span>
+          <span>{companySettings?.companyName || 'GK Travels'} · {companySettings?.email || 'gktravels8249@gmail.com'} · This is a computer generated document</span>
           <span>{quotation.quotationNumber} · {fmtDate(quotation.createdDate)}</span>
         </div>
       </div>
