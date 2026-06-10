@@ -6,6 +6,7 @@ import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 
 const TRIP_STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'orange' }> = {
   draft:       { label: 'Draft',       variant: 'secondary'    },
@@ -43,7 +44,10 @@ export function TripCard({ trip }: TripCardProps) {
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-start justify-between mb-1.5">
-          <span className="text-[10px] font-mono font-medium text-gray-400 tracking-wider">{trip.id}</span>
+          <span className="text-[10px] font-mono font-medium text-gray-400 tracking-wider">
+            {trip.id}
+            <RecordNumberBadge label="Trip" n={trip.tripNumber} className="ml-1.5" />
+          </span>
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
         </div>
         <h3 className="text-sm font-bold text-gray-900">{trip.customer}</h3>

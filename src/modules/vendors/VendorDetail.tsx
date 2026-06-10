@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Plus, Phone, Mail, MapPin,
@@ -18,6 +18,7 @@ import { VendorForm } from './VendorForm';
 import { VendorPaymentForm } from './VendorPaymentForm';
 import { VENDOR_TYPES } from './VendorForm';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 
 export default function VendorDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -33,6 +34,14 @@ export default function VendorDetail() {
   const markVendorPaid      = useStore(s => s.markVendorPaid);
   const activityLog         = useStore(s => s.activityLog);
   const communications      = useStore(s => s.communications);
+  const trips                = useStore(s => s.trips);
+
+  // Linked trip's display number, keyed by trip id — for the "Trip" column.
+  const tripNumberMap = useMemo(() => {
+    const m: Record<string, number | undefined> = {};
+    for (const t of trips) m[t.id] = t.tripNumber;
+    return m;
+  }, [trips]);
 
   const [editOpen,    setEditOpen]    = useState(false);
   const [payOpen,     setPayOpen]     = useState(false);
@@ -260,7 +269,10 @@ export default function VendorDetail() {
                     <td className="px-4 py-3 text-xs text-indigo-600 font-mono whitespace-nowrap">
                       {p.tripId
                         ? <button onClick={() => navigate(`/trips/${p.tripId}`)}
-                            className="hover:underline">{p.tripId}</button>
+                            className="hover:underline">
+                            {p.tripId}
+                            <RecordNumberBadge label="Trip" n={tripNumberMap[p.tripId]} className="ml-1 text-indigo-300" />
+                          </button>
                         : <span className="text-gray-400">—</span>
                       }
                     </td>

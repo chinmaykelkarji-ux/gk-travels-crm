@@ -6,6 +6,7 @@ import { useStore } from '@/store';
 import type { ItineraryStatus, ItineraryTemplate } from '@/shared/types';
 import { fmtDate } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -218,6 +219,7 @@ export default function Itineraries() {
                         {linkedTrip && (
                           <span className="inline-flex items-center gap-0.5 bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-mono">
                             <FileText className="w-2.5 h-2.5" />{linkedTrip.id}
+                            <RecordNumberBadge label="Trip" n={linkedTrip.tripNumber} className="text-blue-400" />
                           </span>
                         )}
                         {linkedQuot && (

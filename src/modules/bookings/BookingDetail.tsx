@@ -13,6 +13,7 @@ import {
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { Button } from '@/shared/components/ui/button';
@@ -328,6 +329,7 @@ export default function BookingDetail() {
                     className="text-indigo-600 hover:text-indigo-700 font-medium"
                   >
                     Trip: {linkedTrip.id} ({linkedTrip.destination})
+                    <RecordNumberBadge label="Trip" n={linkedTrip.tripNumber} className="ml-1.5 text-indigo-300" />
                   </button>
                 )}
                 {primaryDate && (

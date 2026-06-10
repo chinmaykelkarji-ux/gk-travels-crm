@@ -19,6 +19,7 @@ import {
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, isThisMonth, isLastMonth, monthKey } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import type { Payment } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -280,7 +281,10 @@ export default function Finance() {
                           >
                             <td className="py-2.5 pr-3">
                               <div className="font-medium text-gray-800 max-w-[120px] truncate">{t.customer}</div>
-                              <div className="text-gray-400 font-mono">{t.id}</div>
+                              <div className="text-gray-400 font-mono">
+                                {t.id}
+                                <RecordNumberBadge label="Trip" n={t.tripNumber} className="ml-1" />
+                              </div>
                             </td>
                             <td className="py-2.5 pr-3 text-gray-700">
                               {t.totalPayable !== null
@@ -333,7 +337,10 @@ export default function Finance() {
                       >
                         <div>
                           <p className="text-xs font-semibold text-gray-800">{t.customer}</p>
-                          <p className="text-[11px] text-gray-400">{t.destination} · {t.id}</p>
+                          <p className="text-[11px] text-gray-400">
+                            {t.destination} · {t.id}
+                            <RecordNumberBadge label="Trip" n={t.tripNumber} className="ml-1" />
+                          </p>
                         </div>
                         <span className="text-xs font-medium text-yellow-700">Set Price →</span>
                       </div>

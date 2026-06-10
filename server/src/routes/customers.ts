@@ -56,7 +56,9 @@ router.delete('/:id', async (req, res) => {
 });
 
 function sanitize(body: Record<string, unknown>) {
-  const { createdAt, updatedAt, ...rest } = body;
+  // customerNumber is DB-generated only (sequence-backed) — never accept it
+  // from the client on create or update.
+  const { createdAt, updatedAt, customerNumber, ...rest } = body;
   return rest;
 }
 

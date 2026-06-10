@@ -56,10 +56,11 @@ export function GlobalSearch({ open, onClose }: Props) {
     if (q.length < 2) return [];
     const out: SearchResult[] = [];
 
-    // Trips — by ID, customer name, destination, phone
+    // Trips — by ID, trip number, customer name, destination, phone
     trips.forEach(t => {
       if (
         scoreMatch(t.id, q) ||
+        scoreMatch(t.tripNumber !== undefined ? String(t.tripNumber) : '', q) ||
         scoreMatch(t.customer, q) ||
         scoreMatch(t.destination, q) ||
         scoreMatch(t.phone ?? '', q)
@@ -68,7 +69,7 @@ export function GlobalSearch({ open, onClose }: Props) {
           id:       t.id,
           type:     'trip',
           title:    `${t.customer} — ${t.destination}`,
-          subtitle: t.id,
+          subtitle: t.tripNumber !== undefined ? `${t.id} · Trip #${t.tripNumber}` : t.id,
           meta:     t.status,
           url:      `/trips/${t.id}`,
           icon:     FolderOpen,
@@ -76,10 +77,11 @@ export function GlobalSearch({ open, onClose }: Props) {
       }
     });
 
-    // Customers — by name, phone, email
+    // Customers — by name, customer number, phone, email
     customers.forEach(c => {
       if (
         scoreMatch(c.name, q) ||
+        scoreMatch(c.customerNumber !== undefined ? String(c.customerNumber) : '', q) ||
         scoreMatch(c.phone ?? '', q) ||
         scoreMatch(c.email ?? '', q)
       ) {
@@ -87,7 +89,9 @@ export function GlobalSearch({ open, onClose }: Props) {
           id:       c.id,
           type:     'customer',
           title:    c.name,
-          subtitle: c.phone ?? c.email ?? c.id,
+          subtitle: c.customerNumber !== undefined
+            ? `${c.phone ?? c.email ?? c.id} · Customer #${c.customerNumber}`
+            : (c.phone ?? c.email ?? c.id),
           url:      `/customers`,
           icon:     Users,
         });

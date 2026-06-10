@@ -18,6 +18,7 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { ReceivableForm } from '@/shared/components/ReceivableForm';
 import { ReceivableEntryForm } from '@/shared/components/ReceivableEntryForm';
 import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { toast } from '@/shared/hooks/useToast';
 
@@ -37,6 +38,14 @@ export default function Receivables() {
   const addReceivableEntry   = useStore(s => s.addReceivableEntry);
   const updateReceivableEntry = useStore(s => s.updateReceivableEntry);
   const deleteReceivableEntry = useStore(s => s.deleteReceivableEntry);
+  const trips                 = useStore(s => s.trips);
+
+  // Linked trip's display number, keyed by trip id — for the "Linked" column.
+  const tripNumberMap = useMemo(() => {
+    const m: Record<string, number | undefined> = {};
+    for (const t of trips) m[t.id] = t.tripNumber;
+    return m;
+  }, [trips]);
 
   const [search,    setSearch]    = useState('');
   const [statusTab, setStatusTab] = useState<ReceivableStatus | 'all'>('all');
@@ -236,6 +245,7 @@ export default function Receivables() {
                         onRecordPayment={() => setEntryDialog({ receivable: r, entry: null })}
                         onEditEntry={(entry) => setEntryDialog({ receivable: r, entry })}
                         onDeleteEntry={(entryId) => handleDeleteEntry(r, entryId)}
+                        tripNumberMap={tripNumberMap}
                       />
                     </motion.tr>
                   );
@@ -279,10 +289,12 @@ interface RowGroupProps {
   onRecordPayment:  () => void;
   onEditEntry:      (entry: ReceivableEntry) => void;
   onDeleteEntry:    (entryId: string) => void;
+  tripNumberMap:    Record<string, number | undefined>;
 }
 
-function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayment, onEditEntry, onDeleteEntry }: RowGroupProps) {
+function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayment, onEditEntry, onDeleteEntry, tripNumberMap }: RowGroupProps) {
   const linked = r.bookingId ? `Booking ${r.bookingId}` : r.tripId ? `Trip ${r.tripId}` : '—';
+  const linkedTripNumber = r.tripId ? tripNumberMap[r.tripId] : undefined;
   return (
     <>
       <tr className="hover:bg-gray-50/70 transition-colors">
@@ -296,7 +308,10 @@ function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayme
           <div className="font-semibold text-gray-900 text-sm">{r.customerName}</div>
           {r.description && <div className="text-[11px] text-gray-400">{r.description}</div>}
         </td>
-        <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{linked}</td>
+        <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">
+          {linked}
+          {linkedTripNumber !== undefined && <RecordNumberBadge label="Trip" n={linkedTripNumber} className="ml-1" />}
+        </td>
         <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatCurrency(r.invoiceAmount)}</td>
         <td className="px-4 py-3 text-emerald-600 font-medium whitespace-nowrap">{formatCurrency(r.totalReceived)}</td>
         <td className="px-4 py-3 whitespace-nowrap">

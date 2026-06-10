@@ -14,6 +14,7 @@ import {
 import { formatCurrency } from '@/shared/utils/format';
 import { fmtDate, daysUntilLabel, daysUntil, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { canConfirmTrip } from '@/shared/schemas/trip';
 import type { TripFormSchema } from '@/shared/schemas/trip';
 import type { TripStatus, Payment, Receivable, BookingType } from '@/shared/types';
@@ -271,6 +272,7 @@ export default function TripDetail() {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-mono text-gray-400 tracking-wider">{trip.id}</span>
+              <RecordNumberBadge label="Trip" n={trip.tripNumber} className="text-xs" />
               <Badge
                 variant={
                   trip.status === 'confirmed'   ? 'success' :

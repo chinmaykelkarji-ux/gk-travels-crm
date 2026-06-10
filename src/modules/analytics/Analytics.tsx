@@ -20,6 +20,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ interface VendorRow {
 
 interface TripProfit {
   id:          string;
+  tripNumber:  number;
   customer:    string;
   destination: string;
   status:      string;
@@ -113,8 +115,8 @@ interface CustomerRow {
 }
 
 interface AlertsData {
-  negativeProfitTrips:    { id: string; customer: string; destination: string; profit: number; marginPct: number; revenue: number; status: string }[];
-  overdueBalances:        { id: string; customer: string; destination: string; balanceDue: number; departure: string | null; status: string }[];
+  negativeProfitTrips:    { id: string; tripNumber: number; customer: string; destination: string; profit: number; marginPct: number; revenue: number; status: string }[];
+  overdueBalances:        { id: string; tripNumber: number; customer: string; destination: string; balanceDue: number; departure: string | null; status: string }[];
   overdueVendors:         { vendorName: string; outstanding: number; count: number }[];
   lowMarginQuotations:    { id: string; quotationNumber: string; customer: string; destination: string; marginPct: number; totalSelling: number }[];
 }
@@ -804,7 +806,10 @@ export default function Analytics() {
                       <tbody className="divide-y divide-red-50">
                         {alerts.negativeProfitTrips.map(t => (
                           <tr key={t.id} className="hover:bg-red-50 cursor-pointer transition-colors" onClick={() => navigate(`/trips/${t.id}`)}>
-                            <td className="py-2 pr-3 font-mono text-red-700 font-semibold">{t.id}</td>
+                            <td className="py-2 pr-3 font-mono text-red-700 font-semibold">
+                              {t.id}
+                              <RecordNumberBadge label="Trip" n={t.tripNumber} className="ml-1 text-red-300" />
+                            </td>
                             <td className="py-2 pr-3 text-gray-700">{t.customer}</td>
                             <td className="py-2 pr-3 text-gray-600">{t.destination}</td>
                             <td className="py-2 pr-3 text-red-700 font-bold">{formatCurrency(t.profit)}</td>
@@ -828,7 +833,10 @@ export default function Analytics() {
                       <tbody className="divide-y divide-amber-50">
                         {alerts.overdueBalances.map(t => (
                           <tr key={t.id} className="hover:bg-amber-50 cursor-pointer" onClick={() => navigate(`/trips/${t.id}`)}>
-                            <td className="py-2 pr-3 font-mono text-amber-700 font-semibold">{t.id}</td>
+                            <td className="py-2 pr-3 font-mono text-amber-700 font-semibold">
+                              {t.id}
+                              <RecordNumberBadge label="Trip" n={t.tripNumber} className="ml-1 text-amber-300" />
+                            </td>
                             <td className="py-2 pr-3 text-gray-700">{t.customer}</td>
                             <td className="py-2 pr-3 text-gray-600">{t.destination}</td>
                             <td className="py-2 pr-3 text-amber-700 font-bold">{formatCurrency(t.balanceDue)}</td>
@@ -919,7 +927,10 @@ function TripTable({ rows, navigate }: { rows: TripProfit[] | undefined | null; 
         <tbody className="divide-y divide-gray-50">
           {rows.map(t => (
             <tr key={t.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => navigate(`/trips/${t.id}`)}>
-              <td className="py-2 pr-3 font-mono text-indigo-600 font-semibold">{t.id}</td>
+              <td className="py-2 pr-3 font-mono text-indigo-600 font-semibold">
+                {t.id}
+                <RecordNumberBadge label="Trip" n={t.tripNumber} className="ml-1 text-indigo-300" />
+              </td>
               <td className="py-2 pr-3 text-gray-700 max-w-[100px] truncate">{t.customer}</td>
               <td className="py-2 pr-3 text-gray-600">{t.destination}</td>
               <td className="py-2 pr-3 text-emerald-600 font-semibold">{formatCurrency(t.revenue)}</td>

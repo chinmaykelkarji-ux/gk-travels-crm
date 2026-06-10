@@ -22,7 +22,12 @@ model User {
 }
 
 model Customer {
-  id           String   @id
+  id             String   @id
+  // Sequential, human-facing display number ("Customer #N"). DB-generated
+  // only — never accepted from the client. Backed by its own Postgres
+  // sequence so values are atomic, gap-free under concurrency, and never
+  // reused even after a delete.
+  customerNumber Int      @unique @default(autoincrement())
   name         String
   phone        String
   altPhone     String?
@@ -79,6 +84,11 @@ model Lead {
 
 model Trip {
   id                  String    @id
+  // Sequential, human-facing display number ("Trip #N"). DB-generated only —
+  // never accepted from the client. Backed by its own Postgres sequence so
+  // values are atomic, gap-free under concurrency, and never reused even
+  // after a delete.
+  tripNumber          Int       @unique @default(autoincrement())
   customer            String
   phone               String    @default("")
   email               String?

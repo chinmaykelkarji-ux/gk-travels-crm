@@ -16,6 +16,7 @@ import { fmtDate, daysUntil } from '@/shared/utils/date';
 import { initials } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import {
@@ -464,6 +465,7 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
                 return <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', cfg.class)}>{cfg.label}</span>;
               })()}
               <span className="text-[11px] text-gray-400 font-mono">{customer.id}</span>
+              <RecordNumberBadge label="Customer" n={customer.customerNumber} className="text-[11px]" />
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -1073,7 +1075,10 @@ export default function Customers() {
                 <h3 className="font-bold text-gray-900 text-sm truncate group-hover:text-indigo-700 transition-colors">
                   {c.name}
                 </h3>
-                <p className="text-[10px] text-gray-400 font-mono mb-3">{c.id}</p>
+                <p className="text-[10px] text-gray-400 font-mono mb-3">
+                  {c.id}
+                  <RecordNumberBadge label="Customer" n={c.customerNumber} className="ml-1.5" />
+                </p>
 
                 {/* Contact */}
                 <div className="space-y-1.5 mb-3">

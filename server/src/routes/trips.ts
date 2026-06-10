@@ -26,7 +26,9 @@ router.get('/:id', async (req, res) => {
 // POST /api/trips
 router.post('/', async (req: AuthRequest, res) => {
   try {
-    const { payments, tasks, ...data } = req.body;
+    // tripNumber is DB-generated only (sequence-backed) — never accept it
+    // from the client on create or update.
+    const { payments, tasks, tripNumber, ...data } = req.body;
     const existed = await prisma.trip.findUnique({ where: { id: data.id }, select: { id: true } });
     const trip = await prisma.trip.upsert({
       where:  { id: data.id },
@@ -72,7 +74,7 @@ router.post('/', async (req: AuthRequest, res) => {
 // PUT /api/trips/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { payments, tasks, id, createdAt, updatedAt, ...data } = req.body;
+    const { payments, tasks, id, createdAt, updatedAt, tripNumber, ...data } = req.body;
     const trip = await prisma.trip.update({ where: { id: req.params.id }, data });
     res.json(trip);
   } catch (err) {

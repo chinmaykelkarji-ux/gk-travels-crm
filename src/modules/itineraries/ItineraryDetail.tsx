@@ -9,6 +9,7 @@ import apiClient from '@/lib/apiClient';
 import { fmtDate } from '@/shared/utils/date';
 import { whatsapp, gmail } from '@/shared/utils/email';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import type { ItineraryStatus } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -194,7 +195,10 @@ export default function ItineraryDetail() {
                   <div className="space-y-1">
                     {linkedTrip && (
                       <button onClick={() => navigate(`/trips/${linkedTrip.id}`)}
-                        className="block text-xs text-blue-600 hover:underline font-mono">{linkedTrip.id}</button>
+                        className="block text-xs text-blue-600 hover:underline font-mono">
+                        {linkedTrip.id}
+                        <RecordNumberBadge label="Trip" n={linkedTrip.tripNumber} className="ml-1 text-blue-300" />
+                      </button>
                     )}
                     {linkedQuotation && (
                       <button onClick={() => navigate(`/quotations/${linkedQuotation.id}`)}

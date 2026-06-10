@@ -294,6 +294,10 @@ export type BookingDetail =
 
 export interface Trip {
   id: string;
+  /** DB-generated sequential display number ("Trip #N"). Assigned by
+   *  Postgres on insert — absent for an instant on the optimistic record
+   *  returned by createTrip(), then patched in once the create resolves. */
+  tripNumber?: number;
   customer: string;
   phone: string;
   email?: string;
@@ -400,6 +404,10 @@ export interface Lead {
 
 export interface Customer {
   id: string;
+  /** DB-generated sequential display number ("Customer #N"). Assigned by
+   *  Postgres on insert — absent for an instant on the optimistic record
+   *  returned by createCustomer(), then patched in once the create resolves. */
+  customerNumber?: number;
   name: string;
   phone: string;
   altPhone?: string;

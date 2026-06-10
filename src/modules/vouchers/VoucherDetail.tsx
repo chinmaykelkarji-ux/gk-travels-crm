@@ -9,6 +9,7 @@ import apiClient from '@/lib/apiClient';
 import { fmtDate } from '@/shared/utils/date';
 import { whatsapp, gmail } from '@/shared/utils/email';
 import { cn } from '@/shared/utils/cn';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import type { VoucherStatus } from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -189,7 +190,10 @@ export default function VoucherDetail() {
                   <Badge variant={VOUCHER_STATUS_BADGE[voucher.status]}>{voucher.status.toUpperCase()}</Badge>
                   {linkedTrip && (
                     <button onClick={() => navigate(`/trips/${linkedTrip.id}`)}
-                      className="text-xs font-mono text-blue-600 hover:underline">{linkedTrip.id}</button>
+                      className="text-xs font-mono text-blue-600 hover:underline">
+                      {linkedTrip.id}
+                      <RecordNumberBadge label="Trip" n={linkedTrip.tripNumber} className="ml-1 text-blue-300" />
+                    </button>
                   )}
                 </div>
                 <h1 className="text-xl font-bold text-gray-900 font-display">

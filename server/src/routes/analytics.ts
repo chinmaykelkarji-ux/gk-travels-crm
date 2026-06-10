@@ -271,7 +271,7 @@ router.get('/trips', async (req, res) => {
     const allTrips = await prisma.trip.findMany({
       where,
       select: {
-        id: true, customer: true, destination: true, status: true,
+        id: true, tripNumber: true, customer: true, destination: true, status: true,
         paidAmount: true, grossMargin: true, marginPct: true,
         balanceDue: true, totalAmount: true, departure: true, createdDate: true,
       },
@@ -280,6 +280,7 @@ router.get('/trips', async (req, res) => {
 
     const mapped = allTrips.map(t => ({
       id:          t.id,
+      tripNumber:  t.tripNumber,
       customer:    t.customer,
       destination: t.destination,
       status:      t.status,
@@ -352,14 +353,14 @@ router.get('/alerts', async (req, res) => {
       // Trips with negative margin (loss-making)
       prisma.trip.findMany({
         where:   { grossMargin: { lt: 0 }, status: { notIn: ['cancelled', 'draft'] } },
-        select:  { id: true, customer: true, destination: true, grossMargin: true, marginPct: true, paidAmount: true, status: true },
+        select:  { id: true, tripNumber: true, customer: true, destination: true, grossMargin: true, marginPct: true, paidAmount: true, status: true },
         orderBy: { grossMargin: 'asc' },
         take:    20,
       }),
       // Trips with outstanding balance (departed or completing soon)
       prisma.trip.findMany({
         where:   { balanceDue: { gt: 0 }, status: { notIn: ['cancelled', 'draft'] } },
-        select:  { id: true, customer: true, destination: true, balanceDue: true, departure: true, status: true },
+        select:  { id: true, tripNumber: true, customer: true, destination: true, balanceDue: true, departure: true, status: true },
         orderBy: { balanceDue: 'desc' },
         take:    20,
       }),
@@ -383,12 +384,12 @@ router.get('/alerts', async (req, res) => {
 
     res.json({
       negativeProfitTrips: negProfitTrips.map(t => ({
-        id: t.id, customer: t.customer, destination: t.destination,
+        id: t.id, tripNumber: t.tripNumber, customer: t.customer, destination: t.destination,
         profit: t.grossMargin ?? 0, marginPct: t.marginPct ?? 0,
         revenue: t.paidAmount ?? 0, status: t.status,
       })),
       overdueBalances: overdueBalances.map(t => ({
-        id: t.id, customer: t.customer, destination: t.destination,
+        id: t.id, tripNumber: t.tripNumber, customer: t.customer, destination: t.destination,
         balanceDue: t.balanceDue ?? 0, departure: t.departure, status: t.status,
       })),
       overdueVendors: overdueVendors.map(g => ({

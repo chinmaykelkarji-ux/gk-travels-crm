@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { CustomerQuickCreate } from '@/shared/components/CustomerQuickCreate';
 import { useStore } from '@/store';
-import type { Booking, BookingType, BookingStatus } from '@/shared/types';
+import type { Booking, BookingType, BookingStatus, Trip } from '@/shared/types';
+import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
@@ -790,8 +791,8 @@ export default function Bookings() {
   // ── Trip lookup ──────────────────────────────────────────────
 
   const tripMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const t of trips) m[t.id] = t.destination;
+    const m: Record<string, Trip> = {};
+    for (const t of trips) m[t.id] = t;
     return m;
   }, [trips]);
 
@@ -958,7 +959,8 @@ export default function Bookings() {
                   const finStatus  = getFinancialStatus(b.totalPayable, b.advance);
                   const statusCfg  = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.pending;
                   const typeClr    = TYPE_COLOR[b.type]   ?? TYPE_COLOR.other;
-                  const linkedDest = b.refId ? tripMap[b.refId] : null;
+                  const linkedTrip = b.refId ? tripMap[b.refId] : null;
+                  const linkedDest = linkedTrip?.destination;
 
                   return (
                     <tr
@@ -991,6 +993,7 @@ export default function Bookings() {
                             className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
                           >
                             {b.refId}
+                            <RecordNumberBadge label="Trip" n={linkedTrip?.tripNumber} className="ml-1" />
                             {linkedDest && <span className="text-gray-400 ml-1">({linkedDest})</span>}
                           </button>
                         ) : (

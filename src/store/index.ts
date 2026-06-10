@@ -338,7 +338,16 @@ export const useStore = create<GKStore>()(
           activityLog: [tripEntry, ...s.activityLog].slice(0, 500),
         }));
 
-        void apiClient.post('/trips', trip).catch(onMutationError(''));
+        void apiClient.post('/trips', trip)
+          .then(r => {
+            const tripNumber = (r.data as Trip).tripNumber;
+            if (tripNumber !== undefined) {
+              set((s: GKStore) => ({
+                trips: s.trips.map(t => t.id === id ? { ...t, tripNumber } : t),
+              }));
+            }
+          })
+          .catch(onMutationError(''));
         get().refreshAllReminders();
         return trip;
       },
@@ -606,7 +615,16 @@ export const useStore = create<GKStore>()(
           ...data,
         };
         set((s: GKStore) => ({ customers: [cust, ...s.customers] }));
-        void apiClient.post('/customers', cust).catch(onMutationError(''));
+        void apiClient.post('/customers', cust)
+          .then(r => {
+            const customerNumber = (r.data as Customer).customerNumber;
+            if (customerNumber !== undefined) {
+              set((s: GKStore) => ({
+                customers: s.customers.map(c => c.id === id ? { ...c, customerNumber } : c),
+              }));
+            }
+          })
+          .catch(onMutationError(''));
         return cust;
       },
 
