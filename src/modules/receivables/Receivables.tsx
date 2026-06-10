@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   Plus, Search, Receipt, AlertTriangle, CheckCircle, Clock,
-  ChevronDown, ChevronRight, Trash2, IndianRupee,
+  ChevronDown, ChevronRight, Trash2, Pencil, IndianRupee,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
-import type { Receivable, ReceivableStatus } from '@/shared/types';
+import type { Receivable, ReceivableEntry, ReceivableStatus } from '@/shared/types';
 import { fmtDate, today } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
@@ -35,6 +35,7 @@ export default function Receivables() {
   const updateReceivable     = useStore(s => s.updateReceivable);
   const deleteReceivable     = useStore(s => s.deleteReceivable);
   const addReceivableEntry   = useStore(s => s.addReceivableEntry);
+  const updateReceivableEntry = useStore(s => s.updateReceivableEntry);
   const deleteReceivableEntry = useStore(s => s.deleteReceivableEntry);
 
   const [search,    setSearch]    = useState('');
@@ -43,7 +44,7 @@ export default function Receivables() {
 
   const [formOpen,       setFormOpen]       = useState(false);
   const [editing,        setEditing]        = useState<Receivable | null>(null);
-  const [entryFor,       setEntryFor]       = useState<Receivable | null>(null);
+  const [entryDialog,    setEntryDialog]    = useState<{ receivable: Receivable; entry: ReceivableEntry | null } | null>(null);
   const [receiptFormOpen, setReceiptFormOpen] = useState(false);
 
   // Live status for every receivable — never persisted, always derived.
@@ -104,11 +105,17 @@ export default function Receivables() {
     setEditing(null);
   }
 
-  function handleSaveEntry(data: Partial<import('@/shared/types').ReceivableEntry>) {
-    if (!entryFor) return;
-    addReceivableEntry(entryFor.id, data);
-    toast.success('Payment recorded', `₹${data.amount} recorded for ${entryFor.customerName}`);
-    setEntryFor(null);
+  function handleSaveEntry(data: Partial<ReceivableEntry>) {
+    if (!entryDialog) return;
+    const { receivable, entry } = entryDialog;
+    if (entry) {
+      updateReceivableEntry(receivable.id, entry.id, data);
+      toast.success('Payment updated', `₹${data.amount} updated for ${receivable.customerName}`);
+    } else {
+      addReceivableEntry(receivable.id, data);
+      toast.success('Payment recorded', `₹${data.amount} recorded for ${receivable.customerName}`);
+    }
+    setEntryDialog(null);
   }
 
   async function handleDelete(r: Receivable) {
@@ -226,7 +233,8 @@ export default function Receivables() {
                         onToggle={() => toggleExpand(r.id)}
                         onEdit={() => openEdit(r)}
                         onDelete={() => handleDelete(r)}
-                        onRecordPayment={() => setEntryFor(r)}
+                        onRecordPayment={() => setEntryDialog({ receivable: r, entry: null })}
+                        onEditEntry={(entry) => setEntryDialog({ receivable: r, entry })}
                         onDeleteEntry={(entryId) => handleDeleteEntry(r, entryId)}
                       />
                     </motion.tr>
@@ -245,10 +253,11 @@ export default function Receivables() {
         receivable={editing}
       />
       <ReceivableEntryForm
-        open={!!entryFor}
-        onClose={() => setEntryFor(null)}
+        open={!!entryDialog}
+        onClose={() => setEntryDialog(null)}
         onSave={handleSaveEntry}
-        receivable={entryFor}
+        receivable={entryDialog?.receivable ?? null}
+        entry={entryDialog?.entry ?? null}
       />
       <RecordReceiptForm
         open={receiptFormOpen}
@@ -268,10 +277,11 @@ interface RowGroupProps {
   onEdit:           () => void;
   onDelete:         () => void;
   onRecordPayment:  () => void;
+  onEditEntry:      (entry: ReceivableEntry) => void;
   onDeleteEntry:    (entryId: string) => void;
 }
 
-function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayment, onDeleteEntry }: RowGroupProps) {
+function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayment, onEditEntry, onDeleteEntry }: RowGroupProps) {
   const linked = r.bookingId ? `Booking ${r.bookingId}` : r.tripId ? `Trip ${r.tripId}` : '—';
   return (
     <>
@@ -348,9 +358,14 @@ function RowGroup({ r, status, isOpen, onToggle, onEdit, onDelete, onRecordPayme
                       <td className="py-2 px-2 text-gray-500 whitespace-nowrap">{e.reference || '—'}</td>
                       <td className="py-2 px-2 text-gray-500">{e.notes || '—'}</td>
                       <td className="py-2 px-2">
-                        <Button size="icon-sm" variant="ghost" onClick={() => onDeleteEntry(e.id)}>
-                          <Trash2 className="w-3 h-3 text-red-400" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <Button size="icon-sm" variant="ghost" onClick={() => onEditEntry(e)}>
+                            <Pencil className="w-3 h-3 text-gray-400" />
+                          </Button>
+                          <Button size="icon-sm" variant="ghost" onClick={() => onDeleteEntry(e.id)}>
+                            <Trash2 className="w-3 h-3 text-red-400" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

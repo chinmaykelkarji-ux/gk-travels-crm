@@ -225,6 +225,7 @@ interface StoreActions {
   deleteReceivable:      (id: string) => void;
   addReceivableEntry:    (receivableId: string, entry: Partial<ReceivableEntry>) => ReceivableEntry | null;
   deleteReceivableEntry: (receivableId: string, entryId: string) => void;
+  updateReceivableEntry: (receivableId: string, entryId: string, data: Partial<ReceivableEntry>) => void;
 
   // â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   clearAll:    () => void;
@@ -1578,6 +1579,45 @@ export const useStore = create<GKStore>()(
           return { receivables: newReceivables, trips: newTrips };
         });
         void apiClient.delete(`/receivables/${receivableId}/entries/${entryId}`)
+          .then(() => {
+            const updated = get().receivables.find(r => r.id === receivableId);
+            if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
+          })
+          .catch(onMutationError(''));
+      },
+
+      updateReceivableEntry(receivableId, entryId, data) {
+        set((s: GKStore) => {
+          const newReceivables = s.receivables.map(r => {
+            if (r.id !== receivableId) return r;
+            const entries = r.entries.map(e => e.id === entryId ? { ...e, ...data } : e);
+            const fin = calcReceivableFinance({ invoiceAmount: r.invoiceAmount, entries, dueDate: r.dueDate });
+            return { ...r, entries, totalReceived: fin.totalReceived, balanceDue: fin.balanceDue };
+          });
+          const linkedRec = newReceivables.find(r => r.id === receivableId);
+          const tripId    = linkedRec?.tripId;
+          let newTrips    = s.trips;
+          if (tripId) {
+            const tripReceived = newReceivables
+              .filter(r => r.tripId === tripId)
+              .reduce((sum, r) => sum + r.totalReceived, 0);
+            newTrips = s.trips.map(t => {
+              if (t.id !== tripId) return t;
+              const newBalanceDue = Math.max(0, (t.totalPayable ?? 0) - tripReceived);
+              return { ...t, paidAmount: tripReceived, balanceDue: newBalanceDue };
+            });
+          }
+          return { receivables: newReceivables, trips: newTrips };
+        });
+
+        get().logActivity(
+          'receivable_payment_updated',
+          `Payment entry ${entryId} on receivable ${receivableId} updated`,
+          'receivable',
+          receivableId,
+        );
+
+        void apiClient.put(`/receivables/${receivableId}/entries/${entryId}`, data)
           .then(() => {
             const updated = get().receivables.find(r => r.id === receivableId);
             if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);

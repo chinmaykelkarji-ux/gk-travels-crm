@@ -16,10 +16,12 @@ interface ReceivableEntryFormProps {
   onClose:     () => void;
   onSave:      (data: Partial<ReceivableEntry>) => void;
   receivable:  Receivable | null;
+  /** When set, the form edits this existing entry instead of creating a new one */
+  entry?:      ReceivableEntry | null;
   loading?:    boolean;
 }
 
-export function ReceivableEntryForm({ open, onClose, onSave, receivable, loading }: ReceivableEntryFormProps) {
+export function ReceivableEntryForm({ open, onClose, onSave, receivable, entry, loading }: ReceivableEntryFormProps) {
   const [amount,      setAmount]      = useState('');
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('Cash');
@@ -28,22 +30,32 @@ export function ReceivableEntryForm({ open, onClose, onSave, receivable, loading
 
   useEffect(() => {
     if (!open) return;
-    setAmount('');
-    setPaymentDate(new Date().toISOString().split('T')[0]);
-    setPaymentMode('Cash');
-    setReference('');
-    setNotes('');
-  }, [open]);
+    if (entry) {
+      setAmount(String(entry.amount));
+      setPaymentDate(entry.paymentDate);
+      setPaymentMode(entry.paymentMode);
+      setReference(entry.reference ?? '');
+      setNotes(entry.notes ?? '');
+    } else {
+      setAmount('');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
+      setPaymentMode('Cash');
+      setReference('');
+      setNotes('');
+    }
+  }, [open, entry]);
 
   if (!receivable) return null;
-  const balanceDue = receivable.balanceDue;
+  // When editing, this entry's current amount is part of balanceDue's
+  // deduction already — add it back to get the true available headroom.
+  const balanceDue = entry ? receivable.balanceDue + entry.amount : receivable.balanceDue;
 
   function handleSave() {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
     if (amt > balanceDue) {
       const proceed = confirm(
-        `This amount (${formatCurrency(amt)}) exceeds the pending balance (${formatCurrency(balanceDue)}). Record anyway?`
+        `This amount (${formatCurrency(amt)}) exceeds the pending balance (${formatCurrency(balanceDue)}). ${entry ? 'Save' : 'Record'} anyway?`
       );
       if (!proceed) return;
     }
@@ -60,12 +72,12 @@ export function ReceivableEntryForm({ open, onClose, onSave, receivable, loading
     <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Record Payment — {receivable.customerName}</DialogTitle>
+          <DialogTitle>{entry ? 'Edit Payment' : 'Record Payment'} — {receivable.customerName}</DialogTitle>
         </DialogHeader>
 
         <DialogBody>
           <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between text-xs">
-            <span className="text-gray-500">Pending Balance</span>
+            <span className="text-gray-500">{entry ? 'Available Balance' : 'Pending Balance'}</span>
             <span className="font-bold text-gray-900">{formatCurrency(balanceDue)}</span>
           </div>
 
@@ -136,7 +148,7 @@ export function ReceivableEntryForm({ open, onClose, onSave, receivable, loading
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" loading={loading} onClick={handleSave}>
-            Record Payment
+            {entry ? 'Save Changes' : 'Record Payment'}
           </Button>
         </DialogFooter>
       </DialogContent>
