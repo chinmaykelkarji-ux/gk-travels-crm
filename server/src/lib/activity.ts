@@ -32,6 +32,8 @@ export const ACTIVITY_ACTION_LABEL: Record<string, string> = {
   communication_sent:          'Message Sent',
   itinerary_sent:              'Itinerary Sent',
   quotation_sent_comm:         'Quotation Sent',
+  credit_note_edited:          'Credit Note Edited',
+  debit_note_edited:           'Debit Note Edited',
   receivable_created:          'Receivable Raised',
   receivable_payment_recorded: 'Payment Recorded',
   receivable_overdue:          'Receivable Overdue',

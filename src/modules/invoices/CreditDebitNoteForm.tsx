@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, AlertCircle, FileMinus, FilePlus, Search } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import { today } from '@/shared/utils/date';
@@ -52,26 +52,45 @@ function round2(n: number): number {
 
 export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit' }) {
   const navigate = useNavigate();
+  const { id: routeId } = useParams<{ id?: string }>();
   const [params] = useSearchParams();
-  const invoiceId = params.get('invoiceId') ?? '';
+  const isEdit = !!routeId;
+
+  const isCredit = kind === 'credit';
+
+  const existingCreditNote = useStore(isCredit ? selectors.creditNoteById(routeId ?? '') : () => undefined);
+  const existingDebitNote  = useStore(!isCredit ? selectors.debitNoteById(routeId ?? '') : () => undefined);
+  const existing = isCredit ? existingCreditNote : existingDebitNote;
+
+  const invoiceId = isEdit ? (existing?.invoiceId ?? '') : (params.get('invoiceId') ?? '');
 
   const invoice         = useStore(selectors.invoiceById(invoiceId));
   const invoices        = useStore(s => s.invoices);
   const companySettings = useStore(s => s.companySettings);
   const createCreditNote = useStore(s => s.createCreditNote);
+  const updateCreditNote = useStore(s => s.updateCreditNote);
   const createDebitNote  = useStore(s => s.createDebitNote);
+  const updateDebitNote  = useStore(s => s.updateDebitNote);
 
-  const isCredit = kind === 'credit';
   const REASONS  = isCredit ? CREDIT_REASONS : DEBIT_REASONS;
   const Icon     = isCredit ? FileMinus : FilePlus;
-  const title    = isCredit ? 'New Credit Note' : 'New Debit Note';
+  const docLabel = isCredit ? 'Credit Note' : 'Debit Note';
+  const docNumber = isCredit ? existingCreditNote?.creditNoteNumber : existingDebitNote?.debitNoteNumber;
+  const title    = isEdit ? `Edit ${docLabel} ${docNumber ?? ''}`.trim() : `New ${docLabel}`;
   const accent   = isCredit ? 'amber' : 'blue';
 
-  const [date, setDate] = useState(today());
-  const [reason, setReason] = useState(REASONS[0]);
-  const [reasonDetails, setReasonDetails] = useState('');
-  const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<LineRow[]>([emptyRow()]);
+  const [date, setDate] = useState(existing?.date ?? today());
+  const [reason, setReason] = useState(existing?.reason ?? REASONS[0]);
+  const [reasonDetails, setReasonDetails] = useState(existing?.reasonDetails ?? '');
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [items, setItems] = useState<LineRow[]>(() =>
+    existing?.items.length
+      ? existing.items.map(it => ({
+          key: it.id, description: it.description, hsnSac: it.hsnSac ?? '',
+          quantity: it.quantity, rate: it.rate, gstRate: it.gstRate,
+        }))
+      : [emptyRow()],
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -107,8 +126,9 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
     return sumGstSplits(splits);
   }, [items, gstType]);
 
-  const isFrozen = !!(invoice && companySettings?.gstFrozenUntil && invoice.invoiceDate <= companySettings.gstFrozenUntil);
-  const isCancelled = invoice?.status === 'CANCELLED';
+  const isFrozen = !!(invoice && companySettings?.gstFrozenUntil && invoice.invoiceDate <= companySettings.gstFrozenUntil)
+    || !!(existing && companySettings?.gstFrozenUntil && existing.date <= companySettings.gstFrozenUntil);
+  const isCancelled = invoice?.status === 'CANCELLED' || existing?.status === 'CANCELLED';
 
   async function handleSave() {
     if (!invoice) { setError('Select an invoice to issue this against'); return; }
@@ -121,28 +141,54 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
     try {
       const cleanItems = validItems.map(({ key: _key, ...rest }) => rest);
       if (isCredit) {
-        const res = await createCreditNote({
-          invoiceId: invoice.id, date, reason,
-          reasonDetails: reasonDetails || null, notes: notes || null,
-          items: cleanItems,
-        });
-        if (res.ok && res.creditNote) {
-          toast.success('Credit Note issued', res.creditNote.creditNoteNumber);
-          navigate(`/credit-notes/${res.creditNote.id}`);
+        if (isEdit && existing) {
+          const res = await updateCreditNote(existing.id, {
+            date, reason, reasonDetails: reasonDetails || null, notes: notes || null,
+            items: cleanItems,
+          });
+          if (res.ok && res.creditNote) {
+            toast.success('Credit Note updated', res.creditNote.creditNoteNumber);
+            navigate(`/credit-notes/${res.creditNote.id}`);
+          } else {
+            setError(res.reason ?? 'Failed to update credit note');
+          }
         } else {
-          setError(res.reason ?? 'Failed to create credit note');
+          const res = await createCreditNote({
+            invoiceId: invoice.id, date, reason,
+            reasonDetails: reasonDetails || null, notes: notes || null,
+            items: cleanItems,
+          });
+          if (res.ok && res.creditNote) {
+            toast.success('Credit Note issued', res.creditNote.creditNoteNumber);
+            navigate(`/credit-notes/${res.creditNote.id}`);
+          } else {
+            setError(res.reason ?? 'Failed to create credit note');
+          }
         }
       } else {
-        const res = await createDebitNote({
-          invoiceId: invoice.id, date, reason,
-          reasonDetails: reasonDetails || null, notes: notes || null,
-          items: cleanItems,
-        });
-        if (res.ok && res.debitNote) {
-          toast.success('Debit Note issued', res.debitNote.debitNoteNumber);
-          navigate(`/debit-notes/${res.debitNote.id}`);
+        if (isEdit && existing) {
+          const res = await updateDebitNote(existing.id, {
+            date, reason, reasonDetails: reasonDetails || null, notes: notes || null,
+            items: cleanItems,
+          });
+          if (res.ok && res.debitNote) {
+            toast.success('Debit Note updated', res.debitNote.debitNoteNumber);
+            navigate(`/debit-notes/${res.debitNote.id}`);
+          } else {
+            setError(res.reason ?? 'Failed to update debit note');
+          }
         } else {
-          setError(res.reason ?? 'Failed to create debit note');
+          const res = await createDebitNote({
+            invoiceId: invoice.id, date, reason,
+            reasonDetails: reasonDetails || null, notes: notes || null,
+            items: cleanItems,
+          });
+          if (res.ok && res.debitNote) {
+            toast.success('Debit Note issued', res.debitNote.debitNoteNumber);
+            navigate(`/debit-notes/${res.debitNote.id}`);
+          } else {
+            setError(res.reason ?? 'Failed to create debit note');
+          }
         }
       }
     } finally {
@@ -150,7 +196,16 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
     }
   }
 
-  if (!invoiceId) {
+  if (isEdit && !existing) {
+    return (
+      <div className="p-6 text-center text-gray-500">
+        <p>{docLabel} not found.</p>
+        <Button variant="ghost" size="sm" onClick={() => navigate(isCredit ? '/credit-notes' : '/debit-notes')} className="mt-3">← Back to {isCredit ? 'Credit Notes' : 'Debit Notes'}</Button>
+      </div>
+    );
+  }
+
+  if (!isEdit && !invoiceId) {
     return (
       <div className="p-5 space-y-5 animate-fade-in max-w-3xl">
         <button onClick={() => navigate(-1)}
@@ -195,8 +250,10 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
     return (
       <div className="p-6 text-center text-gray-500">
         <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-400" />
-        <p>This invoice is cancelled and cannot have {isCredit ? 'credit' : 'debit'} notes issued against it.</p>
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/invoices/${invoice.id}`)} className="mt-3">← Back to Invoice</Button>
+        <p>{isEdit
+          ? `This ${docLabel.toLowerCase()} is cancelled and cannot be edited.`
+          : `This invoice is cancelled and cannot have ${isCredit ? 'credit' : 'debit'} notes issued against it.`}</p>
+        <Button variant="ghost" size="sm" onClick={() => navigate(isEdit ? `/${isCredit ? 'credit-notes' : 'debit-notes'}/${existing!.id}` : `/invoices/${invoice.id}`)} className="mt-3">← Back</Button>
       </div>
     );
   }
@@ -206,16 +263,16 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
       <div className="p-6 text-center text-gray-500">
         <AlertCircle className="w-8 h-8 mx-auto mb-2 text-purple-400" />
         <p>This invoice's period is GST-frozen and cannot be adjusted.</p>
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/invoices/${invoice.id}`)} className="mt-3">← Back to Invoice</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate(isEdit ? `/${isCredit ? 'credit-notes' : 'debit-notes'}/${existing!.id}` : `/invoices/${invoice.id}`)} className="mt-3">← Back</Button>
       </div>
     );
   }
 
   return (
     <div className="p-5 pb-28 space-y-5 animate-fade-in max-w-4xl">
-      <button onClick={() => navigate(`/invoices/${invoice.id}`)}
+      <button onClick={() => navigate(isEdit ? `/${isCredit ? 'credit-notes' : 'debit-notes'}/${existing!.id}` : `/invoices/${invoice.id}`)}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to Invoice {invoice.invoiceNumber}
+        <ArrowLeft className="w-4 h-4" /> {isEdit ? `Back to ${docLabel} ${docNumber ?? ''}`.trim() : `Back to Invoice ${invoice.invoiceNumber}`}
       </button>
 
       <div className="flex items-center gap-3">
@@ -354,9 +411,9 @@ export default function CreditDebitNoteForm({ kind }: { kind: 'credit' | 'debit'
           <span className="font-bold text-gray-900">{formatCurrency(totals.totalAmount)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/invoices/${invoice.id}`)}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(isEdit ? `/${isCredit ? 'credit-notes' : 'debit-notes'}/${existing!.id}` : `/invoices/${invoice.id}`)}>Cancel</Button>
           <Button size="sm" loading={saving} className="gap-1.5" onClick={handleSave}>
-            <Icon className="w-3.5 h-3.5" /> {isCredit ? 'Issue Credit Note' : 'Issue Debit Note'}
+            <Icon className="w-3.5 h-3.5" /> {isEdit ? 'Save Changes' : (isCredit ? 'Issue Credit Note' : 'Issue Debit Note')}
           </Button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer, XCircle, FileMinus, FilePlus } from 'lucide-react';
+import { ArrowLeft, Printer, XCircle, FileMinus, FilePlus, Pencil } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import { fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
@@ -42,6 +42,7 @@ export default function CreditDebitNoteDetail({ kind }: { kind: 'credit' | 'debi
   }
 
   const isCancelled = note.status === 'CANCELLED';
+  const isFrozen = !!(companySettings?.gstFrozenUntil && note.date <= companySettings.gstFrozenUntil);
 
   async function handleCancel() {
     if (!note) return;
@@ -85,6 +86,11 @@ export default function CreditDebitNoteDetail({ kind }: { kind: 'credit' | 'debi
             {invoice && (
               <Button variant="outline" size="sm" onClick={() => navigate(`/invoices/${invoice.id}`)}>
                 View Invoice {invoice.invoiceNumber}
+              </Button>
+            )}
+            {!isCancelled && !isFrozen && (
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate(`/${isCredit ? 'credit-notes' : 'debit-notes'}/${note.id}/edit`)}>
+                <Pencil className="w-3.5 h-3.5" /> Edit
               </Button>
             )}
             {!isCancelled && (

@@ -3,13 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, AlertCircle, FileWarning } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
-import { today } from '@/shared/utils/date';
+import { today, fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import {
   GST_STATE_CODES, getStateCodeFromGstin, determineGstType, splitGst, sumGstSplits,
   SERVICE_TYPE_OPTIONS, type GstSplitType,
 } from '@/shared/utils/gst';
-import type { Booking, Trip, InvoiceLineItemInput } from '@/shared/types';
+import type {
+  Booking, Trip, InvoiceLineItemInput,
+  FlightDetail, HotelDetail, CabDetail, TrainDetail, ActivityDetail, VisaDetail,
+} from '@/shared/types';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/utils/cn';
 import { Button } from '@/shared/components/ui/button';
@@ -42,6 +45,63 @@ function emptyRow(): LineRow {
     key: makeKey(), description: '', hsnSac: '9985', serviceType: 'other',
     bookingId: null, tripId: null, quantity: 1, rate: 0, gstRate: 5,
   };
+}
+
+function describeBooking(b: Booking): string {
+  const base = `${BOOKING_TYPE_LABEL[b.type] ?? 'Service'} — ${b.customerName}`;
+  const parts: string[] = [];
+
+  switch (b.type) {
+    case 'flight': {
+      const d = b.detail as FlightDetail;
+      if (d.origin && d.destination) parts.push(`${d.origin} → ${d.destination}`);
+      if (d.departDate) parts.push(`Travel Date: ${fmtDate(d.departDate)}`);
+      break;
+    }
+    case 'hotel': {
+      const d = b.detail as HotelDetail;
+      if (d.hotelName) parts.push(d.hotelName);
+      if (d.city) parts.push(d.city);
+      if (d.checkIn || d.checkOut) parts.push(`${fmtDate(d.checkIn)} – ${fmtDate(d.checkOut)}`);
+      break;
+    }
+    case 'cab': {
+      const d = b.detail as CabDetail;
+      if (d.pickup && d.drop) parts.push(`${d.pickup} → ${d.drop}`);
+      if (d.pickupDate) parts.push(`Date: ${fmtDate(d.pickupDate)}`);
+      break;
+    }
+    case 'train':
+    case 'bus': {
+      const d = b.detail as TrainDetail;
+      if (d.fromStation && d.toStation) parts.push(`${d.fromStation} → ${d.toStation}`);
+      if (d.departure) parts.push(`Travel Date: ${fmtDate(d.departure)}`);
+      break;
+    }
+    case 'activity': {
+      const d = b.detail as ActivityDetail;
+      if (d.activityName) parts.push(d.activityName);
+      if (d.location) parts.push(d.location);
+      if (d.date) parts.push(`Date: ${fmtDate(d.date)}`);
+      break;
+    }
+    case 'visa': {
+      const d = b.detail as VisaDetail;
+      if (d.country) parts.push(d.country);
+      break;
+    }
+  }
+
+  if (b.refId) parts.push(`Trip ${b.refId}`);
+  return parts.length ? `${base} (${parts.join(', ')})` : base;
+}
+
+function describeTrip(t: Trip): string {
+  const base = `${t.type || 'Tour Package'} — ${t.destination}`;
+  if (t.departure || t.returnDate) {
+    return `${base} (${fmtDate(t.departure)} – ${fmtDate(t.returnDate)})`;
+  }
+  return base;
 }
 
 export default function InvoiceBuilder() {
@@ -126,14 +186,50 @@ export default function InvoiceBuilder() {
       setItems(prev => prev.filter(i => i.bookingId !== b.id));
       return;
     }
-    const taxable = b.taxableAmount || b.totalPayable || b.sellingPrice || 0;
+    const description = describeBooking(b);
+    const hsnSac = SERVICE_TYPE_OPTIONS.find(s => s.value === b.type)?.sac ?? '9985';
+
     setItems(prev => {
       const base = prev.length === 1 && !prev[0].description && !prev[0].bookingId && !prev[0].tripId
         ? [] : prev;
+
+      if (b.serviceMarginMode) {
+        const rows: LineRow[] = [];
+        if (b.supplierCost > 0) {
+          rows.push({
+            key: makeKey(),
+            description: `${description} — Supplier Cost (passthrough)`,
+            hsnSac,
+            serviceType: b.type,
+            bookingId: b.id,
+            tripId: null,
+            quantity: 1,
+            rate: round2(b.supplierCost),
+            gstRate: 0,
+          });
+        }
+        const fee = b.taxableFee || b.convenienceFee || 0;
+        if (fee > 0) {
+          rows.push({
+            key: makeKey(),
+            description: `${description} — Convenience Fee`,
+            hsnSac,
+            serviceType: b.type,
+            bookingId: b.id,
+            tripId: null,
+            quantity: 1,
+            rate: round2(fee),
+            gstRate: b.gstRate ?? 5,
+          });
+        }
+        return rows.length ? [...base, ...rows] : prev;
+      }
+
+      const taxable = b.taxableAmount || b.totalPayable || b.sellingPrice || 0;
       return [...base, {
         key: makeKey(),
-        description: `${BOOKING_TYPE_LABEL[b.type] ?? 'Service'} — ${b.customerName}${b.refId ? ` (Trip ${b.refId})` : ''}`,
-        hsnSac: SERVICE_TYPE_OPTIONS.find(s => s.value === b.type)?.sac ?? '9985',
+        description,
+        hsnSac,
         serviceType: b.type,
         bookingId: b.id,
         tripId: null,
@@ -155,7 +251,7 @@ export default function InvoiceBuilder() {
         ? [] : prev;
       return [...base, {
         key: makeKey(),
-        description: `${t.type || 'Tour Package'} — ${t.destination}`,
+        description: describeTrip(t),
         hsnSac: SERVICE_TYPE_OPTIONS.find(s => s.value === 'package')?.sac ?? '9985',
         serviceType: 'package',
         bookingId: null,

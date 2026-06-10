@@ -262,9 +262,11 @@ export default function App() {
                 <Route path="/credit-notes"          element={<CreditNotes />} />
                 <Route path="/credit-notes/new"      element={<CreditDebitNoteForm kind="credit" />} />
                 <Route path="/credit-notes/:id"      element={<CreditDebitNoteDetail kind="credit" />} />
+                <Route path="/credit-notes/:id/edit" element={<CreditDebitNoteForm kind="credit" />} />
                 <Route path="/debit-notes"           element={<DebitNotes />} />
                 <Route path="/debit-notes/new"       element={<CreditDebitNoteForm kind="debit" />} />
                 <Route path="/debit-notes/:id"       element={<CreditDebitNoteDetail kind="debit" />} />
+                <Route path="/debit-notes/:id/edit"  element={<CreditDebitNoteForm kind="debit" />} />
                 <Route path="/gst-reports"           element={<GstReports />} />
                 <Route path="/finance"               element={<Finance />} />
                 <Route path="/receivables"           element={<Receivables />} />

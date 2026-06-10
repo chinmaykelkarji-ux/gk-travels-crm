@@ -270,7 +270,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
     });
 
     return finalInvoice;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 export interface UpdateInvoiceInput {
@@ -358,7 +358,7 @@ export async function updateInvoice(id: string, input: UpdateInvoiceInput) {
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 export async function cancelInvoice(id: string, reason: string, userId?: string | null) {
@@ -398,7 +398,7 @@ export async function cancelInvoice(id: string, reason: string, userId?: string 
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 // Deletes an invoice entirely — frees its number (if it was the most
@@ -440,7 +440,7 @@ export async function deleteInvoice(id: string, userId?: string | null) {
     });
 
     return { id };
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 // ── Credit Notes ─────────────────────────────────────────────────
@@ -519,7 +519,84 @@ export async function createCreditNote(input: CreateCreditNoteInput) {
     });
 
     return creditNote;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
+}
+
+export interface UpdateCreditDebitNoteInput {
+  date?:          string;
+  reason?:        string;
+  reasonDetails?: string | null;
+  notes?:         string | null;
+  items?:         CreditDebitLineItemInput[];
+  updatedBy?:     string | null;
+}
+
+export async function updateCreditNote(id: string, input: UpdateCreditDebitNoteInput) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.creditNote.findUniqueOrThrow({ where: { id }, include: { items: true } });
+    const settings = await getOrCreateCompanySettings(tx);
+
+    if (existing.status === 'CANCELLED') throw new Error('Cannot edit a cancelled credit note');
+    assertNotFrozen(existing.date, settings);
+    if (input.date) assertNotFrozen(input.date, settings);
+
+    const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: existing.invoiceId } });
+
+    let totals = {
+      taxableAmount:  existing.taxableAmount,
+      cgstAmount:     existing.cgstAmount,
+      sgstAmount:     existing.sgstAmount,
+      igstAmount:     existing.igstAmount,
+      totalGstAmount: existing.totalGstAmount,
+      totalAmount:    existing.totalAmount,
+    };
+    let lineItems: ReturnType<typeof buildCreditDebitLineItems> | null = null;
+
+    if (input.items) {
+      lineItems = buildCreditDebitLineItems(input.items, invoice.gstType);
+      totals    = sumGstSplits(lineItems.map(li => splitGst(li.amount, li.gstRate, invoice.gstType)));
+    }
+
+    const updated = await tx.creditNote.update({
+      where: { id },
+      data: {
+        date:           input.date ?? undefined,
+        reason:         input.reason ?? undefined,
+        reasonDetails:  input.reasonDetails !== undefined ? input.reasonDetails : undefined,
+        notes:          input.notes !== undefined ? input.notes : undefined,
+        taxableAmount:  totals.taxableAmount,
+        cgstAmount:     totals.cgstAmount,
+        sgstAmount:     totals.sgstAmount,
+        igstAmount:     totals.igstAmount,
+        totalGstAmount: totals.totalGstAmount,
+        totalAmount:    totals.totalAmount,
+        ...(lineItems ? { items: { deleteMany: {}, create: lineItems } } : {}),
+      },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    if (invoice.receivableId && totals.totalAmount !== existing.totalAmount) {
+      const rcv = await tx.receivable.findUnique({ where: { id: invoice.receivableId }, include: { entries: true } });
+      if (rcv) {
+        const delta = round2(totals.totalAmount - existing.totalAmount);
+        const newInvoiceAmount = round2(rcv.invoiceAmount - delta);
+        const fin = calcReceivableFinance({ invoiceAmount: newInvoiceAmount, entries: rcv.entries, dueDate: rcv.dueDate });
+        await tx.receivable.update({ where: { id: rcv.id }, data: { invoiceAmount: newInvoiceAmount, balanceDue: fin.balanceDue } });
+      }
+    }
+
+    await logActivity(tx, {
+      action:      'credit_note_edited',
+      description: `Credit Note ${existing.creditNoteNumber} edited`,
+      entityType:  'credit_note',
+      entityId:    id,
+      userId:      input.updatedBy,
+      before:      existing,
+      after:       updated,
+    });
+
+    return updated;
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 export async function cancelCreditNote(id: string, userId?: string | null) {
@@ -555,7 +632,7 @@ export async function cancelCreditNote(id: string, userId?: string | null) {
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 // ── Debit Notes ──────────────────────────────────────────────────
@@ -634,7 +711,75 @@ export async function createDebitNote(input: CreateDebitNoteInput) {
     });
 
     return debitNote;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
+}
+
+export async function updateDebitNote(id: string, input: UpdateCreditDebitNoteInput) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.debitNote.findUniqueOrThrow({ where: { id }, include: { items: true } });
+    const settings = await getOrCreateCompanySettings(tx);
+
+    if (existing.status === 'CANCELLED') throw new Error('Cannot edit a cancelled debit note');
+    assertNotFrozen(existing.date, settings);
+    if (input.date) assertNotFrozen(input.date, settings);
+
+    const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: existing.invoiceId } });
+
+    let totals = {
+      taxableAmount:  existing.taxableAmount,
+      cgstAmount:     existing.cgstAmount,
+      sgstAmount:     existing.sgstAmount,
+      igstAmount:     existing.igstAmount,
+      totalGstAmount: existing.totalGstAmount,
+      totalAmount:    existing.totalAmount,
+    };
+    let lineItems: ReturnType<typeof buildCreditDebitLineItems> | null = null;
+
+    if (input.items) {
+      lineItems = buildCreditDebitLineItems(input.items, invoice.gstType);
+      totals    = sumGstSplits(lineItems.map(li => splitGst(li.amount, li.gstRate, invoice.gstType)));
+    }
+
+    const updated = await tx.debitNote.update({
+      where: { id },
+      data: {
+        date:           input.date ?? undefined,
+        reason:         input.reason ?? undefined,
+        reasonDetails:  input.reasonDetails !== undefined ? input.reasonDetails : undefined,
+        notes:          input.notes !== undefined ? input.notes : undefined,
+        taxableAmount:  totals.taxableAmount,
+        cgstAmount:     totals.cgstAmount,
+        sgstAmount:     totals.sgstAmount,
+        igstAmount:     totals.igstAmount,
+        totalGstAmount: totals.totalGstAmount,
+        totalAmount:    totals.totalAmount,
+        ...(lineItems ? { items: { deleteMany: {}, create: lineItems } } : {}),
+      },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    if (invoice.receivableId && totals.totalAmount !== existing.totalAmount) {
+      const rcv = await tx.receivable.findUnique({ where: { id: invoice.receivableId }, include: { entries: true } });
+      if (rcv) {
+        const delta = round2(totals.totalAmount - existing.totalAmount);
+        const newInvoiceAmount = round2(rcv.invoiceAmount + delta);
+        const fin = calcReceivableFinance({ invoiceAmount: newInvoiceAmount, entries: rcv.entries, dueDate: rcv.dueDate });
+        await tx.receivable.update({ where: { id: rcv.id }, data: { invoiceAmount: newInvoiceAmount, balanceDue: fin.balanceDue } });
+      }
+    }
+
+    await logActivity(tx, {
+      action:      'debit_note_edited',
+      description: `Debit Note ${existing.debitNoteNumber} edited`,
+      entityType:  'debit_note',
+      entityId:    id,
+      userId:      input.updatedBy,
+      before:      existing,
+      after:       updated,
+    });
+
+    return updated;
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 export async function cancelDebitNote(id: string, userId?: string | null) {
@@ -670,7 +815,7 @@ export async function cancelDebitNote(id: string, userId?: string | null) {
     });
 
     return updated;
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 export type { Prisma };

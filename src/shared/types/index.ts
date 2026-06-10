@@ -1157,6 +1157,14 @@ export interface CreateDebitNoteInput {
   items:          CreditDebitLineItemInput[];
 }
 
+export interface UpdateCreditDebitNoteInput {
+  date?:          string;
+  reason?:        string;
+  reasonDetails?: string | null;
+  notes?:         string | null;
+  items?:         CreditDebitLineItemInput[];
+}
+
 // ─── Form Shapes (subset of entities, used by React Hook Form) ─
 
 export interface TripFormValues {

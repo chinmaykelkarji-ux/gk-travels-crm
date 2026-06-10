@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
-import { createCreditNote, cancelCreditNote, type CreateCreditNoteInput } from '../services/invoiceService.js';
+import {
+  createCreditNote, updateCreditNote, cancelCreditNote,
+  type CreateCreditNoteInput, type UpdateCreditDebitNoteInput,
+} from '../services/invoiceService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -35,6 +38,19 @@ router.post('/', async (req: AuthRequest, res) => {
     res.status(201).json(cn);
   } catch (err) {
     console.error('[creditNotes POST]', err);
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── Update ────────────────────────────────────────────────────
+
+router.put('/:id', async (req: AuthRequest, res) => {
+  try {
+    const input = { ...(req.body as UpdateCreditDebitNoteInput), updatedBy: req.userId };
+    const cn = await updateCreditNote(req.params.id as string, input);
+    res.json(cn);
+  } catch (err) {
+    console.error('[creditNotes PUT]', err);
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });

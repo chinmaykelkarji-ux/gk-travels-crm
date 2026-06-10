@@ -21,7 +21,7 @@ import type {
   Communication,
   Invoice, CreditNote, DebitNote, CompanySettings,
   CreateInvoiceInput, UpdateInvoiceInput,
-  CreateCreditNoteInput, CreateDebitNoteInput,
+  CreateCreditNoteInput, CreateDebitNoteInput, UpdateCreditDebitNoteInput,
 } from '@/shared/types';
 import { calcTripFinance, calcBookingFinance, calcReceivableFinance } from '@/shared/utils/finance';
 import { getApiErrorMessage } from '@/shared/utils/error';
@@ -244,10 +244,12 @@ interface StoreActions {
 
   // â”€â”€ Credit Notes (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createCreditNote: (data: CreateCreditNoteInput) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
+  updateCreditNote: (id: string, data: UpdateCreditDebitNoteInput) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
   cancelCreditNote: (id: string) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
 
   // â”€â”€ Debit Notes (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createDebitNote: (data: CreateDebitNoteInput) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
+  updateDebitNote: (id: string, data: UpdateCreditDebitNoteInput) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
   cancelDebitNote: (id: string) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
 
   // â”€â”€ Company Master â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1732,6 +1734,18 @@ export const useStore = create<GKStore>()(
         }
       },
 
+      async updateCreditNote(id, data) {
+        try {
+          const res = await apiClient.put(`/credit-notes/${id}`, data);
+          const creditNote = res.data as CreditNote;
+          set((s: GKStore) => ({ creditNotes: s.creditNotes.map(c => c.id === id ? creditNote : c) }));
+          await get().fetchAll();
+          return { ok: true, creditNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Credit note update failed') };
+        }
+      },
+
       async cancelCreditNote(id) {
         try {
           const res = await apiClient.post(`/credit-notes/${id}/cancel`);
@@ -1755,6 +1769,18 @@ export const useStore = create<GKStore>()(
           return { ok: true, debitNote };
         } catch (err: unknown) {
           return { ok: false, reason: getApiErrorMessage(err, 'Debit note creation failed') };
+        }
+      },
+
+      async updateDebitNote(id, data) {
+        try {
+          const res = await apiClient.put(`/debit-notes/${id}`, data);
+          const debitNote = res.data as DebitNote;
+          set((s: GKStore) => ({ debitNotes: s.debitNotes.map(d => d.id === id ? debitNote : d) }));
+          await get().fetchAll();
+          return { ok: true, debitNote };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Debit note update failed') };
         }
       },
 
