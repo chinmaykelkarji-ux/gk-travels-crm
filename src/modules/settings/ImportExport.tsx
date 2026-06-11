@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import * as XLSX from 'xlsx';
 import {
   FileSpreadsheet, Download, Upload, CheckCircle2,
-  AlertTriangle, Loader2, Users, UserPlus, Building2, MapPin,
+  AlertTriangle, Loader2, Users, Building2, MapPin, Ticket,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/shared/components/ui/button';
@@ -11,34 +11,16 @@ import { toast } from '@/shared/hooks/useToast';
 import { today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import type {
-  Lead, Customer, Vendor, Trip,
-  LeadStatus, VendorType, TripStatus, GstMode,
+  Customer, Vendor, Trip, Booking,
+  VendorType, TripStatus, BookingType, BookingStatus, GstMode,
 } from '@/shared/types';
 
 // ─── Sheet definitions ──────────────────────────────────────────
 // Each entity gets one sheet. Headers double as the keys used both when
 // building the template/export workbook and when reading an imported file.
-
-const LEAD_HEADERS = [
-  'Name*', 'Phone*', 'Email', 'Source', 'Destination',
-  'Travel Date (YYYY-MM-DD)', 'Pax', 'Budget', 'Trip Type',
-  'Priority (low/medium/high)', 'Notes', 'Assigned To',
-];
-
-const LEAD_SAMPLE: Record<string, unknown> = {
-  'Name*': 'John Doe',
-  'Phone*': '+91 9876543210',
-  'Email': 'john@example.com',
-  'Source': 'Website',
-  'Destination': 'Goa',
-  'Travel Date (YYYY-MM-DD)': '2026-12-15',
-  'Pax': 2,
-  'Budget': 50000,
-  'Trip Type': 'Leisure',
-  'Priority (low/medium/high)': 'medium',
-  'Notes': 'Interested in a beach resort package',
-  'Assigned To': 'Priya',
-};
+// Processing order matters for imports: Customers and Vendors (master data)
+// are created first, then Trips, then Bookings — so Bookings can resolve
+// "Customer Phone" / "Trip ID" references against records from the same file.
 
 const CUSTOMER_HEADERS = [
   'Name*', 'Phone*', 'Alt Phone', 'Email', 'Address', 'City', 'State',
@@ -102,6 +84,31 @@ const TRIP_SAMPLE: Record<string, unknown> = {
   'Notes': 'Family trip with kids',
 };
 
+const BOOKING_TYPE_HEADER = 'Type (flight/hotel/train/bus/cab/visa/insurance/activity/other)*';
+const BOOKING_STATUS_HEADER = 'Status (pending/confirmed/issued/submitted/approved/rejected/checked_in/departed/completed/cancelled)';
+const BOOKING_TRIP_HEADER = 'Trip ID (optional, e.g. GK-2026-0001)';
+
+const BOOKING_HEADERS = [
+  'Customer Name*', 'Customer Phone', BOOKING_TYPE_HEADER, BOOKING_TRIP_HEADER,
+  BOOKING_STATUS_HEADER, 'Selling Price', 'Supplier Cost', 'Advance',
+  'Supplier Paid', 'GST Rate (%)', 'GST Mode (INCLUDED/EXCLUDED)', 'Notes',
+];
+
+const BOOKING_SAMPLE: Record<string, unknown> = {
+  'Customer Name*': 'Amit Sharma',
+  'Customer Phone': '+91 9012345678',
+  [BOOKING_TYPE_HEADER]: 'flight',
+  [BOOKING_TRIP_HEADER]: 'GK-2026-0001',
+  [BOOKING_STATUS_HEADER]: 'confirmed',
+  'Selling Price': 12000,
+  'Supplier Cost': 9500,
+  'Advance': 5000,
+  'Supplier Paid': 0,
+  'GST Rate (%)': 5,
+  'GST Mode (INCLUDED/EXCLUDED)': 'EXCLUDED',
+  'Notes': 'Mumbai → Delhi, IndiGo 6E-204',
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 function buildSheet(headers: string[], rows: Record<string, unknown>[]): XLSX.WorkSheet {
@@ -132,38 +139,15 @@ function parseDateCell(val: unknown): string | undefined {
   return s || undefined;
 }
 
-const LEAD_PRIORITIES = ['low', 'medium', 'high'] as const;
 const VENDOR_TYPES: VendorType[] = ['hotel', 'transport', 'activity', 'guide', 'visa', 'miscellaneous'];
 const TRIP_STATUSES: TripStatus[] = ['draft', 'quotation', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+const BOOKING_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'bus', 'cab', 'visa', 'insurance', 'activity', 'other'];
+const BOOKING_STATUSES: BookingStatus[] = [
+  'pending', 'confirmed', 'issued', 'submitted', 'approved', 'rejected',
+  'checked_in', 'departed', 'completed', 'cancelled',
+];
 
 // ─── Row → entity-data parsers ──────────────────────────────────
-
-function parseLeadRow(row: Record<string, unknown>): Partial<Lead> | null {
-  const name  = toText(row['Name*']);
-  const phone = toText(row['Phone*']);
-  if (!name || !phone) return null;
-
-  const priorityRaw = toText(row['Priority (low/medium/high)']).toLowerCase();
-  const priority = (LEAD_PRIORITIES as readonly string[]).includes(priorityRaw)
-    ? priorityRaw as Lead['priority']
-    : 'medium';
-
-  return {
-    name,
-    phone,
-    email:        toText(row['Email']) || undefined,
-    source:       toText(row['Source']) || 'Walk-in',
-    destination:  toText(row['Destination']),
-    travelDate:   parseDateCell(row['Travel Date (YYYY-MM-DD)']),
-    pax:          toNumber(row['Pax']) ?? 1,
-    budget:       toNumber(row['Budget']),
-    tripType:     toText(row['Trip Type']),
-    priority,
-    notes:        toText(row['Notes']),
-    assignedTo:   toText(row['Assigned To']) || undefined,
-    status:       'new' as LeadStatus,
-  };
-}
 
 function parseCustomerRow(row: Record<string, unknown>): Partial<Customer> | null {
   const name  = toText(row['Name*']);
@@ -246,24 +230,47 @@ function parseTripRow(row: Record<string, unknown>): Partial<Trip> | null {
   };
 }
 
-// ─── Entity → row mappers (for export) ──────────────────────────
+function parseBookingRow(
+  row: Record<string, unknown>,
+  customers: Customer[],
+  trips: Trip[],
+): Partial<Booking> | null {
+  const customerName = toText(row['Customer Name*']);
+  const typeRaw = toText(row[BOOKING_TYPE_HEADER]).toLowerCase();
+  if (!customerName || !BOOKING_TYPES.includes(typeRaw as BookingType)) return null;
 
-function leadToRow(l: Lead): Record<string, unknown> {
+  const phone = toText(row['Customer Phone']);
+  const matchedCustomer =
+    (phone && customers.find(c => c.phone === phone)) ||
+    customers.find(c => c.name.toLowerCase() === customerName.toLowerCase());
+
+  const tripIdRaw = toText(row[BOOKING_TRIP_HEADER]);
+  const matchedTrip = tripIdRaw ? trips.find(t => t.id === tripIdRaw) : undefined;
+
+  const statusRaw = toText(row[BOOKING_STATUS_HEADER]).toLowerCase();
+  const status = BOOKING_STATUSES.includes(statusRaw as BookingStatus) ? statusRaw as BookingStatus : 'pending';
+
+  const gstModeRaw = toText(row['GST Mode (INCLUDED/EXCLUDED)']).toUpperCase();
+  const gstMode: GstMode = gstModeRaw === 'INCLUDED' ? 'INCLUDED' : 'EXCLUDED';
+
   return {
-    'Name*': l.name,
-    'Phone*': l.phone,
-    'Email': l.email ?? '',
-    'Source': l.source,
-    'Destination': l.destination,
-    'Travel Date (YYYY-MM-DD)': l.travelDate ?? '',
-    'Pax': l.pax,
-    'Budget': l.budget ?? '',
-    'Trip Type': l.tripType,
-    'Priority (low/medium/high)': l.priority,
-    'Notes': l.notes,
-    'Assigned To': l.assignedTo ?? '',
+    customerName,
+    customerId:   matchedCustomer?.id,
+    type:         typeRaw as BookingType,
+    refId:        matchedTrip?.id,
+    status,
+    sellingPrice: toNumber(row['Selling Price']),
+    supplierCost: toNumber(row['Supplier Cost']) ?? 0,
+    advance:      toNumber(row['Advance']) ?? 0,
+    supplierPaid: toNumber(row['Supplier Paid']) ?? 0,
+    gstRate:      toNumber(row['GST Rate (%)']) ?? 0,
+    gstMode,
+    notes:        toText(row['Notes']),
+    detail:       {},
   };
 }
+
+// ─── Entity → row mappers (for export) ──────────────────────────
 
 function customerToRow(c: Customer): Record<string, unknown> {
   return {
@@ -315,35 +322,53 @@ function tripToRow(t: Trip): Record<string, unknown> {
   };
 }
 
+function bookingToRow(b: Booking, customers: Customer[]): Record<string, unknown> {
+  const cust = customers.find(c => c.id === b.customerId);
+  return {
+    'Customer Name*': b.customerName,
+    'Customer Phone': cust?.phone ?? '',
+    [BOOKING_TYPE_HEADER]: b.type,
+    [BOOKING_TRIP_HEADER]: b.refId ?? '',
+    [BOOKING_STATUS_HEADER]: b.status,
+    'Selling Price': b.sellingPrice ?? '',
+    'Supplier Cost': b.supplierCost,
+    'Advance': b.advance,
+    'Supplier Paid': b.supplierPaid,
+    'GST Rate (%)': b.gstRate,
+    'GST Mode (INCLUDED/EXCLUDED)': b.gstMode,
+    'Notes': b.notes,
+  };
+}
+
 // ─── Import result ───────────────────────────────────────────────
 
 interface ImportResult {
-  leads: number;
   customers: number;
   vendors: number;
   trips: number;
+  bookings: number;
   errors: string[];
 }
 
 const SHEETS = [
-  { name: 'Leads',     icon: UserPlus,   headers: LEAD_HEADERS,     sample: LEAD_SAMPLE },
-  { name: 'Customers', icon: Users,      headers: CUSTOMER_HEADERS, sample: CUSTOMER_SAMPLE },
-  { name: 'Vendors',   icon: Building2,  headers: VENDOR_HEADERS,   sample: VENDOR_SAMPLE },
-  { name: 'Trips',     icon: MapPin,     headers: TRIP_HEADERS,     sample: TRIP_SAMPLE },
+  { name: 'Customers', icon: Users,     headers: CUSTOMER_HEADERS, sample: CUSTOMER_SAMPLE },
+  { name: 'Vendors',   icon: Building2, headers: VENDOR_HEADERS,   sample: VENDOR_SAMPLE },
+  { name: 'Trips',     icon: MapPin,    headers: TRIP_HEADERS,     sample: TRIP_SAMPLE },
+  { name: 'Bookings',  icon: Ticket,    headers: BOOKING_HEADERS,  sample: BOOKING_SAMPLE },
 ];
 
 // ─── Component ───────────────────────────────────────────────────
 
 export default function ImportExportTab() {
-  const leads     = useStore(s => s.leads);
   const customers = useStore(s => s.customers);
   const vendors   = useStore(s => s.vendors);
   const trips     = useStore(s => s.trips);
+  const bookings  = useStore(s => s.bookings);
 
-  const createLead     = useStore(s => s.createLead);
   const createCustomer = useStore(s => s.createCustomer);
   const createVendor   = useStore(s => s.createVendor);
   const createTrip     = useStore(s => s.createTrip);
+  const createBooking  = useStore(s => s.createBooking);
 
   const [importing, setImporting] = useState(false);
   const [dragOver,  setDragOver]  = useState(false);
@@ -361,10 +386,10 @@ export default function ImportExportTab() {
 
   function handleExport() {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, buildSheet(LEAD_HEADERS, leads.map(leadToRow)), 'Leads');
     XLSX.utils.book_append_sheet(wb, buildSheet(CUSTOMER_HEADERS, customers.map(customerToRow)), 'Customers');
     XLSX.utils.book_append_sheet(wb, buildSheet(VENDOR_HEADERS, vendors.map(vendorToRow)), 'Vendors');
     XLSX.utils.book_append_sheet(wb, buildSheet(TRIP_HEADERS, trips.map(tripToRow)), 'Trips');
+    XLSX.utils.book_append_sheet(wb, buildSheet(BOOKING_HEADERS, bookings.map(b => bookingToRow(b, customers))), 'Bookings');
     XLSX.writeFile(wb, `GK-Travels-CRM-Export_${today()}.xlsx`);
   }
 
@@ -374,18 +399,9 @@ export default function ImportExportTab() {
     try {
       const buf = await file.arrayBuffer();
       const wb  = XLSX.read(buf, { type: 'array' });
-      const out: ImportResult = { leads: 0, customers: 0, vendors: 0, trips: 0, errors: [] };
+      const out: ImportResult = { customers: 0, vendors: 0, trips: 0, bookings: 0, errors: [] };
 
-      if (wb.SheetNames.includes('Leads')) {
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Leads'], { defval: '' });
-        rows.forEach((row, i) => {
-          const data = parseLeadRow(row);
-          if (!data) { out.errors.push(`Leads row ${i + 2}: Name and Phone are required — skipped`); return; }
-          createLead(data);
-          out.leads++;
-        });
-      }
-
+      // Customers and Vendors first — master data referenced by Bookings.
       if (wb.SheetNames.includes('Customers')) {
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Customers'], { defval: '' });
         rows.forEach((row, i) => {
@@ -416,9 +432,22 @@ export default function ImportExportTab() {
         });
       }
 
-      const totalImported = out.leads + out.customers + out.vendors + out.trips;
+      // Bookings last — can reference Customers/Trips imported above.
+      if (wb.SheetNames.includes('Bookings')) {
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Bookings'], { defval: '' });
+        const allCustomers = useStore.getState().customers;
+        const allTrips     = useStore.getState().trips;
+        rows.forEach((row, i) => {
+          const data = parseBookingRow(row, allCustomers, allTrips);
+          if (!data) { out.errors.push(`Bookings row ${i + 2}: Customer Name and a valid Type are required — skipped`); return; }
+          createBooking(data);
+          out.bookings++;
+        });
+      }
+
+      const totalImported = out.customers + out.vendors + out.trips + out.bookings;
       if (totalImported === 0 && out.errors.length === 0) {
-        out.errors.push('No matching sheets found. Use the sample template — sheet names must be Leads, Customers, Vendors or Trips.');
+        out.errors.push('No matching sheets found. Use the sample template — sheet names must be Customers, Vendors, Trips or Bookings.');
       }
 
       setResult(out);
@@ -459,8 +488,9 @@ export default function ImportExportTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-gray-500">
-              Download a starter workbook with one sheet per entity (Leads, Customers,
-              Vendors, Trips), pre-filled with a sample row showing the expected format.
+              Download a starter workbook with one sheet per entity (Customers,
+              Vendors, Trips, Bookings), pre-filled with a sample row showing the
+              expected format.
             </p>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={handleDownloadTemplate}>
               <Download className="w-3.5 h-3.5" /> Download Template
@@ -476,8 +506,8 @@ export default function ImportExportTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-gray-500">
-              Export all current Leads, Customers, Vendors and Trips to a single
-              Excel workbook — useful for backups or bulk edits.
+              Export all current Customers, Vendors, Trips and Bookings to a
+              single Excel workbook — useful for backups or bulk edits.
             </p>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={handleExport}>
               <Download className="w-3.5 h-3.5" /> Export to Excel
@@ -495,10 +525,13 @@ export default function ImportExportTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-gray-500">
-            Upload a filled-in copy of the template. Each sheet (Leads, Customers,
-            Vendors, Trips) is processed independently — you can include just the
-            sheets you need. New records are created with auto-generated IDs;
-            existing records are not modified.
+            Upload a filled-in copy of the template. Each sheet (Customers,
+            Vendors, Trips, Bookings) is processed independently — you can
+            include just the sheets you need. New records are created with
+            auto-generated IDs; existing records are not modified. For
+            Bookings, "Customer Phone" and "Trip ID" are matched against
+            existing (or just-imported) Customers and Trips to link the
+            records.
           </p>
 
           <div
@@ -538,10 +571,10 @@ export default function ImportExportTab() {
             <div className="space-y-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: 'Leads',     count: result.leads },
                   { label: 'Customers', count: result.customers },
                   { label: 'Vendors',   count: result.vendors },
                   { label: 'Trips',     count: result.trips },
+                  { label: 'Bookings',  count: result.bookings },
                 ].map(item => (
                   <div key={item.label} className="text-center p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                     <div className="text-xl font-bold text-emerald-700 font-display flex items-center justify-center gap-1">
