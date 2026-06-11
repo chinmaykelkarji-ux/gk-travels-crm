@@ -55,11 +55,13 @@ export function RecordReceiptForm({ open, onClose, defaultCustomerId, defaultTri
     [customers],
   );
 
-  // Trip options filtered by selected customer — only trips with a payable amount
+  // Trip options filtered by selected customer — only invoiced trips with a
+  // payable amount. A trip without a generated invoice must not appear in
+  // Receivables, mirroring how un-invoiced bookings never appear here.
   const tripOptions = useMemo(() => {
     if (!customerId) return [];
     return trips
-      .filter(t => (t.customerId === customerId || t.customer === customers.find(c => c.id === customerId)?.name) && (t.totalPayable ?? 0) > 0)
+      .filter(t => (t.customerId === customerId || t.customer === customers.find(c => c.id === customerId)?.name) && (t.totalPayable ?? 0) > 0 && !!t.invoiceId)
       .sort((a, b) => (b.createdDate ?? '').localeCompare(a.createdDate ?? ''));
   }, [customerId, trips, customers]);
 

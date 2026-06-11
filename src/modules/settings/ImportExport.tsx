@@ -84,7 +84,7 @@ const TRIP_SAMPLE: Record<string, unknown> = {
   'Notes': 'Family trip with kids',
 };
 
-const BOOKING_MODE_HEADER = 'MODE (Hotel/Train/Bus/Flight/Cab)*';
+const BOOKING_MODE_HEADER = 'MODE (Flight/Hotel/Cab/Train/Bus/Visa/Insurance/Activity/Other)*';
 
 const BOOKING_HEADERS = [
   'NAME*', 'GSTN', BOOKING_MODE_HEADER, 'FROM', 'TO',
@@ -103,7 +103,7 @@ const BOOKING_SAMPLE: Record<string, unknown> = {
   'Cost': 9500,
   'Taxable Value': 500,
   'COMMISSION': 500,
-  'GST AMOUNT': 90,
+  'GST AMOUNT': 500,
   'IGST': 90,
   'CGST': 0,
   'SGST': 0,
@@ -141,23 +141,43 @@ function parseDateCell(val: unknown): string | undefined {
 
 const VENDOR_TYPES: VendorType[] = ['hotel', 'transport', 'activity', 'guide', 'visa', 'miscellaneous'];
 const TRIP_STATUSES: TripStatus[] = ['draft', 'quotation', 'confirmed', 'in_progress', 'completed', 'cancelled'];
-const BOOKING_MODES: BookingType[] = ['hotel', 'train', 'bus', 'flight', 'cab'];
+const BOOKING_MODES: BookingType[] = ['flight', 'hotel', 'train', 'bus', 'cab', 'visa', 'insurance', 'activity', 'other'];
+
+// Common spreadsheet aliases for booking modes that don't match the
+// BookingType value verbatim (e.g. "Cab/Vehicle", "Others").
+const BOOKING_MODE_ALIASES: Record<string, BookingType> = {
+  'cab/vehicle': 'cab',
+  'vehicle': 'cab',
+  'others': 'other',
+};
+
+function normalizeBookingMode(raw: string): BookingType | null {
+  const lower = raw.toLowerCase().trim();
+  if (BOOKING_MODES.includes(lower as BookingType)) return lower as BookingType;
+  return BOOKING_MODE_ALIASES[lower] ?? null;
+}
 
 // Map a booking mode to the type-specific origin/destination/date field names
-// used by FlightDetail / TrainDetail / CabDetail / HotelDetail.
+// used by FlightDetail / TrainDetail / CabDetail / HotelDetail. Modes without
+// a dedicated detail shape (Visa, Insurance, Activity, Other) fall back to
+// the generic base fields.
 function buildBookingDetail(
   type: BookingType,
-  fields: { from: string; to: string; doj?: string; dob?: string; gstNumber: string; igst: number; cgst: number; sgst: number },
+  fields: {
+    from: string; to: string; doj?: string; dob?: string; gstNumber: string;
+    igst: number; cgst: number; sgst: number; taxableValueOfSupply?: number;
+  },
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
-    from:      fields.from,
-    to:        fields.to,
-    doj:       fields.doj,
-    dob:       fields.dob,
-    gstNumber: fields.gstNumber || undefined,
-    igst:      fields.igst,
-    cgst:      fields.cgst,
-    sgst:      fields.sgst,
+    from:                 fields.from,
+    to:                   fields.to,
+    doj:                  fields.doj,
+    dob:                  fields.dob,
+    gstNumber:            fields.gstNumber || undefined,
+    igst:                 fields.igst,
+    cgst:                 fields.cgst,
+    sgst:                 fields.sgst,
+    taxableValueOfSupply: fields.taxableValueOfSupply,
   };
   switch (type) {
     case 'flight': return { ...base, origin: fields.from, destination: fields.to, departDate: fields.doj };
@@ -253,32 +273,38 @@ function parseTripRow(row: Record<string, unknown>): Partial<Trip> | null {
 
 function parseBookingRow(row: Record<string, unknown>, customers: Customer[]): Partial<Booking> | null {
   const name = toText(row['NAME*']);
-  const modeRaw = toText(row[BOOKING_MODE_HEADER]).toLowerCase();
-  if (!name || !BOOKING_MODES.includes(modeRaw as BookingType)) return null;
+  const mode = normalizeBookingMode(toText(row[BOOKING_MODE_HEADER]));
+  if (!name || !mode) return null;
 
   const matchedCustomer = customers.find(c => c.name.toLowerCase() === name.toLowerCase());
 
   const cost         = toNumber(row['Cost']) ?? 0;
   const taxableValue = toNumber(row['Taxable Value']);
   const commission   = toNumber(row['COMMISSION']) ?? taxableValue ?? 0;
-  const gstAmount    = toNumber(row['GST AMOUNT']) ?? 0;
-  const gstRate      = commission > 0 ? Math.round((gstAmount / commission) * 1000) / 10 : 0;
 
-  const detail = buildBookingDetail(modeRaw as BookingType, {
+  // 'GST AMOUNT' is the taxable value of supply (kept for reference), NOT the
+  // GST tax amount itself — the actual GST charged is the sum of IGST/CGST/SGST.
+  const taxableValueOfSupply = toNumber(row['GST AMOUNT']) ?? undefined;
+  const igst = toNumber(row['IGST']) ?? 0;
+  const cgst = toNumber(row['CGST']) ?? 0;
+  const sgst = toNumber(row['SGST']) ?? 0;
+  const gstAmount = igst + cgst + sgst;
+  const gstRate   = commission > 0 ? Math.round((gstAmount / commission) * 1000) / 10 : 0;
+
+  const detail = buildBookingDetail(mode, {
     from:      toText(row['FROM']),
     to:        toText(row['TO']),
     doj:       parseDateCell(row['DOJ (YYYY-MM-DD)']),
     dob:       parseDateCell(row['DOB (YYYY-MM-DD)']),
     gstNumber: toText(row['GSTN']),
-    igst:      toNumber(row['IGST']) ?? 0,
-    cgst:      toNumber(row['CGST']) ?? 0,
-    sgst:      toNumber(row['SGST']) ?? 0,
+    igst, cgst, sgst,
+    taxableValueOfSupply,
   });
 
   return {
     customerName:      name,
     customerId:        matchedCustomer?.id,
-    type:              modeRaw as BookingType,
+    type:              mode,
     status:            'confirmed',
     sellingPrice:      null,
     supplierCost:      cost,
@@ -365,7 +391,7 @@ function bookingToRow(b: Booking, customers: Customer[]): Record<string, unknown
     'Cost': b.supplierCost,
     'Taxable Value': b.taxableFee ?? b.taxableAmount,
     'COMMISSION': b.convenienceFee ?? '',
-    'GST AMOUNT': b.gstOnFee ?? b.gstAmount,
+    'GST AMOUNT': d.taxableValueOfSupply ?? b.taxableFee ?? b.taxableAmount,
     'IGST': d.igst ?? '',
     'CGST': d.cgst ?? '',
     'SGST': d.sgst ?? '',
@@ -470,7 +496,7 @@ export default function ImportExportTab() {
         const allCustomers = useStore.getState().customers;
         rows.forEach((row, i) => {
           const data = parseBookingRow(row, allCustomers);
-          if (!data) { out.errors.push(`Bookings row ${i + 2}: NAME and a valid MODE (Hotel/Train/Bus/Flight/Cab) are required — skipped`); return; }
+          if (!data) { out.errors.push(`Bookings row ${i + 2}: NAME and a valid MODE (Flight/Hotel/Cab/Train/Bus/Visa/Insurance/Activity/Other) are required — skipped`); return; }
           createBooking(data);
           out.bookings++;
         });
@@ -562,7 +588,11 @@ export default function ImportExportTab() {
             auto-generated IDs; existing records are not modified. The
             Bookings sheet uses the NAME / GSTN / MODE / FROM / TO / DOJ /
             DOB / Cost / Taxable Value / COMMISSION / GST AMOUNT / IGST /
-            CGST / SGST format — bookings are linked to a Customer by
+            CGST / SGST format — MODE accepts Flight, Hotel, Cab/Vehicle,
+            Train, Bus, Visa, Insurance, Activity or Other. COMMISSION is
+            the convenience fee charged to the customer; GST AMOUNT is the
+            taxable value of supply, while the actual GST charged is the
+            sum of IGST + CGST + SGST. Bookings are linked to a Customer by
             matching NAME against existing (or just-imported) Customers.
           </p>
 

@@ -4,6 +4,7 @@ import {
   UserCircle, Search, Phone, Mail, MapPin, Shield,
   Star, Users, TrendingUp, X, Plus,
   FileText, ChevronRight, Hash, Pencil, Trash2, Building2, Receipt,
+  LayoutGrid, List,
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { Customer } from '@/shared/types';
@@ -789,6 +790,120 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
   );
 }
 
+// ─── List view ────────────────────────────────────────────────
+
+interface CustomerListViewProps {
+  customers:         Customer[];
+  revenueByCustomer: Record<string, number>;
+  balanceByCustomer: Record<string, { balanceDue: number; excessAmount: number }>;
+  onSelect:          (c: Customer) => void;
+  onEdit:            (c: Customer) => void;
+  onDelete:          (c: Customer) => void;
+  deletingId:        string | null;
+}
+
+function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onSelect, onEdit, onDelete, deletingId }: CustomerListViewProps) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50">
+              {['Customer', 'Phone', 'Email', 'City', 'Segment', 'Trips', 'Balance', ''].map(h => (
+                <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {customers.map(c => {
+              const tripCount  = c.tripIds?.length ?? 0;
+              const revenue    = revenueByCustomer[c.id] ?? 0;
+              const seg        = getSegment(c);
+              const segCfg     = SEGMENT_BADGE[seg];
+              const custBalance = balanceByCustomer[c.id];
+
+              return (
+                <tr key={c.id} onClick={() => onSelect(c)} className="hover:bg-gray-50/70 transition-colors cursor-pointer group">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={cn(
+                        'w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br flex-shrink-0',
+                        avatarColor(c.id)
+                      )}>
+                        {initials(c.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm truncate">{c.name}</div>
+                        <div className="text-[10px] text-gray-400 font-mono">
+                          {c.id}
+                          <RecordNumberBadge label="Customer" n={c.customerNumber} className="ml-1.5" />
+                        </div>
+                      </div>
+                      {c.gstRegistered && (
+                        <span title="GST Registered" className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 flex-shrink-0">
+                          <Receipt className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{c.phone || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]">{c.email || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.city || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', segCfg.class)}>
+                      {segCfg.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                    {tripCount} trip{tripCount !== 1 ? 's' : ''}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {custBalance && custBalance.balanceDue > 0 && (
+                      <span className="text-xs font-semibold text-red-600" title="Balance due from customer">
+                        ₹{custBalance.balanceDue.toLocaleString('en-IN')} due
+                      </span>
+                    )}
+                    {custBalance && custBalance.excessAmount > 0 && custBalance.balanceDue === 0 && (
+                      <span className="text-xs font-semibold text-amber-600" title="Customer advance / excess payment">
+                        +₹{custBalance.excessAmount.toLocaleString('en-IN')} credit
+                      </span>
+                    )}
+                    {(!custBalance || (custBalance.balanceDue === 0 && custBalance.excessAmount === 0)) && revenue > 0 && (
+                      <span className="text-xs font-semibold text-emerald-600">{formatCurrency(revenue)}</span>
+                    )}
+                    {(!custBalance || (custBalance.balanceDue === 0 && custBalance.excessAmount === 0)) && revenue === 0 && (
+                      <span className="text-[10px] text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="hidden group-hover:flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => onEdit(c)}
+                        className="p-1 rounded-lg text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                        title="Edit customer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => onDelete(c)}
+                        disabled={deletingId === c.id}
+                        className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Delete customer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Module ──────────────────────────────────────────────
 
 export default function Customers() {
@@ -800,10 +915,17 @@ export default function Customers() {
 
   const [search,       setSearch]       = useState('');
   const [segment,      setSegment]      = useState<Segment>('all');
+  const [viewMode,     setViewMode]     = useState<'grid' | 'list'>(() =>
+    (localStorage.getItem('customers-view-mode') as 'grid' | 'list' | null) ?? 'grid');
   const [selected,     setSelected]     = useState<Customer | null>(null);
   const [formOpen,     setFormOpen]     = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
+
+  function changeViewMode(mode: 'grid' | 'list') {
+    setViewMode(mode);
+    localStorage.setItem('customers-view-mode', mode);
+  }
 
   function closeForm() {
     setFormOpen(false);
@@ -985,6 +1107,22 @@ export default function Customers() {
             <SelectItem value="passport_expiring">Passport Expiring (&lt;90d)</SelectItem>
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded-lg p-0.5">
+          <button
+            onClick={() => changeViewMode('grid')}
+            title="Grid view"
+            className={cn('p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600')}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => changeViewMode('list')}
+            title="List view"
+            className={cn('p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600')}
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Customer grid */}
@@ -1002,6 +1140,16 @@ export default function Customers() {
             action={{ label: 'Clear filters', onClick: () => { setSearch(''); setSegment('all'); } }}
           />
         )
+      ) : viewMode === 'list' ? (
+        <CustomerListView
+          customers={filtered}
+          revenueByCustomer={revenueByCustomer}
+          balanceByCustomer={balanceByCustomer}
+          onSelect={setSelected}
+          onEdit={openEdit}
+          onDelete={handleDeleteCustomer}
+          deletingId={deletingId}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map(c => {

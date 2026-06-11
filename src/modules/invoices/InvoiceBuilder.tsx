@@ -263,6 +263,29 @@ export default function InvoiceBuilder() {
     });
   }
 
+  const eligibleBookingIds = useMemo(() => new Set(eligible.bookings.map(b => b.id)), [eligible.bookings]);
+  const eligibleTripIds    = useMemo(() => new Set(eligible.trips.map(t => t.id)), [eligible.trips]);
+
+  const allEligibleSelected =
+    (eligible.bookings.length + eligible.trips.length) > 0 &&
+    eligible.bookings.every(b => selectedBookingIds.has(b.id)) &&
+    eligible.trips.every(t => selectedTripIds.has(t.id));
+
+  function toggleSelectAll() {
+    if (allEligibleSelected) {
+      setItems(prev => {
+        const filtered = prev.filter(i =>
+          !(i.bookingId && eligibleBookingIds.has(i.bookingId)) &&
+          !(i.tripId && eligibleTripIds.has(i.tripId)),
+        );
+        return filtered.length ? filtered : [emptyRow()];
+      });
+    } else {
+      eligible.bookings.forEach(b => { if (!selectedBookingIds.has(b.id)) toggleBooking(b); });
+      eligible.trips.forEach(t => { if (!selectedTripIds.has(t.id)) toggleTrip(t); });
+    }
+  }
+
   function addRow() {
     setItems(prev => [...prev, emptyRow()]);
   }
@@ -435,7 +458,13 @@ export default function InvoiceBuilder() {
       {/* Eligible bookings/trips */}
       {!isEdit && customerId && (eligible.bookings.length > 0 || eligible.trips.length > 0) && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-800">Add From Confirmed Bookings / Trips</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800">Add From Confirmed Bookings / Trips</h3>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer select-none">
+              <input type="checkbox" checked={allEligibleSelected} onChange={toggleSelectAll} className="accent-indigo-600" />
+              Select All
+            </label>
+          </div>
           <p className="text-xs text-gray-400">Select items to auto-fill line items below. Each can only be invoiced once.</p>
           <div className="space-y-1.5">
             {eligible.bookings.map(b => (
