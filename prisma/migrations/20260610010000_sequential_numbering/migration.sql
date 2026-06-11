@@ -26,7 +26,14 @@ SET "customerNumber" = ordered."rn"
 FROM ordered
 WHERE c."id" = ordered."id";
 
-SELECT setval('"customers_customerNumber_seq"', COALESCE((SELECT MAX("customerNumber") FROM "customers"), 0), true);
+-- Advance past the backfilled max. On an empty table there is no max:
+-- setval(seq, 1, false) leaves the sequence ready to emit 1 first
+-- (setval cannot accept 0 — the sequence minimum is 1).
+SELECT setval(
+  '"customers_customerNumber_seq"',
+  COALESCE((SELECT MAX("customerNumber") FROM "customers"), 1),
+  (SELECT MAX("customerNumber") FROM "customers") IS NOT NULL
+);
 
 ALTER TABLE "customers" ALTER COLUMN "customerNumber" SET DEFAULT nextval('"customers_customerNumber_seq"'::regclass);
 ALTER TABLE "customers" ALTER COLUMN "customerNumber" SET NOT NULL;
@@ -49,7 +56,11 @@ SET "tripNumber" = ordered."rn"
 FROM ordered
 WHERE t."id" = ordered."id";
 
-SELECT setval('"trips_tripNumber_seq"', COALESCE((SELECT MAX("tripNumber") FROM "trips"), 0), true);
+SELECT setval(
+  '"trips_tripNumber_seq"',
+  COALESCE((SELECT MAX("tripNumber") FROM "trips"), 1),
+  (SELECT MAX("tripNumber") FROM "trips") IS NOT NULL
+);
 
 ALTER TABLE "trips" ALTER COLUMN "tripNumber" SET DEFAULT nextval('"trips_tripNumber_seq"'::regclass);
 ALTER TABLE "trips" ALTER COLUMN "tripNumber" SET NOT NULL;

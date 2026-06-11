@@ -237,6 +237,7 @@ export default function Analytics() {
   const [from,      setFrom]      = useState('');
   const [to,        setTo]        = useState('');
   const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
   const [refreshAt, setRefreshAt] = useState(0);
 
   const [overview,   setOverview]   = useState<Overview | null>(null);
@@ -251,20 +252,28 @@ export default function Analytics() {
   // Fetch all analytics in parallel
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const q = new URLSearchParams();
-    if (from) q.set('from', from);
-    if (to)   q.set('to',   to);
-    const qs = q.toString() ? `?${q}` : '';
+    setError(null);
+
+    // Build a valid query string per endpoint — the date range and any
+    // extra params (e.g. limit) must share a single "?".
+    const qs = (extra?: Record<string, string>) => {
+      const q = new URLSearchParams();
+      if (from) q.set('from', from);
+      if (to)   q.set('to',   to);
+      for (const [k, v] of Object.entries(extra ?? {})) q.set(k, v);
+      const s = q.toString();
+      return s ? `?${s}` : '';
+    };
 
     try {
       const [ov, mo, yr, de, ve, tr, cu, al] = await Promise.all([
-        apiClient.get(`/analytics/overview${qs}`),
+        apiClient.get(`/analytics/overview${qs()}`),
         apiClient.get('/analytics/monthly?months=12'),
         apiClient.get('/analytics/yearly?years=3'),
-        apiClient.get(`/analytics/destinations${qs}&limit=15`),
-        apiClient.get(`/analytics/vendors${qs}&limit=15`),
-        apiClient.get(`/analytics/trips${qs}`),
-        apiClient.get(`/analytics/customers${qs}&limit=20`),
+        apiClient.get(`/analytics/destinations${qs({ limit: '15' })}`),
+        apiClient.get(`/analytics/vendors${qs({ limit: '15' })}`),
+        apiClient.get(`/analytics/trips${qs()}`),
+        apiClient.get(`/analytics/customers${qs({ limit: '20' })}`),
         apiClient.get('/analytics/alerts'),
       ]);
       setOverview(ov.data ?? null);
@@ -277,6 +286,7 @@ export default function Analytics() {
       setAlerts(al.data ?? null);
     } catch (err) {
       console.error('[analytics] fetch failed', err);
+      setError('Failed to load analytics data. Check that the server is running, then retry.');
     } finally {
       setLoading(false);
     }
@@ -343,6 +353,17 @@ export default function Analytics() {
       {loading && !overview && (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-10 text-center">
+          <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-red-800">{error}</p>
+          <Button size="sm" variant="outline" className="mt-4 gap-1.5"
+            onClick={() => setRefreshAt(Date.now())}>
+            <RefreshCw className="w-3.5 h-3.5" /> Retry
+          </Button>
         </div>
       )}
 

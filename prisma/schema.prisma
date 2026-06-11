@@ -23,6 +23,7 @@ model User {
 
 model Customer {
   id             String   @id
+  customerNumber Int      @unique @default(autoincrement())
   name           String
   phone          String
   altPhone       String?
@@ -76,6 +77,7 @@ model Lead {
 
 model Trip {
   id                  String    @id
+  tripNumber          Int       @unique @default(autoincrement())
   invoiceId           String?
   customer            String
   phone               String    @default("")
