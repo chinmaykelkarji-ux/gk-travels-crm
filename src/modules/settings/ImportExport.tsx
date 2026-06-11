@@ -12,7 +12,7 @@ import { today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import type {
   Customer, Vendor, Trip, Booking,
-  VendorType, TripStatus, BookingType, BookingStatus, GstMode,
+  VendorType, TripStatus, BookingType, GstMode,
 } from '@/shared/types';
 
 // ─── Sheet definitions ──────────────────────────────────────────
@@ -84,29 +84,29 @@ const TRIP_SAMPLE: Record<string, unknown> = {
   'Notes': 'Family trip with kids',
 };
 
-const BOOKING_TYPE_HEADER = 'Type (flight/hotel/train/bus/cab/visa/insurance/activity/other)*';
-const BOOKING_STATUS_HEADER = 'Status (pending/confirmed/issued/submitted/approved/rejected/checked_in/departed/completed/cancelled)';
-const BOOKING_TRIP_HEADER = 'Trip ID (optional, e.g. GK-2026-0001)';
+const BOOKING_MODE_HEADER = 'MODE (Hotel/Train/Bus/Flight/Cab)*';
 
 const BOOKING_HEADERS = [
-  'Customer Name*', 'Customer Phone', BOOKING_TYPE_HEADER, BOOKING_TRIP_HEADER,
-  BOOKING_STATUS_HEADER, 'Selling Price', 'Supplier Cost', 'Advance',
-  'Supplier Paid', 'GST Rate (%)', 'GST Mode (INCLUDED/EXCLUDED)', 'Notes',
+  'NAME*', 'GSTN', BOOKING_MODE_HEADER, 'FROM', 'TO',
+  'DOJ (YYYY-MM-DD)', 'DOB (YYYY-MM-DD)', 'Cost', 'Taxable Value',
+  'COMMISSION', 'GST AMOUNT', 'IGST', 'CGST', 'SGST',
 ];
 
 const BOOKING_SAMPLE: Record<string, unknown> = {
-  'Customer Name*': 'Amit Sharma',
-  'Customer Phone': '+91 9012345678',
-  [BOOKING_TYPE_HEADER]: 'flight',
-  [BOOKING_TRIP_HEADER]: 'GK-2026-0001',
-  [BOOKING_STATUS_HEADER]: 'confirmed',
-  'Selling Price': 12000,
-  'Supplier Cost': 9500,
-  'Advance': 5000,
-  'Supplier Paid': 0,
-  'GST Rate (%)': 5,
-  'GST Mode (INCLUDED/EXCLUDED)': 'EXCLUDED',
-  'Notes': 'Mumbai → Delhi, IndiGo 6E-204',
+  'NAME*': 'Amit Sharma',
+  'GSTN': '27ABCDE1234F1Z5',
+  [BOOKING_MODE_HEADER]: 'Flight',
+  'FROM': 'Mumbai',
+  'TO': 'Delhi',
+  'DOJ (YYYY-MM-DD)': '2026-07-10',
+  'DOB (YYYY-MM-DD)': '1990-05-21',
+  'Cost': 9500,
+  'Taxable Value': 500,
+  'COMMISSION': 500,
+  'GST AMOUNT': 90,
+  'IGST': 90,
+  'CGST': 0,
+  'SGST': 0,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -141,11 +141,32 @@ function parseDateCell(val: unknown): string | undefined {
 
 const VENDOR_TYPES: VendorType[] = ['hotel', 'transport', 'activity', 'guide', 'visa', 'miscellaneous'];
 const TRIP_STATUSES: TripStatus[] = ['draft', 'quotation', 'confirmed', 'in_progress', 'completed', 'cancelled'];
-const BOOKING_TYPES: BookingType[] = ['flight', 'hotel', 'train', 'bus', 'cab', 'visa', 'insurance', 'activity', 'other'];
-const BOOKING_STATUSES: BookingStatus[] = [
-  'pending', 'confirmed', 'issued', 'submitted', 'approved', 'rejected',
-  'checked_in', 'departed', 'completed', 'cancelled',
-];
+const BOOKING_MODES: BookingType[] = ['hotel', 'train', 'bus', 'flight', 'cab'];
+
+// Map a booking mode to the type-specific origin/destination/date field names
+// used by FlightDetail / TrainDetail / CabDetail / HotelDetail.
+function buildBookingDetail(
+  type: BookingType,
+  fields: { from: string; to: string; doj?: string; dob?: string; gstNumber: string; igst: number; cgst: number; sgst: number },
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    from:      fields.from,
+    to:        fields.to,
+    doj:       fields.doj,
+    dob:       fields.dob,
+    gstNumber: fields.gstNumber || undefined,
+    igst:      fields.igst,
+    cgst:      fields.cgst,
+    sgst:      fields.sgst,
+  };
+  switch (type) {
+    case 'flight': return { ...base, origin: fields.from, destination: fields.to, departDate: fields.doj };
+    case 'train':  return { ...base, fromStation: fields.from, toStation: fields.to, departure: fields.doj };
+    case 'cab':    return { ...base, pickup: fields.from, drop: fields.to, pickupDate: fields.doj };
+    case 'hotel':  return { ...base, city: fields.to || fields.from, checkIn: fields.doj };
+    default:       return base;
+  }
+}
 
 // ─── Row → entity-data parsers ──────────────────────────────────
 
@@ -230,43 +251,45 @@ function parseTripRow(row: Record<string, unknown>): Partial<Trip> | null {
   };
 }
 
-function parseBookingRow(
-  row: Record<string, unknown>,
-  customers: Customer[],
-  trips: Trip[],
-): Partial<Booking> | null {
-  const customerName = toText(row['Customer Name*']);
-  const typeRaw = toText(row[BOOKING_TYPE_HEADER]).toLowerCase();
-  if (!customerName || !BOOKING_TYPES.includes(typeRaw as BookingType)) return null;
+function parseBookingRow(row: Record<string, unknown>, customers: Customer[]): Partial<Booking> | null {
+  const name = toText(row['NAME*']);
+  const modeRaw = toText(row[BOOKING_MODE_HEADER]).toLowerCase();
+  if (!name || !BOOKING_MODES.includes(modeRaw as BookingType)) return null;
 
-  const phone = toText(row['Customer Phone']);
-  const matchedCustomer =
-    (phone && customers.find(c => c.phone === phone)) ||
-    customers.find(c => c.name.toLowerCase() === customerName.toLowerCase());
+  const matchedCustomer = customers.find(c => c.name.toLowerCase() === name.toLowerCase());
 
-  const tripIdRaw = toText(row[BOOKING_TRIP_HEADER]);
-  const matchedTrip = tripIdRaw ? trips.find(t => t.id === tripIdRaw) : undefined;
+  const cost         = toNumber(row['Cost']) ?? 0;
+  const taxableValue = toNumber(row['Taxable Value']);
+  const commission   = toNumber(row['COMMISSION']) ?? taxableValue ?? 0;
+  const gstAmount    = toNumber(row['GST AMOUNT']) ?? 0;
+  const gstRate      = commission > 0 ? Math.round((gstAmount / commission) * 1000) / 10 : 0;
 
-  const statusRaw = toText(row[BOOKING_STATUS_HEADER]).toLowerCase();
-  const status = BOOKING_STATUSES.includes(statusRaw as BookingStatus) ? statusRaw as BookingStatus : 'pending';
-
-  const gstModeRaw = toText(row['GST Mode (INCLUDED/EXCLUDED)']).toUpperCase();
-  const gstMode: GstMode = gstModeRaw === 'INCLUDED' ? 'INCLUDED' : 'EXCLUDED';
+  const detail = buildBookingDetail(modeRaw as BookingType, {
+    from:      toText(row['FROM']),
+    to:        toText(row['TO']),
+    doj:       parseDateCell(row['DOJ (YYYY-MM-DD)']),
+    dob:       parseDateCell(row['DOB (YYYY-MM-DD)']),
+    gstNumber: toText(row['GSTN']),
+    igst:      toNumber(row['IGST']) ?? 0,
+    cgst:      toNumber(row['CGST']) ?? 0,
+    sgst:      toNumber(row['SGST']) ?? 0,
+  });
 
   return {
-    customerName,
-    customerId:   matchedCustomer?.id,
-    type:         typeRaw as BookingType,
-    refId:        matchedTrip?.id,
-    status,
-    sellingPrice: toNumber(row['Selling Price']),
-    supplierCost: toNumber(row['Supplier Cost']) ?? 0,
-    advance:      toNumber(row['Advance']) ?? 0,
-    supplierPaid: toNumber(row['Supplier Paid']) ?? 0,
-    gstRate:      toNumber(row['GST Rate (%)']) ?? 0,
-    gstMode,
-    notes:        toText(row['Notes']),
-    detail:       {},
+    customerName:      name,
+    customerId:        matchedCustomer?.id,
+    type:              modeRaw as BookingType,
+    status:            'confirmed',
+    sellingPrice:      null,
+    supplierCost:      cost,
+    advance:           0,
+    supplierPaid:      0,
+    gstRate,
+    gstMode:           'EXCLUDED',
+    serviceMarginMode: true,
+    convenienceFee:    commission,
+    detail,
+    notes:             '',
   };
 }
 
@@ -324,19 +347,28 @@ function tripToRow(t: Trip): Record<string, unknown> {
 
 function bookingToRow(b: Booking, customers: Customer[]): Record<string, unknown> {
   const cust = customers.find(c => c.id === b.customerId);
+  const d = (b.detail ?? {}) as Record<string, unknown>;
+  const from = (d.from ?? d.origin ?? d.fromStation ?? d.pickup ?? '') as string;
+  const to   = (d.to ?? d.destination ?? d.toStation ?? d.drop ?? d.city ?? '') as string;
+  const doj  = (d.doj ?? d.departDate ?? d.departure ?? d.pickupDate ?? d.checkIn ?? '') as string;
+  const dob  = (d.dob ?? '') as string;
+  const gstn = (d.gstNumber ?? cust?.gstNumber ?? '') as string;
+
   return {
-    'Customer Name*': b.customerName,
-    'Customer Phone': cust?.phone ?? '',
-    [BOOKING_TYPE_HEADER]: b.type,
-    [BOOKING_TRIP_HEADER]: b.refId ?? '',
-    [BOOKING_STATUS_HEADER]: b.status,
-    'Selling Price': b.sellingPrice ?? '',
-    'Supplier Cost': b.supplierCost,
-    'Advance': b.advance,
-    'Supplier Paid': b.supplierPaid,
-    'GST Rate (%)': b.gstRate,
-    'GST Mode (INCLUDED/EXCLUDED)': b.gstMode,
-    'Notes': b.notes,
+    'NAME*': b.customerName,
+    'GSTN': gstn,
+    [BOOKING_MODE_HEADER]: b.type,
+    'FROM': from,
+    'TO': to,
+    'DOJ (YYYY-MM-DD)': doj,
+    'DOB (YYYY-MM-DD)': dob,
+    'Cost': b.supplierCost,
+    'Taxable Value': b.taxableFee ?? b.taxableAmount,
+    'COMMISSION': b.convenienceFee ?? '',
+    'GST AMOUNT': b.gstOnFee ?? b.gstAmount,
+    'IGST': d.igst ?? '',
+    'CGST': d.cgst ?? '',
+    'SGST': d.sgst ?? '',
   };
 }
 
@@ -432,14 +464,13 @@ export default function ImportExportTab() {
         });
       }
 
-      // Bookings last — can reference Customers/Trips imported above.
+      // Bookings last — links to Customers imported above by name.
       if (wb.SheetNames.includes('Bookings')) {
         const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Bookings'], { defval: '' });
         const allCustomers = useStore.getState().customers;
-        const allTrips     = useStore.getState().trips;
         rows.forEach((row, i) => {
-          const data = parseBookingRow(row, allCustomers, allTrips);
-          if (!data) { out.errors.push(`Bookings row ${i + 2}: Customer Name and a valid Type are required — skipped`); return; }
+          const data = parseBookingRow(row, allCustomers);
+          if (!data) { out.errors.push(`Bookings row ${i + 2}: NAME and a valid MODE (Hotel/Train/Bus/Flight/Cab) are required — skipped`); return; }
           createBooking(data);
           out.bookings++;
         });
@@ -528,10 +559,11 @@ export default function ImportExportTab() {
             Upload a filled-in copy of the template. Each sheet (Customers,
             Vendors, Trips, Bookings) is processed independently — you can
             include just the sheets you need. New records are created with
-            auto-generated IDs; existing records are not modified. For
-            Bookings, "Customer Phone" and "Trip ID" are matched against
-            existing (or just-imported) Customers and Trips to link the
-            records.
+            auto-generated IDs; existing records are not modified. The
+            Bookings sheet uses the NAME / GSTN / MODE / FROM / TO / DOJ /
+            DOB / Cost / Taxable Value / COMMISSION / GST AMOUNT / IGST /
+            CGST / SGST format — bookings are linked to a Customer by
+            matching NAME against existing (or just-imported) Customers.
           </p>
 
           <div
