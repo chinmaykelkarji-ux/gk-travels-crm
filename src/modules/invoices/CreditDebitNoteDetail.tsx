@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Printer, XCircle, FileMinus, FilePlus, Pencil } from 'lucide-react';
+import { ArrowLeft, Printer, XCircle, FileMinus, FilePlus, Pencil, Trash2 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import { fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
@@ -23,8 +23,11 @@ export default function CreditDebitNoteDetail({ kind }: { kind: 'credit' | 'debi
   const invoice = useStore(selectors.invoiceById(note?.invoiceId ?? ''));
   const cancelCreditNote = useStore(s => s.cancelCreditNote);
   const cancelDebitNote  = useStore(s => s.cancelDebitNote);
+  const deleteCreditNote = useStore(s => s.deleteCreditNote);
+  const deleteDebitNote  = useStore(s => s.deleteDebitNote);
 
   const [cancelling, setCancelling] = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
 
   const Icon       = isCredit ? FileMinus : FilePlus;
   const accent     = isCredit ? 'amber' : 'blue';
@@ -68,6 +71,31 @@ export default function CreditDebitNoteDetail({ kind }: { kind: 'credit' | 'debi
     }
   }
 
+  async function handleDelete() {
+    if (!note) return;
+    const ok = await confirm({
+      title:        `Delete ${docNumber}?`,
+      description:  `This permanently deletes this ${docLabel.toLowerCase()} and frees its number for reuse. This cannot be undone.`,
+      confirmLabel: `Delete ${docLabel}`,
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const res = isCredit
+        ? await deleteCreditNote(note.id)
+        : await deleteDebitNote(note.id);
+      if (res.ok) {
+        toast.success(`${docLabel} deleted`);
+        navigate(isCredit ? '/credit-notes' : '/debit-notes');
+      } else {
+        toast.error('Delete failed', res.reason);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       {/* ── Screen view ─────────────────────────────────────── */}
@@ -98,6 +126,9 @@ export default function CreditDebitNoteDetail({ kind }: { kind: 'credit' | 'debi
                 <XCircle className="w-3.5 h-3.5" /> Cancel
               </Button>
             )}
+            <Button variant="destructive" size="sm" loading={deleting} className="gap-1.5" onClick={handleDelete}>
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </Button>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, FileMinus, IndianRupee } from 'lucide-react';
+import { Search, FileMinus, IndianRupee, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import type { CreditDebitStatus } from '@/shared/types';
@@ -8,7 +8,10 @@ import { fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 
 export const CREDIT_DEBIT_STATUS_BADGE: Record<CreditDebitStatus, 'success' | 'destructive'> = {
   ISSUED:    'success',
@@ -24,9 +27,33 @@ const STATUS_TABS: { value: CreditDebitStatus | 'all'; label: string }[] = [
 export default function CreditNotes() {
   const navigate    = useNavigate();
   const creditNotes = useStore(s => s.creditNotes);
+  const deleteCreditNote = useStore(s => s.deleteCreditNote);
 
   const [search,    setSearch]    = useState('');
   const [statusTab, setStatusTab] = useState<CreditDebitStatus | 'all'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(e: React.MouseEvent, cn: { id: string; creditNoteNumber: string }) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title:        `Delete ${cn.creditNoteNumber}?`,
+      description:  'This permanently deletes the credit note and frees its number for reuse. This cannot be undone.',
+      confirmLabel: 'Delete Credit Note',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeletingId(cn.id);
+    try {
+      const res = await deleteCreditNote(cn.id);
+      if (res.ok) {
+        toast.success('Credit note deleted');
+      } else {
+        toast.error('Delete failed', res.reason);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const kpis = useMemo(() => {
     const issued = creditNotes.filter(c => c.status === 'ISSUED');
@@ -121,7 +148,7 @@ export default function CreditNotes() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {['Credit Note #', 'Date', 'Customer', 'Reason', 'Taxable', 'GST', 'Total', 'Status'].map(h => (
+                  {['Credit Note #', 'Date', 'Customer', 'Reason', 'Taxable', 'GST', 'Total', 'Status', ''].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -142,6 +169,12 @@ export default function CreditNotes() {
                     <td className="px-4 py-3 font-semibold text-gray-900 text-sm whitespace-nowrap">{formatCurrency(cn_.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <Badge variant={CREDIT_DEBIT_STATUS_BADGE[cn_.status]}>{cn_.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button size="icon-sm" variant="ghost" loading={deletingId === cn_.id}
+                        onClick={e => handleDelete(e, cn_)}>
+                        <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
+                      </Button>
                     </td>
                   </motion.tr>
                 ))}

@@ -635,6 +635,44 @@ export async function cancelCreditNote(id: string, userId?: string | null) {
   }, { maxWait: 10000, timeout: 20000 });
 }
 
+// Deletes a credit note entirely — frees its number for reuse. If the note
+// is still ISSUED (not yet cancelled), its receivable adjustment is reversed
+// first so the linked invoice's balance stays correct. Allowed regardless
+// of status (including CANCELLED).
+export async function deleteCreditNote(id: string, userId?: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.creditNote.findUniqueOrThrow({ where: { id } });
+    const settings = await getOrCreateCompanySettings(tx);
+    assertNotFrozen(existing.date, settings);
+
+    if (existing.status !== 'CANCELLED') {
+      const invoice = await tx.invoice.findUnique({ where: { id: existing.invoiceId } });
+      if (invoice?.receivableId) {
+        const rcv = await tx.receivable.findUnique({ where: { id: invoice.receivableId }, include: { entries: true } });
+        if (rcv) {
+          const newInvoiceAmount = round2(rcv.invoiceAmount + existing.totalAmount);
+          const fin = calcReceivableFinance({ invoiceAmount: newInvoiceAmount, entries: rcv.entries, dueDate: rcv.dueDate });
+          await tx.receivable.update({ where: { id: rcv.id }, data: { invoiceAmount: newInvoiceAmount, balanceDue: fin.balanceDue } });
+        }
+      }
+    }
+
+    await releaseDocNumber(tx, 'CN', existing.financialYear, existing.sequenceNumber);
+    await tx.creditNote.delete({ where: { id } });
+
+    await logActivity(tx, {
+      action:      'credit_note_deleted',
+      description: `Credit Note ${existing.creditNoteNumber} deleted`,
+      entityType:  'credit_note',
+      entityId:    id,
+      userId,
+      before:      existing,
+    });
+
+    return { id };
+  }, { maxWait: 10000, timeout: 20000 });
+}
+
 // ── Debit Notes ──────────────────────────────────────────────────
 
 export interface CreateDebitNoteInput {
@@ -815,6 +853,44 @@ export async function cancelDebitNote(id: string, userId?: string | null) {
     });
 
     return updated;
+  }, { maxWait: 10000, timeout: 20000 });
+}
+
+// Deletes a debit note entirely — frees its number for reuse. If the note
+// is still ISSUED (not yet cancelled), its receivable adjustment is reversed
+// first so the linked invoice's balance stays correct. Allowed regardless
+// of status (including CANCELLED).
+export async function deleteDebitNote(id: string, userId?: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.debitNote.findUniqueOrThrow({ where: { id } });
+    const settings = await getOrCreateCompanySettings(tx);
+    assertNotFrozen(existing.date, settings);
+
+    if (existing.status !== 'CANCELLED') {
+      const invoice = await tx.invoice.findUnique({ where: { id: existing.invoiceId } });
+      if (invoice?.receivableId) {
+        const rcv = await tx.receivable.findUnique({ where: { id: invoice.receivableId }, include: { entries: true } });
+        if (rcv) {
+          const newInvoiceAmount = round2(rcv.invoiceAmount - existing.totalAmount);
+          const fin = calcReceivableFinance({ invoiceAmount: newInvoiceAmount, entries: rcv.entries, dueDate: rcv.dueDate });
+          await tx.receivable.update({ where: { id: rcv.id }, data: { invoiceAmount: newInvoiceAmount, balanceDue: fin.balanceDue } });
+        }
+      }
+    }
+
+    await releaseDocNumber(tx, 'DN', existing.financialYear, existing.sequenceNumber);
+    await tx.debitNote.delete({ where: { id } });
+
+    await logActivity(tx, {
+      action:      'debit_note_deleted',
+      description: `Debit Note ${existing.debitNoteNumber} deleted`,
+      entityType:  'debit_note',
+      entityId:    id,
+      userId,
+      before:      existing,
+    });
+
+    return { id };
   }, { maxWait: 10000, timeout: 20000 });
 }
 

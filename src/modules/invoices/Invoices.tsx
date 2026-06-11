@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Receipt, FileWarning, IndianRupee, Percent } from 'lucide-react';
+import { Plus, Search, Receipt, FileWarning, IndianRupee, Percent, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import type { InvoiceStatus } from '@/shared/types';
@@ -10,6 +10,8 @@ import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 
 export const INVOICE_STATUS_BADGE: Record<InvoiceStatus, 'secondary' | 'success' | 'destructive'> = {
   DRAFT:     'secondary',
@@ -24,11 +26,35 @@ const STATUS_TABS: { value: InvoiceStatus | 'all'; label: string }[] = [
 ];
 
 export default function Invoices() {
-  const navigate  = useNavigate();
-  const invoices  = useStore(s => s.invoices);
+  const navigate     = useNavigate();
+  const invoices     = useStore(s => s.invoices);
+  const deleteInvoice = useStore(s => s.deleteInvoice);
 
   const [search,    setSearch]    = useState('');
   const [statusTab, setStatusTab] = useState<InvoiceStatus | 'all'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(e: React.MouseEvent, inv: { id: string; invoiceNumber: string }) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title:        `Delete ${inv.invoiceNumber}?`,
+      description:  'This permanently deletes the invoice and frees its number for reuse. This cannot be undone.',
+      confirmLabel: 'Delete Invoice',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeletingId(inv.id);
+    try {
+      const res = await deleteInvoice(inv.id);
+      if (res.ok) {
+        toast.success('Invoice deleted');
+      } else {
+        toast.error('Delete failed', res.reason);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const kpis = useMemo(() => {
     const issued = invoices.filter(i => i.status === 'ISSUED');
@@ -159,10 +185,16 @@ export default function Invoices() {
                       <Badge variant={INVOICE_STATUS_BADGE[inv.status]}>{inv.status}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Button size="icon-sm" variant="ghost"
-                        onClick={e => { e.stopPropagation(); navigate(`/invoices/${inv.id}`); }}>
-                        <Receipt className="w-3.5 h-3.5 text-gray-400" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon-sm" variant="ghost"
+                          onClick={e => { e.stopPropagation(); navigate(`/invoices/${inv.id}`); }}>
+                          <Receipt className="w-3.5 h-3.5 text-gray-400" />
+                        </Button>
+                        <Button size="icon-sm" variant="ghost" loading={deletingId === inv.id}
+                          onClick={e => handleDelete(e, inv)}>
+                          <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
+                        </Button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

@@ -246,11 +246,13 @@ interface StoreActions {
   createCreditNote: (data: CreateCreditNoteInput) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
   updateCreditNote: (id: string, data: UpdateCreditDebitNoteInput) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
   cancelCreditNote: (id: string) => Promise<{ ok: boolean; creditNote?: CreditNote; reason?: string }>;
+  deleteCreditNote: (id: string) => Promise<{ ok: boolean; reason?: string }>;
 
   // â”€â”€ Debit Notes (GST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createDebitNote: (data: CreateDebitNoteInput) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
   updateDebitNote: (id: string, data: UpdateCreditDebitNoteInput) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
   cancelDebitNote: (id: string) => Promise<{ ok: boolean; debitNote?: DebitNote; reason?: string }>;
+  deleteDebitNote: (id: string) => Promise<{ ok: boolean; reason?: string }>;
 
   // â”€â”€ Company Master â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   updateCompanySettings: (data: Partial<CompanySettings>) => Promise<{ ok: boolean; settings?: CompanySettings; reason?: string }>;
@@ -1758,6 +1760,17 @@ export const useStore = create<GKStore>()(
         }
       },
 
+      async deleteCreditNote(id) {
+        try {
+          await apiClient.delete(`/credit-notes/${id}`);
+          set((s: GKStore) => ({ creditNotes: s.creditNotes.filter(c => c.id !== id) }));
+          await get().fetchAll();
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Credit note deletion failed') };
+        }
+      },
+
       // â•â• Debit Note Actions (GST) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
       async createDebitNote(data) {
@@ -1793,6 +1806,17 @@ export const useStore = create<GKStore>()(
           return { ok: true, debitNote };
         } catch (err: unknown) {
           return { ok: false, reason: getApiErrorMessage(err, 'Debit note cancellation failed') };
+        }
+      },
+
+      async deleteDebitNote(id) {
+        try {
+          await apiClient.delete(`/debit-notes/${id}`);
+          set((s: GKStore) => ({ debitNotes: s.debitNotes.filter(d => d.id !== id) }));
+          await get().fetchAll();
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Debit note deletion failed') };
         }
       },
 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, FilePlus, IndianRupee } from 'lucide-react';
+import { Search, FilePlus, IndianRupee, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import type { CreditDebitStatus } from '@/shared/types';
@@ -8,7 +8,10 @@ import { fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
+import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 import { CREDIT_DEBIT_STATUS_BADGE } from './CreditNotes';
 
 const STATUS_TABS: { value: CreditDebitStatus | 'all'; label: string }[] = [
@@ -20,9 +23,33 @@ const STATUS_TABS: { value: CreditDebitStatus | 'all'; label: string }[] = [
 export default function DebitNotes() {
   const navigate   = useNavigate();
   const debitNotes = useStore(s => s.debitNotes);
+  const deleteDebitNote = useStore(s => s.deleteDebitNote);
 
   const [search,    setSearch]    = useState('');
   const [statusTab, setStatusTab] = useState<CreditDebitStatus | 'all'>('all');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDelete(e: React.MouseEvent, dn: { id: string; debitNoteNumber: string }) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title:        `Delete ${dn.debitNoteNumber}?`,
+      description:  'This permanently deletes the debit note and frees its number for reuse. This cannot be undone.',
+      confirmLabel: 'Delete Debit Note',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setDeletingId(dn.id);
+    try {
+      const res = await deleteDebitNote(dn.id);
+      if (res.ok) {
+        toast.success('Debit note deleted');
+      } else {
+        toast.error('Delete failed', res.reason);
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const kpis = useMemo(() => {
     const issued = debitNotes.filter(d => d.status === 'ISSUED');
@@ -117,7 +144,7 @@ export default function DebitNotes() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {['Debit Note #', 'Date', 'Customer', 'Reason', 'Taxable', 'GST', 'Total', 'Status'].map(h => (
+                  {['Debit Note #', 'Date', 'Customer', 'Reason', 'Taxable', 'GST', 'Total', 'Status', ''].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -138,6 +165,12 @@ export default function DebitNotes() {
                     <td className="px-4 py-3 font-semibold text-gray-900 text-sm whitespace-nowrap">{formatCurrency(dn.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <Badge variant={CREDIT_DEBIT_STATUS_BADGE[dn.status]}>{dn.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button size="icon-sm" variant="ghost" loading={deletingId === dn.id}
+                        onClick={e => handleDelete(e, dn)}>
+                        <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-red-600" />
+                      </Button>
                     </td>
                   </motion.tr>
                 ))}

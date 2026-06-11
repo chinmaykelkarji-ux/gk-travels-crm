@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
-  AlertTriangle, Clock, CalendarDays, Activity, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
+  AlertTriangle, Clock, CalendarDays, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
   ClipboardCheck, ListChecks, Ticket, FileMinus, FilePlus, Percent,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -88,7 +88,6 @@ export default function Dashboard() {
   const trips             = useStore(s => s.trips);
   const leads             = useStore(s => s.leads);
   const payments          = useStore(s => s.payments);
-  const activityLog       = useStore(s => s.activityLog);
   const reminders         = useStore(selectors.pendingReminders);
   const vendors           = useStore(s => s.vendors);
   const vendorPayments    = useStore(s => s.vendorPayments);
@@ -230,15 +229,13 @@ export default function Dashboard() {
     };
   }, [invoices, creditNotes, debitNotes]);
 
-  // Operations widgets — pending approvals, today's activity, tasks due today
+  // Operations widgets — pending approvals, tasks due today
   const opsStats = useMemo(() => {
     const todayStr = today();
 
     const pendingApprovals = quotations
       .filter(q => q.approvalStatus === 'PENDING_APPROVAL')
       .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
-
-    const todaysActivity = activityLog.filter(a => a.date === todayStr);
 
     const tasksDueToday = tasks
       .filter(t => t.dueDate === todayStr && t.status !== 'completed' && t.status !== 'cancelled')
@@ -247,8 +244,8 @@ export default function Dashboard() {
         return order[a.priority] - order[b.priority];
       });
 
-    return { pendingApprovals, todaysActivity, tasksDueToday };
-  }, [quotations, activityLog, tasks]);
+    return { pendingApprovals, tasksDueToday };
+  }, [quotations, tasks]);
 
   // Booking departure / check-in alerts (next 7 days, not cancelled/completed)
   const bookingAlerts = useMemo(() => {
@@ -263,12 +260,6 @@ export default function Dashboard() {
       })
       .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
   }, [bookings]);
-
-  // Activity feed
-  const recentActivity = useMemo(
-    () => activityLog.slice(0, 15),
-    [activityLog]
-  );
 
   // Urgent reminders
   const urgentReminders = reminders
@@ -588,7 +579,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Operations Overview ────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Pending Approvals */}
         <Card>
@@ -690,44 +681,6 @@ export default function Dashboard() {
                         {t.priority}
                       </Badge>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Today's Activity */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-600" />
-                Today's Activity
-                {opsStats.todaysActivity.length > 0 && (
-                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                    {opsStats.todaysActivity.length}
-                  </span>
-                )}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <Separator />
-          <CardContent className="pt-0 pb-3">
-            {opsStats.todaysActivity.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-400">
-                No activity recorded today
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {opsStats.todaysActivity.slice(0, 6).map(a => (
-                  <div key={a.id} className="py-2">
-                    <p className="text-xs text-gray-700 leading-snug">{a.description}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                      {new Date(a.timestamp).toLocaleTimeString('en-IN', {
-                        hour: '2-digit', minute: '2-digit', hour12: true,
-                      })}
-                    </p>
                   </div>
                 ))}
               </div>

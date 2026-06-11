@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import {
-  createCreditNote, updateCreditNote, cancelCreditNote,
+  createCreditNote, updateCreditNote, cancelCreditNote, deleteCreditNote,
   type CreateCreditNoteInput, type UpdateCreditDebitNoteInput,
 } from '../services/invoiceService.js';
 
@@ -63,6 +63,18 @@ router.post('/:id/cancel', async (req: AuthRequest, res) => {
     res.json(cn);
   } catch (err) {
     console.error('[creditNotes cancel]', err);
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── Delete ────────────────────────────────────────────────────
+
+router.delete('/:id', async (req: AuthRequest, res) => {
+  try {
+    await deleteCreditNote(req.params.id as string, req.userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[creditNotes DELETE]', err);
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
