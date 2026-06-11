@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
 import {
   Settings as SettingsIcon, Database, Trash2,
   Users, Plus, Edit2, KeyRound, Shield, CheckCircle, XCircle,
-  Building2, Save,
+  Building2, Save, FileSpreadsheet,
 } from 'lucide-react';
+import ImportExportTab from './ImportExport';
 import { useStore } from '@/store';
 import { useAuth, usePermission } from '@/backend/auth/AuthContext';
 import { PERMISSIONS } from '@/backend/auth/permissions';
@@ -682,6 +683,9 @@ export default function Settings() {
           <TabsTrigger value="data" className="gap-1.5">
             <Database className="w-3.5 h-3.5" /> Data
           </TabsTrigger>
+          <TabsTrigger value="import-export" className="gap-1.5">
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Import / Export
+          </TabsTrigger>
         </TabsList>
 
         {/* Users tab */}
@@ -735,6 +739,11 @@ export default function Settings() {
               </Button>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Import / Export tab */}
+        <TabsContent value="import-export">
+          <ImportExportTab />
         </TabsContent>
       </Tabs>
     </div>
