@@ -9,7 +9,7 @@ export function fmtDate(dateStr: string | null | undefined): string {
   try {
     const d = parseISO(dateStr);
     if (!isValid(d)) return '—';
-    return format(d, 'd MMM yyyy');
+    return format(d, 'dd/MM/yyyy');
   } catch {
     return '—';
   }
@@ -20,7 +20,7 @@ export function fmtDateTime(dateStr: string | null | undefined): string {
   try {
     const d = new Date(dateStr);
     if (!isValid(d)) return '—';
-    return format(d, 'd MMM yyyy, h:mm a');
+    return format(d, 'dd/MM/yyyy, h:mm a');
   } catch {
     return '—';
   }

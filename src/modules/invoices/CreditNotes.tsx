@@ -12,6 +12,8 @@ import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
+import { useBulkSelection } from '@/shared/hooks/useBulkSelection';
+import { BulkActionBar } from '@/shared/components/BulkActionBar';
 
 export const CREDIT_DEBIT_STATUS_BADGE: Record<CreditDebitStatus, 'success' | 'destructive'> = {
   ISSUED:    'success',
@@ -32,6 +34,7 @@ export default function CreditNotes() {
   const [search,    setSearch]    = useState('');
   const [statusTab, setStatusTab] = useState<CreditDebitStatus | 'all'>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   async function handleDelete(e: React.MouseEvent, cn: { id: string; creditNoteNumber: string }) {
     e.stopPropagation();
@@ -86,6 +89,37 @@ export default function CreditNotes() {
     return list;
   }, [creditNotes, statusTab, search]);
 
+  // ── Bulk selection ───────────────────────────────────────────
+
+  const filteredIds = useMemo(() => filtered.map(c => c.id), [filtered]);
+  const bulkSel = useBulkSelection(filteredIds);
+
+  async function handleBulkDelete() {
+    const ids = Array.from(bulkSel.selected);
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title:        `Delete ${ids.length} credit note${ids.length > 1 ? 's' : ''}?`,
+      description:  `This permanently deletes the selected credit note${ids.length > 1 ? 's' : ''} and frees their numbers for reuse. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      let okCount = 0, failCount = 0;
+      for (const id of ids) {
+        const res = await deleteCreditNote(id);
+        if (res.ok) okCount++; else failCount++;
+      }
+      if (okCount > 0) toast.success(`${okCount} credit note${okCount > 1 ? 's' : ''} deleted`);
+      if (failCount > 0) toast.error(`${failCount} credit note${failCount > 1 ? 's' : ''} could not be deleted`);
+      bulkSel.clear();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
 
@@ -133,6 +167,15 @@ export default function CreditNotes() {
           className="bg-transparent text-xs text-gray-700 outline-none flex-1 placeholder:text-gray-400" />
       </div>
 
+      {/* Bulk action bar */}
+      <BulkActionBar
+        count={bulkSel.count}
+        itemLabel="credit note"
+        onClear={bulkSel.clear}
+        onDelete={handleBulkDelete}
+        deleting={bulkDeleting}
+      />
+
       {/* List */}
       {filtered.length === 0 ? (
         creditNotes.length === 0 ? (
@@ -148,6 +191,15 @@ export default function CreditNotes() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={bulkSel.allSelected}
+                      onChange={bulkSel.toggleAll}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      aria-label="Select all credit notes"
+                    />
+                  </th>
                   {['Credit Note #', 'Date', 'Customer', 'Reason', 'Taxable', 'GST', 'Total', 'Status', ''].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
@@ -160,6 +212,15 @@ export default function CreditNotes() {
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/credit-notes/${cn_.id}`)}
                   >
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={bulkSel.selected.has(cn_.id)}
+                        onChange={() => bulkSel.toggle(cn_.id)}
+                        className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        aria-label={`Select credit note ${cn_.creditNoteNumber}`}
+                      />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-amber-600 font-semibold whitespace-nowrap">{cn_.creditNoteNumber}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmtDate(cn_.date)}</td>
                     <td className="px-4 py-3 font-semibold text-gray-900 text-sm">{cn_.customerName}</td>

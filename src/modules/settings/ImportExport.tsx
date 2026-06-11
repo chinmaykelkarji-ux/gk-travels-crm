@@ -63,7 +63,7 @@ const VENDOR_SAMPLE: Record<string, unknown> = {
 
 const TRIP_HEADERS = [
   'Customer Name*', 'Phone*', 'Email', 'Destination*', 'Type', 'Pax',
-  'Departure Date (YYYY-MM-DD)', 'Return Date (YYYY-MM-DD)',
+  'Departure Date (DD-MM-YYYY)', 'Return Date (DD-MM-YYYY)',
   'Status (draft/quotation/confirmed/in_progress/completed/cancelled)',
   'Total Amount', 'GST Rate (%)', 'GST Mode (INCLUDED/EXCLUDED)', 'Notes',
 ];
@@ -75,8 +75,8 @@ const TRIP_SAMPLE: Record<string, unknown> = {
   'Destination*': 'Manali',
   'Type': 'Leisure',
   'Pax': 4,
-  'Departure Date (YYYY-MM-DD)': '2026-07-10',
-  'Return Date (YYYY-MM-DD)': '2026-07-15',
+  'Departure Date (DD-MM-YYYY)': '10-07-2026',
+  'Return Date (DD-MM-YYYY)': '15-07-2026',
   'Status (draft/quotation/confirmed/in_progress/completed/cancelled)': 'confirmed',
   'Total Amount': 85000,
   'GST Rate (%)': 5,
@@ -88,7 +88,7 @@ const BOOKING_MODE_HEADER = 'MODE (Flight/Hotel/Cab/Train/Bus/Visa/Insurance/Act
 
 const BOOKING_HEADERS = [
   'NAME*', 'GSTN', BOOKING_MODE_HEADER, 'FROM', 'TO',
-  'DOJ (YYYY-MM-DD)', 'DOB (YYYY-MM-DD)', 'Cost', 'Taxable Value',
+  'DOJ (DD-MM-YYYY)', 'DOB (DD-MM-YYYY)', 'Cost', 'Taxable Value',
   'COMMISSION', 'GST AMOUNT', 'IGST', 'CGST', 'SGST',
 ];
 
@@ -98,8 +98,8 @@ const BOOKING_SAMPLE: Record<string, unknown> = {
   [BOOKING_MODE_HEADER]: 'Flight',
   'FROM': 'Mumbai',
   'TO': 'Delhi',
-  'DOJ (YYYY-MM-DD)': '2026-07-10',
-  'DOB (YYYY-MM-DD)': '1990-05-21',
+  'DOJ (DD-MM-YYYY)': '10-07-2026',
+  'DOB (DD-MM-YYYY)': '21-05-1990',
   'Cost': 9500,
   'Taxable Value': 500,
   'COMMISSION': 500,
@@ -134,9 +134,31 @@ function parseDateCell(val: unknown): string | undefined {
     return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
   }
   const s = String(val).trim();
+  // DD-MM-YYYY or DD/MM/YYYY (the format used by the import template)
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    const [, dd, mm, yyyy] = dmy;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  }
+  // Already ISO (YYYY-MM-DD)
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const [, yyyy, mm, dd] = iso;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  }
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
   return s || undefined;
+}
+
+// Convert a stored ISO (YYYY-MM-DD) date to the DD-MM-YYYY format used in
+// the import/export template.
+function formatDateForRow(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return String(iso);
+  const [, yyyy, mm, dd] = m;
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 const VENDOR_TYPES: VendorType[] = ['hotel', 'transport', 'activity', 'guide', 'visa', 'miscellaneous'];
@@ -261,8 +283,8 @@ function parseTripRow(row: Record<string, unknown>): Partial<Trip> | null {
     destination,
     type:        toText(row['Type']) || 'Leisure',
     pax:         toNumber(row['Pax']) ?? 1,
-    departure:   parseDateCell(row['Departure Date (YYYY-MM-DD)']) ?? null,
-    returnDate:  parseDateCell(row['Return Date (YYYY-MM-DD)']) ?? null,
+    departure:   parseDateCell(row['Departure Date (DD-MM-YYYY)']) ?? null,
+    returnDate:  parseDateCell(row['Return Date (DD-MM-YYYY)']) ?? null,
     status,
     totalAmount: toNumber(row['Total Amount']),
     gstRate:     toNumber(row['GST Rate (%)']) ?? 5,
@@ -294,8 +316,8 @@ function parseBookingRow(row: Record<string, unknown>, customers: Customer[]): P
   const detail = buildBookingDetail(mode, {
     from:      toText(row['FROM']),
     to:        toText(row['TO']),
-    doj:       parseDateCell(row['DOJ (YYYY-MM-DD)']),
-    dob:       parseDateCell(row['DOB (YYYY-MM-DD)']),
+    doj:       parseDateCell(row['DOJ (DD-MM-YYYY)']),
+    dob:       parseDateCell(row['DOB (DD-MM-YYYY)']),
     gstNumber: toText(row['GSTN']),
     igst, cgst, sgst,
     taxableValueOfSupply,
@@ -361,8 +383,8 @@ function tripToRow(t: Trip): Record<string, unknown> {
     'Destination*': t.destination,
     'Type': t.type,
     'Pax': t.pax,
-    'Departure Date (YYYY-MM-DD)': t.departure ?? '',
-    'Return Date (YYYY-MM-DD)': t.returnDate ?? '',
+    'Departure Date (DD-MM-YYYY)': formatDateForRow(t.departure),
+    'Return Date (DD-MM-YYYY)': formatDateForRow(t.returnDate),
     'Status (draft/quotation/confirmed/in_progress/completed/cancelled)': t.status,
     'Total Amount': t.totalAmount ?? '',
     'GST Rate (%)': t.gstRate,
@@ -386,8 +408,8 @@ function bookingToRow(b: Booking, customers: Customer[]): Record<string, unknown
     [BOOKING_MODE_HEADER]: b.type,
     'FROM': from,
     'TO': to,
-    'DOJ (YYYY-MM-DD)': doj,
-    'DOB (YYYY-MM-DD)': dob,
+    'DOJ (DD-MM-YYYY)': formatDateForRow(doj),
+    'DOB (DD-MM-YYYY)': formatDateForRow(dob),
     'Cost': b.supplierCost,
     'Taxable Value': b.taxableFee ?? b.taxableAmount,
     'COMMISSION': b.convenienceFee ?? '',

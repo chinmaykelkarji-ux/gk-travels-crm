@@ -31,6 +31,8 @@ import {
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { useBulkSelection } from '@/shared/hooks/useBulkSelection';
+import { BulkActionBar } from '@/shared/components/BulkActionBar';
 import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG, DETAIL_FIELDS } from './bookingMeta';
 
 const BOOKING_TYPES: BookingType[] = [
@@ -734,6 +736,7 @@ export default function Bookings() {
   const [formOpen,    setFormOpen]    = useState(false);
   const [editBooking, setEditBooking] = useState<Booking | null>(null);
   const [deletingId,  setDeletingId]  = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   function closeForm() {
     setFormOpen(false);
@@ -797,6 +800,32 @@ export default function Bookings() {
   }, [trips]);
 
   const hasFilters = typeFilter !== 'all' || statusFilter !== 'all' || search.trim();
+
+  // ── Bulk selection ───────────────────────────────────────────
+
+  const filteredIds = useMemo(() => filtered.map(b => b.id), [filtered]);
+  const bulkSel = useBulkSelection(filteredIds);
+
+  async function handleBulkDelete() {
+    const ids = Array.from(bulkSel.selected);
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title:        `Delete ${ids.length} booking${ids.length > 1 ? 's' : ''}?`,
+      description:  `This will permanently delete the selected booking${ids.length > 1 ? 's' : ''}. This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      for (const id of ids) deleteBooking(id);
+      toast.success(`${ids.length} booking${ids.length > 1 ? 's' : ''} deleted`);
+      bulkSel.clear();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   return (
     <div className="p-5 space-y-5 animate-fade-in">
@@ -920,6 +949,15 @@ export default function Bookings() {
         )}
       </div>
 
+      {/* Bulk action bar */}
+      <BulkActionBar
+        count={bulkSel.count}
+        itemLabel="booking"
+        onClear={bulkSel.clear}
+        onDelete={handleBulkDelete}
+        deleting={bulkDeleting}
+      />
+
       {/* Bookings table */}
       {filtered.length === 0 ? (
         bookings.length === 0 ? (
@@ -945,6 +983,15 @@ export default function Bookings() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={bulkSel.allSelected}
+                      onChange={bulkSel.toggleAll}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      aria-label="Select all bookings"
+                    />
+                  </th>
                   {['Type', 'Customer', 'Linked Trip', 'Selling Price', 'Cost', 'Balance', 'Margin', 'Status', 'Date'].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-400 px-4 py-3 whitespace-nowrap">
                       {h}
@@ -968,6 +1015,15 @@ export default function Bookings() {
                       className="hover:bg-gray-50/70 transition-colors cursor-pointer"
                       onClick={() => navigate(`/bookings/${b.id}`)}
                     >
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={bulkSel.selected.has(b.id)}
+                          onChange={() => bulkSel.toggle(b.id)}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          aria-label={`Select booking ${b.id}`}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <div className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium capitalize', typeClr)}>

@@ -19,9 +19,11 @@ const TRIP_STATUS_BADGE: Record<string, { label: string; variant: 'default' | 's
 
 interface TripCardProps {
   trip: Trip;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function TripCard({ trip }: TripCardProps) {
+export function TripCard({ trip, selected, onToggleSelect }: TripCardProps) {
   const navigate  = useNavigate();
   const days      = daysUntil(trip.departure);
   const finStatus = getFinancialStatus(trip.totalPayable, trip.paidAmount);
@@ -44,10 +46,22 @@ export function TripCard({ trip }: TripCardProps) {
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-start justify-between mb-1.5">
-          <span className="text-[10px] font-mono font-medium text-gray-400 tracking-wider">
-            {trip.id}
-            <RecordNumberBadge label="Trip" n={trip.tripNumber} className="ml-1.5" />
-          </span>
+          <div className="flex items-center gap-2">
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={() => onToggleSelect(trip.id)}
+                onClick={e => e.stopPropagation()}
+                className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                aria-label={`Select trip ${trip.id}`}
+              />
+            )}
+            <span className="text-[10px] font-mono font-medium text-gray-400 tracking-wider">
+              {trip.id}
+              <RecordNumberBadge label="Trip" n={trip.tripNumber} className="ml-1.5" />
+            </span>
+          </div>
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
         </div>
         <h3 className="text-sm font-bold text-gray-900">{trip.customer}</h3>

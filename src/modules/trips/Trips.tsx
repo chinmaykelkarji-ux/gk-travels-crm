@@ -16,6 +16,9 @@ import {
 } from '@/shared/components/ui/select';
 import { Badge } from '@/shared/components/ui/badge';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { confirm } from '@/shared/hooks/useConfirm';
+import { useBulkSelection } from '@/shared/hooks/useBulkSelection';
+import { BulkActionBar } from '@/shared/components/BulkActionBar';
 
 const STATUS_FILTERS: { value: 'all' | TripStatus; label: string }[] = [
   { value: 'all',         label: 'All' },
@@ -31,11 +34,13 @@ export default function Trips() {
   const navigate  = useNavigate();
   const trips     = useStore(s => s.trips);
   const createTrip = useStore(s => s.createTrip);
+  const deleteTrip = useStore(s => s.deleteTrip);
 
   const [formOpen, setFormOpen]  = useState(false);
   const [search, setSearch]      = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TripStatus>('all');
   const [creating, setCreating]  = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const filtered = useMemo(() => {
     let list = trips;
@@ -88,6 +93,32 @@ export default function Trips() {
     in_progress: trips.filter(t => t.status === 'in_progress').length,
     draft:       trips.filter(t => t.status === 'draft').length,
   }), [trips]);
+
+  // ── Bulk selection ───────────────────────────────────────────
+
+  const filteredIds = useMemo(() => filtered.map(t => t.id), [filtered]);
+  const bulkSel = useBulkSelection(filteredIds);
+
+  async function handleBulkDelete() {
+    const ids = Array.from(bulkSel.selected);
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title:        `Delete ${ids.length} trip${ids.length > 1 ? 's' : ''}?`,
+      description:  `This will permanently delete the selected trip${ids.length > 1 ? 's' : ''} and any linked bookings/invoices data. This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      for (const id of ids) deleteTrip(id);
+      toast.success(`${ids.length} trip${ids.length > 1 ? 's' : ''} deleted`);
+      bulkSel.clear();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   return (
     <div className="p-5 space-y-5 animate-fade-in">
@@ -153,6 +184,15 @@ export default function Trips() {
         })}
       </div>
 
+      {/* Bulk action bar */}
+      <BulkActionBar
+        count={bulkSel.count}
+        itemLabel="trip"
+        onClear={bulkSel.clear}
+        onDelete={handleBulkDelete}
+        deleting={bulkDeleting}
+      />
+
       {/* Grid */}
       {filtered.length === 0 ? (
         trips.length === 0 ? (
@@ -185,7 +225,7 @@ export default function Trips() {
               key={trip.id}
               variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
             >
-              <TripCard trip={trip} />
+              <TripCard trip={trip} selected={bulkSel.selected.has(trip.id)} onToggleSelect={bulkSel.toggle} />
             </motion.div>
           ))}
         </motion.div>

@@ -34,6 +34,8 @@ import {
 } from '@/shared/components/ui/select';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
+import { useBulkSelection } from '@/shared/hooks/useBulkSelection';
+import { BulkActionBar } from '@/shared/components/BulkActionBar';
 
 // ─── Segment helpers ──────────────────────────────────────────
 
@@ -800,15 +802,28 @@ interface CustomerListViewProps {
   onEdit:            (c: Customer) => void;
   onDelete:          (c: Customer) => void;
   deletingId:        string | null;
+  selectedIds:       Set<string>;
+  allSelected:       boolean;
+  onToggleSelect:    (id: string) => void;
+  onToggleAll:       () => void;
 }
 
-function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onSelect, onEdit, onDelete, deletingId }: CustomerListViewProps) {
+function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onSelect, onEdit, onDelete, deletingId, selectedIds, allSelected, onToggleSelect, onToggleAll }: CustomerListViewProps) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="px-4 py-3 w-8">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={onToggleAll}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  aria-label="Select all customers"
+                />
+              </th>
               {['Customer', 'Phone', 'Email', 'City', 'Segment', 'Trips', 'Balance', ''].map(h => (
                 <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
@@ -824,6 +839,15 @@ function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onS
 
               return (
                 <tr key={c.id} onClick={() => onSelect(c)} className="hover:bg-gray-50/70 transition-colors cursor-pointer group">
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => onToggleSelect(c.id)}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      aria-label={`Select customer ${c.name}`}
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <div className={cn(
@@ -921,6 +945,7 @@ export default function Customers() {
   const [formOpen,     setFormOpen]     = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [deletingId,   setDeletingId]   = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   function changeViewMode(mode: 'grid' | 'list') {
     setViewMode(mode);
@@ -1041,6 +1066,37 @@ export default function Customers() {
     return m;
   }, [allReceivables]);
 
+  // ── Bulk selection ───────────────────────────────────────────
+
+  const filteredIds = useMemo(() => filtered.map(c => c.id), [filtered]);
+  const bulkSel = useBulkSelection(filteredIds);
+
+  async function handleBulkDelete() {
+    const ids = Array.from(bulkSel.selected);
+    if (ids.length === 0) return;
+    const ok = await confirm({
+      title:        `Delete ${ids.length} customer${ids.length > 1 ? 's' : ''}?`,
+      description:  `This will permanently remove the selected customer${ids.length > 1 ? 's' : ''} from your records. Customers linked to active trips or bookings will be skipped. This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      let okCount = 0, failCount = 0;
+      for (const id of ids) {
+        const res = deleteCustomer(id);
+        if (res.ok) okCount++; else failCount++;
+      }
+      if (okCount > 0) toast.success(`${okCount} customer${okCount > 1 ? 's' : ''} deleted`);
+      if (failCount > 0) toast.error(`${failCount} customer${failCount > 1 ? 's' : ''} could not be deleted`, 'Linked to active trips or bookings');
+      bulkSel.clear();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
 
@@ -1125,6 +1181,15 @@ export default function Customers() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      <BulkActionBar
+        count={bulkSel.count}
+        itemLabel="customer"
+        onClear={bulkSel.clear}
+        onDelete={handleBulkDelete}
+        deleting={bulkDeleting}
+      />
+
       {/* Customer grid */}
       {filtered.length === 0 ? (
         customers.length === 0 ? (
@@ -1149,6 +1214,10 @@ export default function Customers() {
           onEdit={openEdit}
           onDelete={handleDeleteCustomer}
           deletingId={deletingId}
+          selectedIds={bulkSel.selected}
+          allSelected={bulkSel.allSelected}
+          onToggleSelect={bulkSel.toggle}
+          onToggleAll={bulkSel.toggleAll}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1168,11 +1237,21 @@ export default function Customers() {
               >
                 {/* Avatar + segment + actions */}
                 <div className="flex items-start justify-between mb-3">
-                  <div className={cn(
-                    'w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold text-white bg-gradient-to-br flex-shrink-0',
-                    avatarColor(c.id)
-                  )}>
-                    {initials(c.name)}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={bulkSel.selected.has(c.id)}
+                      onChange={() => bulkSel.toggle(c.id)}
+                      onClick={e => e.stopPropagation()}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      aria-label={`Select customer ${c.name}`}
+                    />
+                    <div className={cn(
+                      'w-11 h-11 rounded-2xl flex items-center justify-center text-base font-bold text-white bg-gradient-to-br flex-shrink-0',
+                      avatarColor(c.id)
+                    )}>
+                      {initials(c.name)}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {c.gstRegistered && (
