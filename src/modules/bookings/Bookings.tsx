@@ -135,7 +135,7 @@ interface BookingFormDialogProps {
   booking?: Booking | null;
 }
 
-function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
+export function BookingFormDialog({ open, onClose, booking }: BookingFormDialogProps) {
   const trips         = useStore(s => s.trips);
   const customers     = useStore(s => s.customers);
   const createBooking = useStore(s => s.createBooking);

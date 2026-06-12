@@ -22,6 +22,7 @@ import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
 import { openWhatsApp, openGmail } from '@/shared/utils/email';
 import { TYPE_ICON, TYPE_COLOR, STATUS_CONFIG, DETAIL_FIELDS, getBookingPrimaryDate } from './bookingMeta';
+import { BookingFormDialog } from './Bookings';
 
 // ─── Detail card ───────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ export default function BookingDetail() {
   const [recEntryOpen, setRecEntryOpen]   = useState(false);
   const [creatingReceivable, setCreatingReceivable] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (!booking) {
     return (
@@ -266,7 +268,7 @@ export default function BookingDetail() {
             <Button variant="success" size="sm" className="gap-1.5" onClick={openRecordPayment} loading={creatingReceivable}>
               <IndianRupee className="w-3.5 h-3.5" /> Record Payment
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate('/bookings')} className="gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
               <Edit2 className="w-3.5 h-3.5" /> Edit
             </Button>
             <Button variant="destructive" size="sm" onClick={handleDelete} className="gap-1.5">
@@ -594,6 +596,12 @@ export default function BookingDetail() {
           onClose={() => setRecEntryOpen(false)}
           defaultCustomerId={bk.customerId}
           defaultTripId={bk.refId || undefined}
+        />
+
+        <BookingFormDialog
+          open={editOpen}
+          booking={bk}
+          onClose={() => setEditOpen(false)}
         />
       </div>
     </>
