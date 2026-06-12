@@ -53,6 +53,11 @@ router.post('/login', async (req, res) => {
       role:  user.role,
     });
 
+    await prisma.user.update({
+      where: { id: user.id },
+      data:  { lastLoginAt: new Date() },
+    });
+
     res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
     console.log(`[auth/login] Signed in: ${user.email} (${user.role})`);
     res.json({

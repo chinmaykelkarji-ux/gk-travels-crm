@@ -34,6 +34,12 @@ import invoicesRouter       from './routes/invoices.js';
 import creditNotesRouter    from './routes/creditNotes.js';
 import debitNotesRouter     from './routes/debitNotes.js';
 import gstReportsRouter     from './routes/gstReports.js';
+import tripServiceRouter    from './routes/tripService.js';
+import messagingRouter      from './routes/messaging.js';
+import dashboardRouter      from './routes/dashboard.js';
+import enquiryRouter        from './routes/enquiry.js';
+import salesQuoteRouter     from './routes/salesQuote.js';
+import aiRouter              from './routes/ai.js';
 
 const app = express();
 
@@ -100,6 +106,12 @@ app.use('/api/invoices',      invoicesRouter);
 app.use('/api/credit-notes',  creditNotesRouter);
 app.use('/api/debit-notes',   debitNotesRouter);
 app.use('/api/gst-reports',   gstReportsRouter);
+app.use('/api/trip-services', tripServiceRouter);
+app.use('/api/messaging',     messagingRouter);
+app.use('/api/dashboard',     dashboardRouter);
+app.use('/api/enquiries',     enquiryRouter);
+app.use('/api/sales-quotes',  salesQuoteRouter);
+app.use('/api/ai',            aiRouter);
 
 // ── 404 ────────────────────────────────────────────────────────
 

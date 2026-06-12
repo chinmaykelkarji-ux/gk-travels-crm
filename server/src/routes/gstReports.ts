@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,7 +18,7 @@ function dateRange(req: { query: Record<string, unknown> }) {
 // ── Sales Register ───────────────────────────────────────────
 // Invoice#, Date, Customer, HSN/SAC, Taxable Value, GST Value, Total Value
 
-router.get('/sales-register', async (req, res) => {
+router.get('/sales-register', requirePermission('finance:read'), async (req, res) => {
   try {
     const dateFilter = dateRange(req);
     const invoices = await prisma.invoice.findMany({
@@ -52,7 +53,7 @@ router.get('/sales-register', async (req, res) => {
 
 // ── Credit Note Register ─────────────────────────────────────
 
-router.get('/credit-notes', async (req, res) => {
+router.get('/credit-notes', requirePermission('finance:read'), async (req, res) => {
   try {
     const dateFilter = dateRange(req);
     const notes = await prisma.creditNote.findMany({
@@ -85,7 +86,7 @@ router.get('/credit-notes', async (req, res) => {
 
 // ── Debit Note Register ──────────────────────────────────────
 
-router.get('/debit-notes', async (req, res) => {
+router.get('/debit-notes', requirePermission('finance:read'), async (req, res) => {
   try {
     const dateFilter = dateRange(req);
     const notes = await prisma.debitNote.findMany({
@@ -120,7 +121,7 @@ router.get('/debit-notes', async (req, res) => {
 // Total Taxable Sales, Total CGST/SGST/IGST, Net GST Liability
 // (Sales GST - Credit Note GST + Debit Note GST)
 
-router.get('/summary', async (req, res) => {
+router.get('/summary', requirePermission('finance:read'), async (req, res) => {
   try {
     const dateFilter = dateRange(req);
 

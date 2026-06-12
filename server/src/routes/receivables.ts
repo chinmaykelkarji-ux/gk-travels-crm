@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -18,7 +19,7 @@ function strip(body: Record<string, unknown>) {
 
 // ── List ──────────────────────────────────────────────────────
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('finance:read'), async (_req, res) => {
   try {
     res.json(await prisma.receivable.findMany({ orderBy: { createdAt: 'desc' }, include }));
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -41,7 +42,7 @@ interface CustomerLedgerRow {
   lastPaymentDate:  string | null;
 }
 
-router.get('/customer-ledger', async (_req, res) => {
+router.get('/customer-ledger', requirePermission('finance:read'), async (_req, res) => {
   try {
     const rows = await prisma.$queryRaw<CustomerLedgerRow[]>`
       SELECT * FROM "customer_ledger_balances" ORDER BY "balanceDue" DESC
@@ -50,7 +51,7 @@ router.get('/customer-ledger', async (_req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.get('/customer-ledger/:customerId', async (req, res) => {
+router.get('/customer-ledger/:customerId', requirePermission('finance:read'), async (req, res) => {
   try {
     const rows = await prisma.$queryRaw<CustomerLedgerRow[]>`
       SELECT * FROM "customer_ledger_balances" WHERE "customerId" = ${req.params.customerId}
@@ -61,7 +62,7 @@ router.get('/customer-ledger/:customerId', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('finance:write'), async (req, res) => {
   try {
     const data = strip(req.body as Record<string, unknown>);
     const r    = await prisma.receivable.upsert({
@@ -79,7 +80,7 @@ router.post('/', async (req, res) => {
 
 // ── Update ────────────────────────────────────────────────────
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     const data = strip(req.body as Record<string, unknown>);
     const r = await prisma.receivable.update({
@@ -93,7 +94,7 @@ router.put('/:id', async (req, res) => {
 
 // ── Delete ────────────────────────────────────────────────────
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     await prisma.receivable.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
@@ -102,7 +103,7 @@ router.delete('/:id', async (req, res) => {
 
 // ── Entries — record / remove payments against a receivable ──
 
-router.post('/:id/entries', async (req, res) => {
+router.post('/:id/entries', requirePermission('finance:write'), async (req, res) => {
   try {
     const { id, receivableId, createdAt, ...data } = req.body as Record<string, unknown>;
     const entry = await prisma.receivableEntry.create({
@@ -119,7 +120,7 @@ router.post('/:id/entries', async (req, res) => {
   }
 });
 
-router.put('/:id/entries/:entryId', async (req, res) => {
+router.put('/:id/entries/:entryId', requirePermission('finance:write'), async (req, res) => {
   try {
     const { id, receivableId, createdAt, ...data } = req.body as Record<string, unknown>;
     const entry = await prisma.receivableEntry.update({
@@ -130,7 +131,7 @@ router.put('/:id/entries/:entryId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.delete('/:id/entries/:entryId', async (req, res) => {
+router.delete('/:id/entries/:entryId', requirePermission('finance:write'), async (req, res) => {
   try {
     await prisma.receivableEntry.delete({ where: { id: req.params.entryId } });
     res.json({ ok: true });

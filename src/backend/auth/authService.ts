@@ -7,7 +7,7 @@
 // ============================================================
 
 import { supabase } from '@/backend/supabase/client';
-import type { AuthUser, LoginCredentials } from './types';
+import type { AuthUser, LoginCredentials, UserRole } from './types';
 import type { DbProfile } from '@/backend/supabase/database.types';
 
 class AuthService {
@@ -142,7 +142,7 @@ function profileToAuthUser(profile: DbProfile): AuthUser {
     orgId:       profile.org_id,
     email:       profile.email,
     name:        profile.name,
-    role:        (profile.role as string).toUpperCase() as DbProfile['role'],
+    role:        (profile.role as string).toUpperCase() as UserRole,
     avatar:      profile.avatar,
     phone:       profile.phone,
     isActive:    profile.is_active,

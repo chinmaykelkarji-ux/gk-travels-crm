@@ -3,17 +3,19 @@ import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
   FileText, Map, FileCheck, BarChart2, LogOut, Receipt, UsersRound, CalendarClock,
-  FileMinus, FilePlus, Percent,
+  FileMinus, FilePlus, Percent, Gauge, MessageSquare, FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
 import { useAuth } from '@/backend/auth/AuthContext';
+import { PermissionGate } from '@/shared/components/PermissionGate';
 
 interface NavItem {
-  path:     string;
-  label:    string;
-  icon:     React.ElementType;
-  badge?:   'reminders';
+  path:       string;
+  label:      string;
+  icon:       React.ElementType;
+  badge?:     'reminders';
+  permission: string;
 }
 
 interface NavGroup {
@@ -25,45 +27,54 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: null,
     items: [
-      { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:read' },
     ],
   },
   {
     label: 'CRM',
     items: [
-      { path: '/leads',      label: 'Leads',      icon: Users       },
-      { path: '/customers',  label: 'Customers',  icon: UserCircle  },
-      { path: '/passengers', label: 'Passengers', icon: UsersRound  },
-      { path: '/trips',      label: 'Trips',      icon: FolderOpen  },
+      { path: '/leads',      label: 'Leads',      icon: Users,       permission: 'enquiries:read' },
+      { path: '/enquiries',  label: 'Enquiries',  icon: MessageSquare, permission: 'enquiries:read' },
+      { path: '/sales-quotes', label: 'Sales Quotes', icon: FileSpreadsheet, permission: 'sales-quotes:read' },
+      { path: '/customers',  label: 'Customers',  icon: UserCircle,  permission: 'customers:read' },
+      { path: '/passengers', label: 'Passengers', icon: UsersRound,  permission: 'customers:read' },
+      { path: '/trips',      label: 'Trips',      icon: FolderOpen,  permission: 'trips:read' },
     ],
   },
   {
     label: 'OPERATIONS',
     items: [
-      { path: '/daily-ops',   label: 'Daily Ops',   icon: CalendarClock },
-      { path: '/bookings',    label: 'Bookings',    icon: Ticket        },
-      { path: '/quotations',  label: 'Quotations',  icon: FileText      },
-      { path: '/itineraries', label: 'Itineraries', icon: Map           },
-      { path: '/vouchers',    label: 'Vouchers',    icon: FileCheck     },
-      { path: '/operations',  label: 'Operations',  icon: Activity, badge: 'reminders' },
+      { path: '/daily-ops',   label: 'Daily Ops',   icon: CalendarClock, permission: 'trip-services:read' },
+      { path: '/bookings',    label: 'Bookings',    icon: Ticket,        permission: 'bookings:read' },
+      { path: '/quotations',  label: 'Quotations',  icon: FileText,      permission: 'sales-quotes:read' },
+      { path: '/itineraries', label: 'Itineraries', icon: Map,           permission: 'trips:read' },
+      { path: '/vouchers',    label: 'Vouchers',    icon: FileCheck,     permission: 'trips:read' },
+      { path: '/operations',  label: 'Operations',  icon: Activity, badge: 'reminders', permission: 'trip-services:read' },
+      { path: '/operations-dashboard', label: 'Ops Dashboard', icon: Gauge, permission: 'dashboard:read' },
     ],
   },
   {
     label: 'FINANCE',
     items: [
-      { path: '/finance', label: 'Finance', icon: IndianRupee },
-      { path: '/invoices', label: 'Invoices', icon: Receipt },
-      { path: '/credit-notes', label: 'Credit Notes', icon: FileMinus },
-      { path: '/debit-notes', label: 'Debit Notes', icon: FilePlus },
-      { path: '/gst-reports', label: 'GST Reports', icon: Percent },
-      { path: '/receivables', label: 'Receivables', icon: Receipt },
-      { path: '/vendors', label: 'Vendors', icon: Building2   },
+      { path: '/finance', label: 'Finance', icon: IndianRupee, permission: 'finance:read' },
+      { path: '/invoices', label: 'Invoices', icon: Receipt, permission: 'invoices:read' },
+      { path: '/credit-notes', label: 'Credit Notes', icon: FileMinus, permission: 'credit-notes:read' },
+      { path: '/debit-notes', label: 'Debit Notes', icon: FilePlus, permission: 'debit-notes:read' },
+      { path: '/gst-reports', label: 'GST Reports', icon: Percent, permission: 'gst:read' },
+      { path: '/receivables', label: 'Receivables', icon: Receipt, permission: 'payments:read' },
+      { path: '/vendors', label: 'Vendors', icon: Building2, permission: 'suppliers:read' },
     ],
   },
   {
     label: 'INTELLIGENCE',
     items: [
-      { path: '/analytics', label: 'Analytics', icon: BarChart2 },
+      { path: '/analytics', label: 'Analytics', icon: BarChart2, permission: 'reports:read' },
+    ],
+  },
+  {
+    label: 'ADMIN',
+    items: [
+      { path: '/users', label: 'Users', icon: UsersRound, permission: 'users:read' },
     ],
   },
 ];
@@ -152,44 +163,45 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 </div>
               )}
               <div className="space-y-0.5">
-                {group.items.map(({ path, label, icon: Icon, badge }) => {
+                {group.items.map(({ path, label, icon: Icon, badge, permission }) => {
                   const count = getBadgeCount(badge);
                   return (
-                    <NavLink
-                      key={path}
-                      to={path}
-                      end={path === '/'}
-                      onClick={onClose}
-                      className={({ isActive }) =>
-                        cn(
-                          'flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 relative group',
-                          isActive
-                            ? 'bg-indigo-500/20 text-indigo-300'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {isActive && (
-                            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-indigo-400" />
-                          )}
-                          <Icon
-                            className={cn(
-                              'flex-shrink-0 transition-colors',
-                              isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+                    <PermissionGate key={path} permission={permission}>
+                      <NavLink
+                        to={path}
+                        end={path === '/'}
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 relative group',
+                            isActive
+                              ? 'bg-indigo-500/20 text-indigo-300'
+                              : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                          )
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {isActive && (
+                              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-indigo-400" />
                             )}
-                            style={{ width: 15, height: 15 }}
-                          />
-                          <span className="text-[13px]">{label}</span>
-                          {count > 0 && (
-                            <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
-                              {count > 99 ? '99+' : count}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </NavLink>
+                            <Icon
+                              className={cn(
+                                'flex-shrink-0 transition-colors',
+                                isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'
+                              )}
+                              style={{ width: 15, height: 15 }}
+                            />
+                            <span className="text-[13px]">{label}</span>
+                            {count > 0 && (
+                              <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                                {count > 99 ? '99+' : count}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </NavLink>
+                    </PermissionGate>
                   );
                 })}
               </div>

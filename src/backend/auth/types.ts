@@ -1,5 +1,5 @@
-// UserRole matches the Prisma Role enum: ADMIN | SALES | OPERATIONS | ACCOUNTS
-export type UserRole = 'ADMIN' | 'SALES' | 'OPERATIONS' | 'ACCOUNTS';
+// UserRole matches the Prisma Role enum: ADMIN | BOOKING | OPERATIONS | ACCOUNTS
+export type UserRole = 'ADMIN' | 'BOOKING' | 'OPERATIONS' | 'ACCOUNTS';
 
 // ─── Auth User ────────────────────────────────────────────────
 // What AuthContext.user contains after a successful session check.

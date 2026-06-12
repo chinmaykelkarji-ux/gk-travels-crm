@@ -4,7 +4,7 @@ import {
   ArrowLeft, MapPin, Calendar, Users, Phone, IndianRupee,
   Edit2, Trash2, CheckCircle, Clock, Plane, Hotel, Globe, Plus, Receipt,
   Car, Shield, Activity, User, FileText, Package, AlertTriangle,
-  Bus, ExternalLink, Building2, CreditCard, ChevronRight,
+  Bus, ExternalLink, Building2, CreditCard, ChevronRight, Sparkles, MessageSquare,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
@@ -35,6 +35,8 @@ import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
+import { AiMessagePanel } from '@/shared/components/AiMessagePanel';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 
 const TRIP_STATUS_FLOW: TripStatus[] = [
   'draft', 'quotation', 'confirmed', 'in_progress', 'completed',
@@ -87,6 +89,9 @@ export default function TripDetail() {
   const receivables        = allReceivables.filter(r => r.tripId === id);
 
   const customer = useStore(selectors.customerById(trip?.customerId ?? ''));
+
+  const { can } = usePermissions();
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
   const [editOpen,   setEditOpen]   = useState(false);
   const [payAmount,  setPayAmount]  = useState('');
@@ -257,6 +262,16 @@ export default function TripDetail() {
             onClick={() => navigate(`/itineraries/new?tripId=${id}`)}>
             <Plus className="w-3.5 h-3.5" /> Itinerary
           </Button>
+          {can('ai:use') && (
+            <>
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setShowAiPanel(true)}>
+                <MessageSquare className="w-3.5 h-3.5" /> AI Message
+              </Button>
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => navigate(`/trips/${id}/itinerary`)}>
+                <Sparkles className="w-3.5 h-3.5" /> AI Itinerary
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
             <Edit2 className="w-3.5 h-3.5" /> Edit
           </Button>
@@ -1413,6 +1428,14 @@ export default function TripDetail() {
         defaultCustomerId={trip.customerId}
         defaultTripId={trip.id}
       />
+
+      {showAiPanel && (
+        <AiMessagePanel
+          tripId={trip.id}
+          customerPhone={trip.phone}
+          onClose={() => setShowAiPanel(false)}
+        />
+      )}
     </div>
   );
 }

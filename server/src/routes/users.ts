@@ -2,24 +2,40 @@ import { Router }  from 'express';
 import bcrypt      from 'bcryptjs';
 import { prisma }  from '../lib/prisma.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
 
 const SAFE_SELECT = {
-  id:        true,
-  email:     true,
-  name:      true,
-  role:      true,
-  isActive:  true,
-  createdAt: true,
-  updatedAt: true,
+  id:          true,
+  email:       true,
+  name:        true,
+  role:        true,
+  isActive:    true,
+  lastLoginAt: true,
+  createdAt:   true,
+  updatedAt:   true,
 } as const;
 
-const VALID_ROLES = ['ADMIN', 'SALES', 'OPERATIONS', 'ACCOUNTS'] as const;
+const VALID_ROLES = ['ADMIN', 'BOOKING', 'OPERATIONS', 'ACCOUNTS'] as const;
+
+// GET /api/users/me — current user's own profile
+router.get('/me', async (req: AuthRequest, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where:  { id: req.userId as string },
+      select: SAFE_SELECT,
+    });
+    if (!user) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
 
 // GET /api/users
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('users:read'), async (_req, res) => {
   try {
     const users = await prisma.user.findMany({
       select:  SAFE_SELECT,
@@ -31,8 +47,22 @@ router.get('/', async (_req, res) => {
   }
 });
 
+// GET /api/users/:id
+router.get('/:id', requirePermission('users:read'), async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where:  { id: req.params.id as string },
+      select: SAFE_SELECT,
+    });
+    if (!user) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // POST /api/users — create new user (ADMIN only)
-router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+router.post('/', requirePermission('users:write'), async (req: AuthRequest, res) => {
   try {
     const { email, password, name, role } = req.body as {
       email?: string; password?: string; name?: string; role?: string;
@@ -64,7 +94,7 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
         email:        email.trim().toLowerCase(),
         passwordHash,
         name:         name.trim(),
-        role:         assignedRole as 'ADMIN' | 'SALES' | 'OPERATIONS' | 'ACCOUNTS',
+        role:         assignedRole as 'ADMIN' | 'BOOKING' | 'OPERATIONS' | 'ACCOUNTS',
       },
       select: SAFE_SELECT,
     });
@@ -76,7 +106,7 @@ router.post('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
 });
 
 // PUT /api/users/:id — update name, email, role, isActive (ADMIN only)
-router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+router.put('/:id', requirePermission('users:write'), async (req: AuthRequest, res) => {
   try {
     const { name, email, role, isActive } = req.body as {
       name?: string; email?: string; role?: string; isActive?: boolean;
@@ -85,6 +115,14 @@ router.put('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
     if (req.userId === req.params.id && isActive === false) {
       res.status(400).json({ error: 'You cannot deactivate your own account' });
       return;
+    }
+
+    if (req.userId === req.params.id && role !== undefined) {
+      const self = await prisma.user.findUnique({ where: { id: req.params.id as string }, select: { role: true } });
+      if (self && role !== self.role) {
+        res.status(400).json({ error: 'You cannot change your own role' });
+        return;
+      }
     }
 
     const data: Record<string, unknown> = {};
@@ -126,14 +164,14 @@ router.put('/:id/password', requireRole('ADMIN'), async (req: AuthRequest, res) 
   }
 });
 
-// DELETE /api/users/:id (ADMIN only)
-router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+// DELETE /api/users/:id — soft delete (deactivate), ADMIN only
+router.delete('/:id', requirePermission('users:write'), async (req: AuthRequest, res) => {
   try {
     if (req.userId === req.params.id) {
       res.status(400).json({ error: 'You cannot delete your own account' });
       return;
     }
-    await prisma.user.delete({ where: { id: req.params.id as string } });
+    await prisma.user.update({ where: { id: req.params.id as string }, data: { isActive: false } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[users DELETE]', err);

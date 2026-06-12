@@ -12,6 +12,8 @@
 import app         from './app.js';
 import { prisma }  from './lib/prisma.js';
 import bcrypt      from 'bcryptjs';
+import { startOutboxWorker }    from './workers/outboxWorker.js';
+import { startSchedulerWorker } from './workers/schedulerWorker.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -55,6 +57,11 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`🚀 GK Travels CRM API  →  http://localhost:${PORT}`);
     console.log(`   Health check        →  http://localhost:${PORT}/api/health`);
+
+    // Background workers — started after the server is listening so
+    // they never block startup.
+    startOutboxWorker();
+    startSchedulerWorker();
   }).on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use. Run: npx kill-port ${PORT}`);

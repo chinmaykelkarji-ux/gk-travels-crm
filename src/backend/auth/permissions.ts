@@ -3,7 +3,7 @@
 //
 // Roles (matches Prisma UserRole enum):
 //   ADMIN      — full access
-//   SALES      — leads, trips, quotations, customers
+//   BOOKING    — leads, trips, quotations, customers
 //   OPERATIONS — trips, bookings, tasks, vendors, itineraries, vouchers
 //   ACCOUNTS   — finance, payments, vendor payments, reports
 //
@@ -82,8 +82,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   // ADMIN — everything
   ADMIN: ALL_PERMISSIONS,
 
-  // SALES — lead/trip/quotation/customer workflow, no finance, no settings users
-  SALES: [
+  // BOOKING — lead/trip/quotation/customer workflow, no finance, no settings users
+  BOOKING: [
     PERMISSIONS.TRIPS_VIEW,
     PERMISSIONS.TRIPS_CREATE,
     PERMISSIONS.TRIPS_EDIT,
@@ -176,8 +176,8 @@ export function hasAllPermissions(
   return permissions.every(p => hasPermission(role, p));
 }
 
-// Role hierarchy for isAtLeast checks: ACCOUNTS < OPERATIONS < SALES < ADMIN
-const HIERARCHY: UserRole[] = ['ACCOUNTS', 'OPERATIONS', 'SALES', 'ADMIN'];
+// Role hierarchy for isAtLeast checks: ACCOUNTS < OPERATIONS < BOOKING < ADMIN
+const HIERARCHY: UserRole[] = ['ACCOUNTS', 'OPERATIONS', 'BOOKING', 'ADMIN'];
 
 export function isAtLeast(
   role: UserRole | string | null | undefined,
@@ -193,14 +193,14 @@ export function isAtLeast(
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN:      'Admin',
-  SALES:      'Sales',
+  BOOKING:    'Booking',
   OPERATIONS: 'Operations',
   ACCOUNTS:   'Accounts',
 };
 
 export const ROLE_COLORS: Record<UserRole, string> = {
   ADMIN:      'bg-indigo-100 text-indigo-700',
-  SALES:      'bg-emerald-100 text-emerald-700',
+  BOOKING:    'bg-emerald-100 text-emerald-700',
   OPERATIONS: 'bg-blue-100 text-blue-700',
   ACCOUNTS:   'bg-amber-100 text-amber-700',
 };

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import {
   createInvoice,
   updateInvoice,
@@ -17,7 +18,7 @@ const include = { items: { orderBy: { sortOrder: 'asc' as const } } };
 
 // ── List ──────────────────────────────────────────────────────
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('finance:read'), async (_req, res) => {
   try {
     res.json(await prisma.invoice.findMany({ orderBy: { createdAt: 'desc' }, include }));
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -25,7 +26,7 @@ router.get('/', async (_req, res) => {
 
 // ── Eligible bookings/trips for a customer (not yet invoiced) ──
 
-router.get('/eligible/:customerId', async (req, res) => {
+router.get('/eligible/:customerId', requirePermission('finance:read'), async (req, res) => {
   try {
     const { customerId } = req.params;
 
@@ -54,7 +55,7 @@ router.get('/eligible/:customerId', async (req, res) => {
 
 // ── Single ────────────────────────────────────────────────────
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('finance:read'), async (req, res) => {
   try {
     const inv = await prisma.invoice.findUnique({ where: { id: req.params.id }, include });
     if (!inv) { res.status(404).json({ error: 'Not found' }); return; }
@@ -64,7 +65,7 @@ router.get('/:id', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as CreateInvoiceInput), createdBy: req.userId };
     const invoice = await createInvoice(input);
@@ -77,7 +78,7 @@ router.post('/', async (req: AuthRequest, res) => {
 
 // ── Update ────────────────────────────────────────────────────
 
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as UpdateInvoiceInput), updatedBy: req.userId };
     const invoice = await updateInvoice(req.params.id as string, input);
@@ -90,7 +91,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
 // ── Cancel ────────────────────────────────────────────────────
 
-router.post('/:id/cancel', async (req: AuthRequest, res) => {
+router.post('/:id/cancel', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const { reason } = req.body as { reason: string };
     if (!reason) { res.status(400).json({ error: 'Cancellation reason is required' }); return; }
@@ -104,7 +105,7 @@ router.post('/:id/cancel', async (req: AuthRequest, res) => {
 
 // ── Delete ────────────────────────────────────────────────────
 
-router.delete('/:id', async (req: AuthRequest, res) => {
+router.delete('/:id', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     await deleteInvoice(req.params.id as string, req.userId);
     res.json({ ok: true });

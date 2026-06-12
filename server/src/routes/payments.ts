@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('finance:read'), async (_req, res) => {
   try {
     const all = await prisma.payment.findMany({ orderBy: { createdAt: 'desc' } });
     res.json({
@@ -16,7 +17,7 @@ router.get('/', async (_req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const existed = await prisma.payment.findUnique({ where: { id: req.body.id }, select: { id: true } });
     const p = await prisma.payment.upsert({
@@ -62,7 +63,7 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     const p = await prisma.payment.update({
       where: { id: req.params.id },
@@ -72,7 +73,7 @@ router.put('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     await prisma.payment.delete({ where: { id: req.params.id } });
     res.json({ ok: true });

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import {
   createDebitNote, updateDebitNote, cancelDebitNote, deleteDebitNote,
   type CreateDebitNoteInput, type UpdateCreditDebitNoteInput,
@@ -13,7 +14,7 @@ const include = { items: { orderBy: { sortOrder: 'asc' as const } } };
 
 // ── List ──────────────────────────────────────────────────────
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('debit-notes:read'), async (_req, res) => {
   try {
     res.json(await prisma.debitNote.findMany({ orderBy: { createdAt: 'desc' }, include }));
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -21,7 +22,7 @@ router.get('/', async (_req, res) => {
 
 // ── Single ────────────────────────────────────────────────────
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('debit-notes:read'), async (req, res) => {
   try {
     const dn = await prisma.debitNote.findUnique({ where: { id: req.params.id }, include });
     if (!dn) { res.status(404).json({ error: 'Not found' }); return; }
@@ -31,7 +32,7 @@ router.get('/:id', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as CreateDebitNoteInput), createdBy: req.userId };
     const dn = await createDebitNote(input);
@@ -44,7 +45,7 @@ router.post('/', async (req: AuthRequest, res) => {
 
 // ── Update ────────────────────────────────────────────────────
 
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put('/:id', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as UpdateCreditDebitNoteInput), updatedBy: req.userId };
     const dn = await updateDebitNote(req.params.id as string, input);
@@ -57,7 +58,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
 // ── Cancel ────────────────────────────────────────────────────
 
-router.post('/:id/cancel', async (req: AuthRequest, res) => {
+router.post('/:id/cancel', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
     const dn = await cancelDebitNote(req.params.id as string, req.userId);
     res.json(dn);
@@ -69,7 +70,7 @@ router.post('/:id/cancel', async (req: AuthRequest, res) => {
 
 // ── Delete ────────────────────────────────────────────────────
 
-router.delete('/:id', async (req: AuthRequest, res) => {
+router.delete('/:id', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
     await deleteDebitNote(req.params.id as string, req.userId);
     res.json({ ok: true });

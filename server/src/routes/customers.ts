@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('customers:read'), async (_req, res) => {
   try { res.json(await prisma.customer.findMany({ orderBy: { createdAt: 'desc' } })); }
   catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('customers:write'), async (req: AuthRequest, res) => {
   try {
     const existed = await prisma.customer.findUnique({ where: { id: req.body.id }, select: { id: true } });
     const c = await prisma.customer.upsert({
@@ -38,7 +39,7 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
     const c = await prisma.customer.update({
       where: { id: req.params.id },
@@ -48,7 +49,11 @@ router.put('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('customers:write'), async (req: AuthRequest, res) => {
+  if (req.userRole !== 'ADMIN') {
+    res.status(403).json({ error: 'Only administrators can delete customers' });
+    return;
+  }
   try {
     await prisma.customer.delete({ where: { id: req.params.id } });
     res.json({ ok: true });

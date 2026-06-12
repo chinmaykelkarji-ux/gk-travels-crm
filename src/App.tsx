@@ -17,6 +17,7 @@ import { GlobalSearch }      from '@/modules/search/GlobalSearch';
 import { Toaster }           from '@/shared/components/Toaster';
 import { ConfirmDialog }     from '@/shared/components/ConfirmDialog';
 import { DashboardSkeleton } from '@/shared/components/LoadingSkeleton';
+import { RoleGuard }         from '@/shared/components/RoleGuard';
 
 import { useStore }            from '@/store';
 import type { TripFormSchema } from '@/shared/schemas/trip';
@@ -41,6 +42,9 @@ const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
 const Quotations        = lazy(() => import('@/modules/quotations/Quotations'));
 const QuotationDetail   = lazy(() => import('@/modules/quotations/QuotationDetail'));
 const QuotationBuilder  = lazy(() => import('@/modules/quotations/QuotationBuilder'));
+const EnquiryPipeline   = lazy(() => import('@/modules/sales/EnquiryPipeline'));
+const SalesQuoteList    = lazy(() => import('@/modules/sales/SalesQuoteList'));
+const SalesQuoteBuilder = lazy(() => import('@/modules/sales/SalesQuoteBuilder'));
 const Itineraries       = lazy(() => import('@/modules/itineraries/Itineraries'));
 const ItineraryBuilder  = lazy(() => import('@/modules/itineraries/ItineraryBuilder'));
 const ItineraryDetail   = lazy(() => import('@/modules/itineraries/ItineraryDetail'));
@@ -60,6 +64,10 @@ const DebitNotes        = lazy(() => import('@/modules/invoices/DebitNotes'));
 const CreditDebitNoteForm   = lazy(() => import('@/modules/invoices/CreditDebitNoteForm'));
 const CreditDebitNoteDetail = lazy(() => import('@/modules/invoices/CreditDebitNoteDetail'));
 const GstReports        = lazy(() => import('@/modules/invoices/GstReports'));
+const OperationsDashboard = lazy(() => import('@/modules/operations/OperationsDashboard'));
+const AiItineraryBuilder   = lazy(() => import('@/modules/trips/AiItineraryBuilder'));
+const TripTimeline         = lazy(() => import('@/modules/operations/TripTimeline'));
+const UserManagement       = lazy(() => import('@/modules/users/UserManagement'));
 
 // ─── QueryClient ─────────────────────────────────────────────
 
@@ -236,16 +244,23 @@ export default function App() {
                 <Route path="/leads"                 element={<Leads />} />
                 <Route path="/trips"                 element={<Trips />} />
                 <Route path="/trips/:id"             element={<TripDetail />} />
+                <Route path="/trips/:tripId/itinerary" element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><AiItineraryBuilder /></RoleGuard>} />
                 <Route path="/bookings"              element={<Bookings />} />
                 <Route path="/bookings/:id"          element={<BookingDetail />} />
                 <Route path="/customers"             element={<Customers />} />
                 <Route path="/operations"            element={<Operations />} />
+                <Route path="/operations-dashboard"  element={<RoleGuard allowed={['ADMIN', 'BOOKING', 'OPERATIONS']}><OperationsDashboard /></RoleGuard>} />
+                <Route path="/trips/:id/timeline"    element={<TripTimeline />} />
                 <Route path="/vendors"               element={<Vendors />} />
                 <Route path="/vendors/:id"           element={<VendorDetail />} />
                 <Route path="/quotations"            element={<Quotations />} />
                 <Route path="/quotations/new"        element={<QuotationBuilder />} />
                 <Route path="/quotations/:id"        element={<QuotationDetail />} />
                 <Route path="/quotations/:id/edit"   element={<QuotationBuilder />} />
+                <Route path="/enquiries"             element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><EnquiryPipeline /></RoleGuard>} />
+                <Route path="/sales-quotes"          element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteList /></RoleGuard>} />
+                <Route path="/sales-quotes/new"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />
+                <Route path="/sales-quotes/:id"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />
                 <Route path="/itineraries"           element={<Itineraries />} />
                 <Route path="/itineraries/new"       element={<ItineraryBuilder />} />
                 <Route path="/itineraries/:id"       element={<ItineraryDetail />} />
@@ -255,10 +270,10 @@ export default function App() {
                 <Route path="/vouchers/new"          element={<VoucherFormPage />} />
                 <Route path="/vouchers/:id"          element={<VoucherDetail />} />
                 <Route path="/vouchers/:id/edit"     element={<VoucherFormPage />} />
-                <Route path="/invoices"              element={<Invoices />} />
-                <Route path="/invoices/new"          element={<InvoiceBuilder />} />
-                <Route path="/invoices/:id"          element={<InvoiceDetail />} />
-                <Route path="/invoices/:id/edit"     element={<InvoiceBuilder />} />
+                <Route path="/invoices"              element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Invoices /></RoleGuard>} />
+                <Route path="/invoices/new"          element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceBuilder /></RoleGuard>} />
+                <Route path="/invoices/:id"          element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceDetail /></RoleGuard>} />
+                <Route path="/invoices/:id/edit"     element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceBuilder /></RoleGuard>} />
                 <Route path="/credit-notes"          element={<CreditNotes />} />
                 <Route path="/credit-notes/new"      element={<CreditDebitNoteForm kind="credit" />} />
                 <Route path="/credit-notes/:id"      element={<CreditDebitNoteDetail kind="credit" />} />
@@ -267,12 +282,13 @@ export default function App() {
                 <Route path="/debit-notes/new"       element={<CreditDebitNoteForm kind="debit" />} />
                 <Route path="/debit-notes/:id"       element={<CreditDebitNoteDetail kind="debit" />} />
                 <Route path="/debit-notes/:id/edit"  element={<CreditDebitNoteForm kind="debit" />} />
-                <Route path="/gst-reports"           element={<GstReports />} />
+                <Route path="/gst-reports"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><GstReports /></RoleGuard>} />
                 <Route path="/finance"               element={<Finance />} />
-                <Route path="/receivables"           element={<Receivables />} />
+                <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
                 <Route path="/passengers"            element={<Passengers />} />
                 <Route path="/daily-ops"             element={<DailyOps />} />
                 <Route path="/settings"              element={<Settings />} />
+                <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />
               </Route>
             </Route>
