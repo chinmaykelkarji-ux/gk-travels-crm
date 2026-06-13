@@ -718,6 +718,32 @@ export interface VendorPayment {
   createdDate:  string;
 }
 
+// ─── Trip Services ───────────────────────────────────────────
+
+export type TripServiceType =
+  'FLIGHT' | 'HOTEL' | 'VEHICLE' | 'ACTIVITY' | 'TRANSFER' | 'VISA' | 'INSURANCE' | 'OTHER';
+
+export type TripServiceStatus =
+  'DRAFT' | 'REQUESTED' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'VOUCHER_RECEIVED' | 'CANCELLED';
+
+export interface TripService {
+  id:           string;
+  tripId:       string;
+  type:         TripServiceType;
+  status:       TripServiceStatus;
+  serviceDate:  string;
+  startTime:    string | null;
+  endTime:      string | null;
+  supplierId:   string | null;
+  supplierName: string | null;
+  costPrice:    number;
+  sellPrice:    number;
+  details:      Record<string, unknown>;
+  notes:        string | null;
+  completedAt:  string | null;
+  createdAt:    string;
+}
+
 // ─── Passenger Master ────────────────────────────────────────
 
 export type PassengerVisaStatus = 'none' | 'applied' | 'approved' | 'rejected' | 'expired';

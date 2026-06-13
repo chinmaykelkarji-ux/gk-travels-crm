@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  Plus, Search, MessageSquare, X, FileText, MapPin, Users, IndianRupee,
+  Plus, Search, MessageSquare, X, FileText, MapPin, Users, IndianRupee, Trash2,
 } from 'lucide-react';
 import apiClient from '@/lib/apiClient';
 import { useStore } from '@/store';
 import { cn } from '@/shared/utils/cn';
 import { formatCurrency } from '@/shared/utils/format';
 import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -267,10 +268,12 @@ interface EnquiryCardProps {
   enquiry: Enquiry;
   onChangeStatus: (enquiry: Enquiry, status: EnquiryStatus) => void;
   onNewQuote: (enquiry: Enquiry) => void;
+  onDelete: (enquiry: Enquiry) => void;
 }
 
-function EnquiryCard({ enquiry, onChangeStatus, onNewQuote }: EnquiryCardProps) {
+function EnquiryCard({ enquiry, onChangeStatus, onNewQuote, onDelete }: EnquiryCardProps) {
   const next = NEXT_STATUS[enquiry.status];
+  const deletable = enquiry.status === 'NEW' || enquiry.status === 'IN_PROGRESS';
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-2 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-2">
@@ -278,7 +281,18 @@ function EnquiryCard({ enquiry, onChangeStatus, onNewQuote }: EnquiryCardProps) 
           <div className="text-sm font-semibold text-gray-900 truncate">{enquiry.customerName}</div>
           <div className="text-xs text-gray-400 truncate">{enquiry.customerPhone}</div>
         </div>
-        <Badge variant="secondary">{SOURCE_LABELS[enquiry.source]}</Badge>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Badge variant="secondary">{SOURCE_LABELS[enquiry.source]}</Badge>
+          {deletable && (
+            <button
+              onClick={() => onDelete(enquiry)}
+              title="Delete enquiry"
+              className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-1.5 text-xs text-gray-600">
@@ -391,6 +405,26 @@ export default function EnquiryPipeline() {
     navigate(`/sales-quotes/new?enquiryId=${enquiry.id}`);
   }
 
+  async function handleDelete(enquiry: Enquiry) {
+    const ok = await confirm({
+      title:        `Delete enquiry from ${enquiry.customerName}?`,
+      description:  `This will permanently remove this enquiry for ${enquiry.destination}. This action cannot be undone.`,
+      confirmLabel: 'Delete Enquiry',
+      cancelLabel:  'Cancel',
+      variant:      'destructive',
+    });
+    if (!ok) return;
+
+    try {
+      await apiClient.delete(`/enquiries/${enquiry.id}`);
+      toast.success('Enquiry deleted');
+      setEnquiries(prev => prev.filter(e => e.id !== enquiry.id));
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(message ?? 'Failed to delete enquiry');
+    }
+  }
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
       {/* Header */}
@@ -450,7 +484,7 @@ export default function EnquiryPipeline() {
                 </div>
                 <div className="space-y-2">
                   {items.map(e => (
-                    <EnquiryCard key={e.id} enquiry={e} onChangeStatus={handleChangeStatus} onNewQuote={handleNewQuote} />
+                    <EnquiryCard key={e.id} enquiry={e} onChangeStatus={handleChangeStatus} onNewQuote={handleNewQuote} onDelete={handleDelete} />
                   ))}
                 </div>
               </div>

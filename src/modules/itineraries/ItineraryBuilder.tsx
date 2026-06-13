@@ -378,6 +378,16 @@ export default function ItineraryBuilder() {
 
   useEffect(() => {
     async function autoFill() {
+      // A trip may only have one linked itinerary — if one already exists,
+      // redirect there instead of creating a duplicate.
+      if (tripParam && !isEdit) {
+        const existingForTrip = itineraries.find(i => i.tripId === tripParam);
+        if (existingForTrip) {
+          toast.error('Itinerary already linked', 'This trip already has an itinerary — opening it instead.');
+          navigate(`/itineraries/${existingForTrip.id}`, { replace: true });
+          return;
+        }
+      }
       if (tripParam) {
         setLoading(true);
         try {

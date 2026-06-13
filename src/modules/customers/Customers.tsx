@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   UserCircle, Search, Phone, Mail, MapPin, Shield,
   Star, Users, TrendingUp, X, Plus,
-  FileText, ChevronRight, Hash, Pencil, Trash2, Building2, Receipt,
+  FileText, ChevronRight, Hash, Pencil, Edit2, Trash2, Building2, Receipt,
   LayoutGrid, List,
 } from 'lucide-react';
 import { useStore } from '@/store';
-import type { Customer } from '@/shared/types';
+import type { Customer, Payment } from '@/shared/types';
+import { PaymentForm } from '@/shared/components/PaymentForm';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -18,7 +19,7 @@ import { initials } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
-import { GmailButton } from '@/shared/components/GmailButton';
+import { GmailButton, GmailIcon } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import {
   RECEIVABLE_STATUS_CLASS, RECEIVABLE_STATUS_LABEL, calcReceivableFinance,
@@ -397,7 +398,44 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
   const allBookings    = useStore(s => s.bookings);
   const allReceivables   = useStore(s => s.receivables);
   const createReceivable = useStore(s => s.createReceivable);
+  const updatePayment   = useStore(s => s.updatePayment);
+  const deletePayment   = useStore(s => s.deletePayment);
   const [recFormOpen, setRecFormOpen] = useState(false);
+  const [payFormOpen, setPayFormOpen] = useState(false);
+  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+
+  const customerPayments = useMemo(
+    () => payments.customerPayments
+      .filter(p => p.customerId === customer.id)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+    [payments, customer]
+  );
+
+  function openEditPayment(p: Payment) {
+    setEditPayment(p);
+    setPayFormOpen(true);
+  }
+
+  function handleSavePayment(data: Partial<Payment>) {
+    if (!editPayment) return;
+    updatePayment(editPayment.id, 'customer', data);
+    toast.success('Payment updated');
+    setPayFormOpen(false);
+    setEditPayment(null);
+  }
+
+  async function handleDeletePayment(p: Payment) {
+    const ok = await confirm({
+      title:        'Delete payment?',
+      description:  `Remove ₹${p.amount} payment record?`,
+      confirmLabel: 'Delete',
+      variant:      'destructive',
+    });
+    if (ok) {
+      deletePayment(p.id, 'customer');
+      toast.success('Payment deleted');
+    }
+  }
 
   const customerBookings = useMemo(
     () => allBookings.filter(b => b.customerId === customer.id || b.customerName === customer.name)
@@ -710,6 +748,64 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
             )}
           </div>
 
+          {/* Payment Ledger */}
+          <div>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Payment Ledger ({customerPayments.length})
+            </h4>
+            {customerPayments.length === 0 ? (
+              <p className="text-xs text-gray-400 py-4 text-center bg-gray-50 rounded-xl">No payments recorded yet</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      {['Trip', 'Amount', 'Method', 'Date', 'Status', ''].map(h => (
+                        <th key={h} className="text-left font-semibold text-gray-500 px-3 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {customerPayments.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-3 py-2 text-blue-600 cursor-pointer hover:underline"
+                          onClick={() => p.tripId && navigate(`/trips/${p.tripId}`)}>
+                          {p.tripId || '—'}
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-emerald-600">{formatCurrency(p.amount)}</td>
+                        <td className="px-3 py-2 text-gray-600">{p.method}</td>
+                        <td className="px-3 py-2 text-gray-500">{fmtDate(p.date)}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant={p.status === 'received' ? 'success' : 'warning'}>
+                            {p.status}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => openEditPayment(p)}
+                              className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => handleDeletePayment(p)}
+                              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                            {customer.email && (
+                              <GmailIcon
+                                email={customer.email}
+                                onClick={() => gmail.toCustomer(customer.email!, customer.name)}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Bookings */}
           {customerBookings.length > 0 && (
             <div>
@@ -788,6 +884,14 @@ function CustomerDrawer({ customer, onClose, onEdit, onDelete }: DrawerProps) {
       }}
       defaults={{ customerId: customer.id, customerName: customer.name }}
     />
+
+    <PaymentForm
+      open={payFormOpen}
+      onClose={() => { setPayFormOpen(false); setEditPayment(null); }}
+      onSave={handleSavePayment}
+      payment={editPayment}
+      payType="customer"
+    />
     </>
   );
 }
@@ -824,7 +928,7 @@ function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onS
                   aria-label="Select all customers"
                 />
               </th>
-              {['Customer', 'Phone', 'Email', 'City', 'Segment', 'Trips', 'Balance', ''].map(h => (
+              {['Customer', 'Segment', 'Trips', 'Balance', ''].map(h => (
                 <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -870,9 +974,6 @@ function CustomerListView({ customers, revenueByCustomer, balanceByCustomer, onS
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{c.phone || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]">{c.email || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.city || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', segCfg.class)}>
                       {segCfg.label}
@@ -1290,34 +1391,6 @@ export default function Customers() {
                   {c.id}
                   <RecordNumberBadge label="Customer" n={c.customerNumber} className="ml-1.5" />
                 </p>
-
-                {/* Contact */}
-                <div className="space-y-1.5 mb-3">
-                  {c.phone && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                      <Phone className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      {c.phone}
-                    </div>
-                  )}
-                  {c.email && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500 truncate"
-                      onClick={e => e.stopPropagation()}>
-                      <Mail className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      <span className="truncate flex-1">{c.email}</span>
-                      <GmailButton
-                        email={c.email}
-                        onClick={() => gmail.toCustomer(c.email!, c.name)}
-                        label=""
-                      />
-                    </div>
-                  )}
-                  {c.city && (
-                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                      <MapPin className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                      {c.city}
-                    </div>
-                  )}
-                </div>
 
                 {/* Passport expiry warning */}
                 {passportExpDays !== null && passportExpDays >= 0 && passportExpDays <= 90 && (

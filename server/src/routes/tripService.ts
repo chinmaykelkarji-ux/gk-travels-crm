@@ -46,11 +46,14 @@ function toServiceDTO(s: ServiceWithRelations) {
     serviceDate:  s.serviceDate.toISOString(),
     startTime:    s.startTime,
     endTime:      s.endTime,
+    supplierId:   s.supplierId,
     supplierName: s.supplier?.name ?? null,
     costPrice:    Number(s.costPrice),
     sellPrice:    Number(s.sellPrice),
     details:      s.details as Record<string, unknown>,
     notes:        s.notes,
+    completedAt:  s.completedAt ? s.completedAt.toISOString() : null,
+    createdAt:    s.createdAt.toISOString(),
   };
 }
 
@@ -131,10 +134,29 @@ router.get('/pending-confirmation', requirePermission('trip-services:read'), asy
 router.post('/', requirePermission('trip-services:write'), async (req: AuthRequest, res) => {
   try {
     const data = strip(req.body as Record<string, unknown>);
+
+    if (!data.tripId || !data.type || !data.serviceDate) {
+      res.status(400).json({ error: 'tripId, type and serviceDate are required' });
+      return;
+    }
+
+    const trip = await prisma.trip.findUnique({ where: { id: data.tripId as string } });
+    if (!trip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+
+    // Date-only strings (e.g. "2026-09-10" from <input type="date">) aren't
+    // valid Prisma DateTime values — coerce to a full Date.
+    if (typeof data.serviceDate === 'string') {
+      data.serviceDate = new Date(data.serviceDate);
+    }
+
     const service = await prisma.tripService.create({
       data: data as Parameters<typeof prisma.tripService.create>[0]['data'],
+      include: { trip: true, supplier: true },
     });
-    res.status(201).json(service);
+    res.status(201).json(toServiceDTO(service as ServiceWithRelations));
   } catch (err) {
     console.error('[trip-services POST]', err);
     res.status(500).json({ error: String(err) });
@@ -154,11 +176,25 @@ router.put('/:id', requireTripServiceUpdate, async (req: AuthRequest, res) => {
       );
     }
 
+    // Date-only strings (e.g. "2026-09-10" from <input type="date">) aren't
+    // valid Prisma DateTime values — coerce to a full Date.
+    if (typeof data.serviceDate === 'string') {
+      data.serviceDate = new Date(data.serviceDate);
+    }
+
+    // Track completion time alongside the COMPLETED status.
+    if (data.status === 'COMPLETED') {
+      data.completedAt = new Date();
+    } else if ('status' in data) {
+      data.completedAt = null;
+    }
+
     const service = await prisma.tripService.update({
-      where: { id: req.params.id },
-      data:  data as Parameters<typeof prisma.tripService.update>[0]['data'],
+      where:   { id: req.params.id },
+      data:    data as Parameters<typeof prisma.tripService.update>[0]['data'],
+      include: { trip: true, supplier: true },
     });
-    res.json(service);
+    res.json(toServiceDTO(service as ServiceWithRelations));
   } catch (err) {
     console.error('[trip-services PUT]', err);
     res.status(500).json({ error: String(err) });

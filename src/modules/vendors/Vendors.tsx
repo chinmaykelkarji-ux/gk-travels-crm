@@ -2,19 +2,23 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Building2, Phone, MapPin,
-  IndianRupee, AlertCircle, TrendingUp,
+  IndianRupee, AlertCircle, TrendingUp, Edit2, Trash2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
-import type { VendorType } from '@/shared/types';
+import type { VendorType, Payment } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
+import { fmtDate } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
 import { toast } from '@/shared/hooks/useToast';
+import { confirm } from '@/shared/hooks/useConfirm';
 import { VendorForm } from './VendorForm';
 import { VENDOR_TYPES } from './VendorForm';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/shared/components/ui/tabs';
+import { PaymentForm } from '@/shared/components/PaymentForm';
 
 export default function Vendors() {
   const navigate         = useNavigate();
@@ -22,12 +26,17 @@ export default function Vendors() {
   const vendorPayments   = useStore(s => s.vendorPayments);
   const totalOutstanding = useStore(selectors.totalVendorOutstanding);
   const createVendor     = useStore(s => s.createVendor);
+  const supplierPayments = useStore(s => s.payments.supplierPayments);
+  const updatePayment    = useStore(s => s.updatePayment);
+  const deletePayment    = useStore(s => s.deletePayment);
 
   const [formOpen,     setFormOpen]     = useState(false);
   const [search,       setSearch]       = useState('');
   const [typeFilter,   setTypeFilter]   = useState<VendorType | 'all'>('all');
   const [destFilter,   setDestFilter]   = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [payFormOpen,  setPayFormOpen]  = useState(false);
+  const [editPayment,  setEditPayment]  = useState<Payment | null>(null);
 
   // Unique destinations from all vendors
   const allDestinations = useMemo(() =>
@@ -107,6 +116,32 @@ export default function Vendors() {
     setFormOpen(false);
   }
 
+  function openEditPayment(p: Payment) {
+    setEditPayment(p);
+    setPayFormOpen(true);
+  }
+
+  function handleSavePayment(data: Partial<Payment>) {
+    if (!editPayment) return;
+    updatePayment(editPayment.id, 'supplier', data);
+    toast.success('Payment updated');
+    setPayFormOpen(false);
+    setEditPayment(null);
+  }
+
+  async function handleDeletePayment(p: Payment) {
+    const ok = await confirm({
+      title:        'Delete payment?',
+      description:  `Remove ₹${p.amount} payment record?`,
+      confirmLabel: 'Delete',
+      variant:      'destructive',
+    });
+    if (ok) {
+      deletePayment(p.id, 'supplier');
+      toast.success('Payment deleted');
+    }
+  }
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
 
@@ -123,6 +158,14 @@ export default function Vendors() {
           <Plus className="w-3.5 h-3.5" /> Add Vendor
         </Button>
       </div>
+
+      <Tabs defaultValue="vendors">
+        <TabsList>
+          <TabsTrigger value="vendors">Vendors</TabsTrigger>
+          <TabsTrigger value="ledger">Supplier Ledger</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="vendors" className="space-y-5">
 
       {/* Dashboard cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -344,10 +387,75 @@ export default function Vendors() {
         </motion.div>
       )}
 
+        </TabsContent>
+
+        {/* Supplier Ledger */}
+        <TabsContent value="ledger">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Supplier Payment Ledger</h3>
+            {supplierPayments.length === 0 ? (
+              <p className="text-sm text-gray-400 py-8 text-center">No supplier payments recorded</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      {['Pay ID', 'Supplier', 'Trip', 'Amount', 'Method', 'Date', 'Status', ''].map(h => (
+                        <th key={h} className="text-left font-semibold text-gray-500 pb-2 pr-3">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {supplierPayments.map(p => (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-2.5 pr-3 font-mono text-gray-400">{p.id}</td>
+                        <td className="py-2.5 pr-3 font-medium text-gray-800">{p.customer || '—'}</td>
+                        <td className="py-2.5 pr-3 text-gray-500 cursor-pointer hover:underline text-blue-600"
+                          onClick={() => p.tripId && navigate(`/trips/${p.tripId}`)}>
+                          {p.tripId || '—'}
+                        </td>
+                        <td className="py-2.5 pr-3 font-semibold text-red-500">{formatCurrency(p.amount)}</td>
+                        <td className="py-2.5 pr-3 text-gray-600">{p.method}</td>
+                        <td className="py-2.5 pr-3 text-gray-500">{fmtDate(p.date)}</td>
+                        <td className="py-2.5 pr-3">
+                          <Badge variant={p.status === 'paid' ? 'success' : 'warning'}>
+                            {p.status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => openEditPayment(p)}
+                              className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => handleDeletePayment(p)}
+                              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+
       <VendorForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <PaymentForm
+        open={payFormOpen}
+        onClose={() => { setPayFormOpen(false); setEditPayment(null); }}
+        onSave={handleSavePayment}
+        payment={editPayment}
+        payType="supplier"
       />
     </div>
   );

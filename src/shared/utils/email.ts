@@ -85,6 +85,49 @@ export const whatsapp = {
         `Best regards,\nGK Travels\n📧 ${FROM}`,
     });
   },
+
+  cabReminder(opts: {
+    phone: string; customerName: string;
+    pickupDate?: string; pickupTime?: string;
+    pickup?: string; drop?: string;
+    vehicleType?: string; driverName?: string; driverPhone?: string;
+    nextDayPlan?: string;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `🚗 *Cab Reminder*\n\n` +
+        (opts.pickupDate ? `📅 Date: ${opts.pickupDate}\n` : '') +
+        (opts.pickupTime ? `⏰ Pickup Time: ${opts.pickupTime}\n` : '') +
+        (opts.pickup ? `📍 Pickup: ${opts.pickup}\n` : '') +
+        (opts.drop ? `🏁 Drop: ${opts.drop}\n` : '') +
+        (opts.vehicleType ? `🚙 Vehicle: ${opts.vehicleType}\n` : '') +
+        (opts.driverName ? `👤 Driver: ${opts.driverName}${opts.driverPhone ? ` (${opts.driverPhone})` : ''}\n` : '') +
+        (opts.nextDayPlan ? `\n🗓 Tomorrow's Plan:\n${opts.nextDayPlan}\n` : '') +
+        `\nPlease be ready on time. Contact us for any changes.\n\nBest regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
+
+  hotelReminder(opts: {
+    phone: string; customerName: string;
+    hotelName?: string; city?: string;
+    checkIn?: string; checkOut?: string;
+    confirmationNumber?: string;
+  }) {
+    openWhatsApp({
+      phone: opts.phone,
+      message:
+        `Hello ${opts.customerName},\n\n` +
+        `🏨 *Hotel Check-in Reminder*\n\n` +
+        (opts.hotelName ? `🏨 Hotel: ${opts.hotelName}\n` : '') +
+        (opts.city ? `📍 City: ${opts.city}\n` : '') +
+        (opts.checkIn ? `📅 Check-in: ${opts.checkIn}\n` : '') +
+        (opts.checkOut ? `📅 Check-out: ${opts.checkOut}\n` : '') +
+        (opts.confirmationNumber ? `🔖 Confirmation No: ${opts.confirmationNumber}\n` : '') +
+        `\nPlease carry a valid photo ID at check-in. Contact us for any assistance.\n\nBest regards,\nGK Travels\n📧 ${FROM}`,
+    });
+  },
 };
 
 /**
@@ -224,6 +267,30 @@ export const gmail = {
         opts.details +
         `\n\nFor any queries please reply to this email or contact us directly.\n\n` +
         `Best regards,\nGK Travels Team\n📧 ${FROM}`,
+    });
+  },
+
+  webCheckinReminder(opts: {
+    customerName: string; bookingId: string;
+    airline?: string; flightNumber?: string;
+    pnr?: string; origin?: string; destination?: string;
+    departDate?: string; departTime?: string;
+  }) {
+    openGmail({
+      to:      FROM,
+      subject: `Web Check-in Due — ${opts.customerName} — ${opts.bookingId}`,
+      body:
+        `Web check-in reminder for the following flight (due within 24 hours):\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 Customer     : ${opts.customerName}\n` +
+        `📋 Booking Ref  : ${opts.bookingId}\n` +
+        (opts.airline ? `✈️ Airline      : ${opts.airline}\n` : '') +
+        (opts.flightNumber ? `🔢 Flight No    : ${opts.flightNumber}\n` : '') +
+        (opts.pnr ? `🎫 PNR          : ${opts.pnr}\n` : '') +
+        (opts.origin && opts.destination ? `🛫 Route        : ${opts.origin} → ${opts.destination}\n` : '') +
+        (opts.departDate ? `📅 Depart Date  : ${opts.departDate}${opts.departTime ? ` ${opts.departTime}` : ''}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Action: Complete web check-in and send boarding pass to the customer.`,
     });
   },
 

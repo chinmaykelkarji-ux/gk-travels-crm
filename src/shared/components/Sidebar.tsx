@@ -33,11 +33,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CRM',
     items: [
-      { path: '/leads',      label: 'Leads',      icon: Users,       permission: 'enquiries:read' },
       { path: '/enquiries',  label: 'Enquiries',  icon: MessageSquare, permission: 'enquiries:read' },
       { path: '/sales-quotes', label: 'Sales Quotes', icon: FileSpreadsheet, permission: 'sales-quotes:read' },
       { path: '/customers',  label: 'Customers',  icon: UserCircle,  permission: 'customers:read' },
-      { path: '/passengers', label: 'Passengers', icon: UsersRound,  permission: 'customers:read' },
       { path: '/trips',      label: 'Trips',      icon: FolderOpen,  permission: 'trips:read' },
     ],
   },
@@ -56,7 +54,6 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'FINANCE',
     items: [
-      { path: '/finance', label: 'Finance', icon: IndianRupee, permission: 'finance:read' },
       { path: '/invoices', label: 'Invoices', icon: Receipt, permission: 'invoices:read' },
       { path: '/credit-notes', label: 'Credit Notes', icon: FileMinus, permission: 'credit-notes:read' },
       { path: '/debit-notes', label: 'Debit Notes', icon: FilePlus, permission: 'debit-notes:read' },

@@ -9,18 +9,15 @@ import { formatCurrency } from '@/shared/utils/format';
 
 const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
   '/':           { title: 'Dashboard',   subtitle: 'Operations Overview' },
-  '/leads':      { title: 'Leads',       subtitle: 'Sales Pipeline' },
   '/trips':      { title: 'Trips',       subtitle: 'Trip Files & Management' },
   '/bookings':   { title: 'Bookings',    subtitle: 'Flights · Hotels · Visas · Services' },
   '/customers':  { title: 'Customers',   subtitle: 'Profiles · History · Preferences' },
-  '/finance':    { title: 'Finance',     subtitle: 'Revenue · Costs · Gross Margin' },
   '/analytics':  { title: 'Analytics',   subtitle: 'Profit Intelligence · Business Analytics' },
   '/operations': { title: 'Operations',  subtitle: 'Tasks · Reminders · Alerts' },
   '/vendors':     { title: 'Vendors',     subtitle: 'Suppliers · Costs · Payments'            },
   '/quotations':   { title: 'Quotations',   subtitle: 'Proposals · Pricing · Conversion'     },
   '/itineraries':  { title: 'Itineraries',  subtitle: 'Day-wise Plans · Hotels · Activities'      },
   '/vouchers':     { title: 'Vouchers',     subtitle: 'Hotel · Transfer · Activity · Flight'     },
-  '/passengers':   { title: 'Passengers',   subtitle: 'Passport · Visa · Travel Profiles' },
   '/daily-ops':    { title: 'Daily Ops',    subtitle: "Today's Departures · Check-Ins · Payments" },
   '/settings':     { title: 'Settings',     subtitle: 'Company · Integrations · Users'            },
 };
@@ -191,7 +188,7 @@ export function Header({ onMenuToggle, onNewTrip, onSearchOpen }: HeaderProps) {
               >
                 {[
                   { label: 'New Trip File', icon: FolderPlus, color: 'text-indigo-600 bg-indigo-50', action: () => { onNewTrip(); setQuickOpen(false); } },
-                  { label: 'New Lead',      icon: UserPlus,  color: 'text-emerald-600 bg-emerald-50', action: () => { navigate('/leads'); setQuickOpen(false); } },
+                  { label: 'New Enquiry',   icon: UserPlus,  color: 'text-emerald-600 bg-emerald-50', action: () => { navigate('/enquiries'); setQuickOpen(false); } },
                 ].map(({ label, icon: Icon, color, action }) => (
                   <button
                     key={label}

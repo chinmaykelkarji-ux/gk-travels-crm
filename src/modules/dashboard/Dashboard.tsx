@@ -2,23 +2,22 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, FolderOpen, Users, IndianRupee,
-  AlertTriangle, Clock, CalendarDays, ArrowRight, Building2, FileText, Map, FileCheck, Receipt,
-  ClipboardCheck, ListChecks, Ticket, FileMinus, FilePlus, Percent,
+  AlertTriangle, Clock, CalendarDays, ArrowRight, Building2, Receipt,
+  ClipboardCheck, ListChecks, Percent, MessageCircle, Mail,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore, selectors } from '@/store';
 import {
   calcPortfolioFinance,
   normalizeTripFinance,
-  FINANCIAL_STATUS_CLASS,
-  FINANCIAL_STATUS_LABEL,
   RECEIVABLE_STATUS_CLASS,
   RECEIVABLE_STATUS_LABEL,
   calcReceivableFinance,
 } from '@/shared/utils/finance';
 import { APPROVAL_STATUS_LABEL, APPROVAL_STATUS_CLASS } from '@/shared/types';
 import { getBookingPrimaryDate, TYPE_ICON as BOOKING_TYPE_ICON, STATUS_CONFIG as BOOKING_STATUS_CONFIG } from '@/modules/bookings/bookingMeta';
-import type { ReceivableStatus } from '@/shared/types';
+import { whatsapp, gmail } from '@/shared/utils/email';
+import type { ReceivableStatus, CabDetail, HotelDetail, FlightDetail } from '@/shared/types';
 import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
 import { fmtDate, daysUntil, isThisMonth, isLastMonth, today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
@@ -81,20 +80,39 @@ function KpiCard({ title, value, sub, trend, icon: Icon, color, onClick }: KpiCa
   );
 }
 
+// ─── Due Item (unified daily ops / due-this-week feed) ────────
+
+interface DueAction {
+  icon:    React.ElementType;
+  label:   string;
+  onClick: () => void;
+}
+
+interface DueItem {
+  id:        string;
+  icon:      React.ElementType;
+  iconClass: string;
+  title:     string;
+  subtitle:  string;
+  date:      string;
+  daysUntil: number;
+  amount?:   number;
+  url:       string;
+  webCheckinDue?: boolean;
+  actions?:  DueAction[];
+}
+
 // ─── Main Dashboard ──────────────────────────────────────────
 
 export default function Dashboard() {
   const navigate          = useNavigate();
   const trips             = useStore(s => s.trips);
+  const customers         = useStore(s => s.customers);
   const leads             = useStore(s => s.leads);
   const payments          = useStore(s => s.payments);
   const reminders         = useStore(selectors.pendingReminders);
-  const vendors           = useStore(s => s.vendors);
   const vendorPayments    = useStore(s => s.vendorPayments);
-  const totalVendorOwed   = useStore(selectors.totalVendorOutstanding);
   const quotations        = useStore(s => s.quotations);
-  const itineraries       = useStore(s => s.itineraries);
-  const vouchers          = useStore(s => s.vouchers);
   const receivables       = useStore(s => s.receivables);
   const bookings          = useStore(s => s.bookings);
   const tasks             = useStore(s => s.tasks);
@@ -155,9 +173,6 @@ export default function Dashboard() {
     // Active trips
     const activeTrips = trips.filter(t => ['confirmed', 'in_progress'].includes(t.status));
 
-    // Open leads
-    const openLeads = leads.filter(l => !['converted', 'cancelled'].includes(l.status));
-
     return {
       portfolio,
       thisMonthReceived,
@@ -166,9 +181,8 @@ export default function Dashboard() {
       departingThisWeek,
       overdueTrips,
       activeTrips,
-      openLeads,
     };
-  }, [trips, leads, payments]);
+  }, [trips, payments]);
 
   // Receivables KPIs + recent payments feed
   const receivableStats = useMemo(() => {
@@ -209,7 +223,6 @@ export default function Dashboard() {
     const issuedCredit   = creditNotes.filter(c => c.status === 'ISSUED');
     const issuedDebit    = debitNotes.filter(d => d.status === 'ISSUED');
 
-    const totalInvoiced = issuedInvoices.reduce((s, i) => s + i.totalAmount, 0);
     const gstCollected  = issuedInvoices.reduce((s, i) => s + i.totalGstAmount, 0)
       - issuedCredit.reduce((s, c) => s + c.totalGstAmount, 0)
       + issuedDebit.reduce((s, d) => s + d.totalGstAmount, 0);
@@ -217,16 +230,7 @@ export default function Dashboard() {
       .filter(i => isThisMonth(i.invoiceDate))
       .reduce((s, i) => s + i.totalAmount, 0);
 
-    return {
-      invoiceCount:    issuedInvoices.length,
-      totalInvoiced,
-      gstCollected,
-      monthlySales,
-      creditNoteCount: issuedCredit.length,
-      creditNoteTotal: issuedCredit.reduce((s, c) => s + c.totalAmount, 0),
-      debitNoteCount:  issuedDebit.length,
-      debitNoteTotal:  issuedDebit.reduce((s, d) => s + d.totalAmount, 0),
-    };
+    return { gstCollected, monthlySales };
   }, [invoices, creditNotes, debitNotes]);
 
   // Operations widgets — pending approvals, tasks due today
@@ -266,6 +270,188 @@ export default function Dashboard() {
     .filter(r => r.priority === 'urgent' || r.priority === 'high')
     .slice(0, 5);
 
+  // Find a customer's phone/email — via linked trip first, then customer record
+  function findContact(customerId?: string, refTripId?: string, customerName?: string): { phone?: string; email?: string } {
+    if (refTripId) {
+      const trip = trips.find(t => t.id === refTripId);
+      if (trip?.phone) return { phone: trip.phone, email: trip.email };
+    }
+    if (customerId) {
+      const c = customers.find(c => c.id === customerId);
+      if (c) return { phone: c.phone, email: c.email };
+    }
+    const c = customers.find(c => c.name === customerName);
+    return { phone: c?.phone, email: c?.email };
+  }
+
+  // Build a short summary of the day after `dateStr` from a trip's itinerary
+  function nextDayPlan(refTripId: string | undefined, dateStr: string | undefined): string | undefined {
+    if (!refTripId || !dateStr) return undefined;
+    const trip = trips.find(t => t.id === refTripId);
+    if (!trip?.itinerary?.length) return undefined;
+    const next = new Date(dateStr);
+    next.setDate(next.getDate() + 1);
+    const nextStr = next.toISOString().slice(0, 10);
+    const day = trip.itinerary.find(d => d.date === nextStr);
+    if (!day) return undefined;
+    return [
+      day.title,
+      day.description,
+      day.activities?.length ? `Activities: ${day.activities.join(', ')}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  // ── Unified "Due This Week" feed — daily ops + ops dashboard items,
+  // merged with trip departures and supplier payments, sorted so the
+  // earliest-due item (today first) appears at the top of the list.
+  const dueItems = useMemo((): DueItem[] => {
+    const items: DueItem[] = [];
+
+    for (const t of stats.departingThisWeek) {
+      const d = daysUntil(t.departure);
+      if (d === null) continue;
+      const actions: DueAction[] = [];
+      if (t.phone) {
+        actions.push({
+          icon:  MessageCircle,
+          label: 'Cab Reminder',
+          onClick: () => whatsapp.cabReminder({
+            phone:        t.phone,
+            customerName: t.customer,
+            pickupDate:   t.departure ?? undefined,
+            drop:         t.destination,
+            vehicleType:  t.transportMode,
+            driverName:   t.cabDriver,
+            driverPhone:  t.cabContact,
+            nextDayPlan:  nextDayPlan(t.id, t.departure ?? undefined),
+          }),
+        });
+      }
+      items.push({
+        id:        `trip-${t.id}`,
+        icon:      FolderOpen,
+        iconClass: 'bg-indigo-50 text-indigo-600',
+        title:     `${t.customer} — ${t.destination}`,
+        subtitle:  `Trip departure · ${t.pax} pax`,
+        date:      t.departure!,
+        daysUntil: d,
+        amount:    (t.balanceDue ?? 0) > 0 ? t.balanceDue : undefined,
+        url:       `/trips/${t.id}`,
+        actions,
+      });
+    }
+
+    for (const { booking: b, date } of bookingAlerts) {
+      if (!date) continue;
+      const d = daysUntil(date);
+      if (d === null) continue;
+      const BIcon = BOOKING_TYPE_ICON[b.type];
+      const statusCfg = BOOKING_STATUS_CONFIG[b.status];
+      const contact = findContact(b.customerId, b.refId, b.customerName);
+      const actions: DueAction[] = [];
+      let webCheckinDue = false;
+
+      if (b.type === 'cab') {
+        const detail = b.detail as CabDetail;
+        if (contact.phone) {
+          actions.push({
+            icon:  MessageCircle,
+            label: 'Cab Reminder',
+            onClick: () => whatsapp.cabReminder({
+              phone:        contact.phone!,
+              customerName: b.customerName,
+              pickupDate:   detail.pickupDate,
+              pickupTime:   detail.pickupTime,
+              pickup:       detail.pickup,
+              drop:         detail.drop,
+              vehicleType:  detail.vehicleType,
+              driverName:   detail.driverName,
+              driverPhone:  detail.driverPhone,
+              nextDayPlan:  nextDayPlan(b.refId, detail.pickupDate ?? date),
+            }),
+          });
+        }
+      } else if (b.type === 'hotel') {
+        const detail = b.detail as HotelDetail;
+        if (contact.phone) {
+          actions.push({
+            icon:  MessageCircle,
+            label: 'Hotel Reminder',
+            onClick: () => whatsapp.hotelReminder({
+              phone:              contact.phone!,
+              customerName:       b.customerName,
+              hotelName:          detail.hotelName,
+              city:               detail.city,
+              checkIn:            detail.checkIn,
+              checkOut:           detail.checkOut,
+              confirmationNumber: detail.confirmationNumber,
+            }),
+          });
+        }
+      } else if (b.type === 'flight') {
+        const detail = b.detail as FlightDetail;
+        if (d <= 1) {
+          webCheckinDue = true;
+          actions.push({
+            icon:  Mail,
+            label: 'Web Check-in Reminder',
+            onClick: () => gmail.webCheckinReminder({
+              customerName: b.customerName,
+              bookingId:    b.id,
+              airline:      detail.airline,
+              flightNumber: detail.flightNumber,
+              pnr:          detail.pnr,
+              origin:       detail.origin,
+              destination:  detail.destination,
+              departDate:   detail.departDate,
+              departTime:   detail.departTime,
+            }),
+          });
+        }
+      }
+
+      items.push({
+        id:        `booking-${b.id}`,
+        icon:      BIcon,
+        iconClass: 'bg-blue-50 text-blue-600',
+        title:     `${b.customerName} · ${b.type.charAt(0).toUpperCase() + b.type.slice(1)}`,
+        subtitle:  statusCfg.label,
+        date,
+        daysUntil: d,
+        amount:    b.balanceDue > 0 ? b.balanceDue : undefined,
+        url:       `/bookings/${b.id}`,
+        webCheckinDue,
+        actions,
+      });
+    }
+
+    for (const vp of vendorPayments) {
+      if (vp.isPaid || !vp.dueDate) continue;
+      const d = daysUntil(vp.dueDate);
+      if (d === null || d < 0 || d > 7) continue;
+      const trip = vp.tripId ? trips.find(t => t.id === vp.tripId) : undefined;
+      items.push({
+        id:        `vendor-${vp.id}`,
+        icon:      Building2,
+        iconClass: 'bg-red-50 text-red-600',
+        title:     `${vp.vendorName} — payment due`,
+        subtitle:  trip ? `${trip.customer} — ${trip.destination}` : 'Supplier payment',
+        date:      vp.dueDate,
+        daysUntil: d,
+        amount:    vp.outstanding > 0 ? vp.outstanding : undefined,
+        url:       '/vendors',
+      });
+    }
+
+    return items.sort((a, b) => a.daysUntil - b.daysUntil || a.date.localeCompare(b.date));
+  }, [stats.departingThisWeek, bookingAlerts, vendorPayments, trips, customers]);
+
+  function dueLabel(days: number): string {
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    return `in ${days}d`;
+  }
+
   return (
     <div className="p-5 space-y-5 animate-fade-in">
 
@@ -295,64 +481,92 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Upcoming Booking Alerts ────────────────────── */}
-      {bookingAlerts.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3.5">
-          <div className="flex items-center gap-2 mb-2">
-            <Ticket className="w-4 h-4 text-blue-600 flex-shrink-0" />
-            <span className="text-sm font-semibold text-blue-800">
-              {bookingAlerts.length} booking{bookingAlerts.length > 1 ? 's' : ''} departing / checking in within 7 days
-            </span>
+      {/* ── Due This Week (Daily Ops + Ops Dashboard feed) ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-indigo-600" />
+              Due This Week
+              {dueItems.length > 0 && (
+                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {dueItems.length}
+                </span>
+              )}
+            </CardTitle>
+            <button
+              onClick={() => navigate('/daily-ops')}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+            >
+              Daily Ops <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
-          <div className="space-y-1">
-            {bookingAlerts.slice(0, 5).map(({ booking: b, date }) => {
-              const d = date ? daysUntil(date) : null;
-              const BIcon = BOOKING_TYPE_ICON[b.type];
-              const statusCfg = BOOKING_STATUS_CONFIG[b.status];
-              return (
-                <div
-                  key={b.id}
-                  className="flex items-center justify-between text-xs cursor-pointer hover:text-blue-700 transition-colors"
-                  onClick={() => navigate(`/bookings/${b.id}`)}
-                >
-                  <span className="flex items-center gap-2 text-blue-700">
-                    <BIcon className="w-3 h-3 flex-shrink-0" />
-                    <span className="font-semibold">{b.customerName}</span>
-                    <span className="text-blue-500 capitalize">{b.type}</span>
-                    <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-medium', statusCfg.class)}>
-                      {statusCfg.label}
-                    </span>
-                  </span>
-                  <span className="font-bold text-blue-700">
-                    {d === 0 ? 'Today' : `${d}d`} · {fmtDate(date!)}
-                    {b.balanceDue > 0 && <span className="ml-2 text-red-600">· ₹{b.balanceDue.toLocaleString('en-IN')} due</span>}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        </CardHeader>
+        <Separator />
+        <CardContent className="pt-0 pb-3">
+          {dueItems.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-400">
+              Nothing due in the next 7 days
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {dueItems.map(item => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 py-3 cursor-pointer group hover:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
+                    onClick={() => navigate(item.url)}
+                  >
+                    <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', item.iconClass)}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{item.title}</p>
+                      <p className="text-xs text-gray-500 truncate">{item.subtitle}</p>
+                      {item.webCheckinDue && (
+                        <Badge variant="warning" className="mt-1 text-[10px]">Web Check-in Due</Badge>
+                      )}
+                    </div>
+                    {item.actions && item.actions.length > 0 && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {item.actions.map(action => {
+                          const ActionIcon = action.icon;
+                          return (
+                            <button
+                              key={action.label}
+                              title={action.label}
+                              onClick={(e) => { e.stopPropagation(); action.onClick(); }}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            >
+                              <ActionIcon className="w-3.5 h-3.5" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="text-right flex-shrink-0">
+                      <p className={cn(
+                        'text-xs font-bold',
+                        item.daysUntil === 0 ? 'text-red-600' :
+                        item.daysUntil === 1 ? 'text-orange-600' : 'text-gray-700'
+                      )}>
+                        {dueLabel(item.daysUntil)} · {fmtDate(item.date)}
+                      </p>
+                      {item.amount !== undefined && (
+                        <p className="text-xs text-red-500 font-medium">{formatCurrency(item.amount)} due</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── KPI Cards ──────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          title="Total Collected"
-          value={formatCurrencyShort(stats.portfolio.totalCollected)}
-          sub={`This month: ${formatCurrency(stats.thisMonthReceived)}`}
-          trend={stats.revTrend}
-          icon={IndianRupee}
-          color="green"
-          onClick={() => navigate('/finance')}
-        />
-        <KpiCard
-          title="Pending Balance"
-          value={formatCurrencyShort(stats.portfolio.totalBalance)}
-          sub={`${stats.portfolio.unpricedCount} unpriced trip${stats.portfolio.unpricedCount !== 1 ? 's' : ''}`}
-          icon={Clock}
-          color="orange"
-          onClick={() => navigate('/finance')}
-        />
         <KpiCard
           title="Active Trips"
           value={String(stats.activeTrips.length)}
@@ -360,30 +574,6 @@ export default function Dashboard() {
           icon={FolderOpen}
           color="blue"
           onClick={() => navigate('/trips')}
-        />
-        <KpiCard
-          title="Open Leads"
-          value={String(stats.openLeads.length)}
-          sub={`${leads.filter(l => isThisMonth(l.createdDate)).length} new this month`}
-          icon={Users}
-          color="purple"
-          onClick={() => navigate('/leads')}
-        />
-        <KpiCard
-          title="Vendor Payable"
-          value={formatCurrencyShort(totalVendorOwed)}
-          sub={`${vendors.filter(v => v.isActive).length} active vendors`}
-          icon={Building2}
-          color="red"
-          onClick={() => navigate('/vendors')}
-        />
-        <KpiCard
-          title="Today's Collections"
-          value={formatCurrencyShort(receivableStats.todayCollected)}
-          sub={`Received on ${fmtDate(today())}`}
-          icon={IndianRupee}
-          color="green"
-          onClick={() => navigate('/receivables')}
         />
         <KpiCard
           title="Total Receivables"
@@ -410,30 +600,6 @@ export default function Dashboard() {
           onClick={() => navigate('/receivables')}
         />
         <KpiCard
-          title="Itineraries"
-          value={String(itineraries.length)}
-          sub={`${itineraries.filter(i => i.status === 'finalized').length} finalized`}
-          icon={Map}
-          color="orange"
-          onClick={() => navigate('/itineraries')}
-        />
-        <KpiCard
-          title="Vouchers"
-          value={String(vouchers.length)}
-          sub={`${vouchers.filter(v => v.status === 'issued').length} issued · ${vouchers.filter(v => v.status === 'completed').length} completed`}
-          icon={FileCheck}
-          color="green"
-          onClick={() => navigate('/vouchers')}
-        />
-        <KpiCard
-          title="Total Invoiced"
-          value={formatCurrencyShort(invoiceStats.totalInvoiced)}
-          sub={`${invoiceStats.invoiceCount} invoice${invoiceStats.invoiceCount !== 1 ? 's' : ''} issued`}
-          icon={Receipt}
-          color="blue"
-          onClick={() => navigate('/invoices')}
-        />
-        <KpiCard
           title="GST Collected"
           value={formatCurrencyShort(invoiceStats.gstCollected)}
           sub={`This month: ${formatCurrency(invoiceStats.monthlySales)} sales`}
@@ -441,86 +607,10 @@ export default function Dashboard() {
           color="purple"
           onClick={() => navigate('/gst-reports')}
         />
-        <KpiCard
-          title="Credit Notes Issued"
-          value={formatCurrencyShort(invoiceStats.creditNoteTotal)}
-          sub={`${invoiceStats.creditNoteCount} credit note${invoiceStats.creditNoteCount !== 1 ? 's' : ''}`}
-          icon={FileMinus}
-          color="orange"
-          onClick={() => navigate('/credit-notes')}
-        />
-        <KpiCard
-          title="Debit Notes Issued"
-          value={formatCurrencyShort(invoiceStats.debitNoteTotal)}
-          sub={`${invoiceStats.debitNoteCount} debit note${invoiceStats.debitNoteCount !== 1 ? 's' : ''}`}
-          icon={FilePlus}
-          color="blue"
-          onClick={() => navigate('/debit-notes')}
-        />
       </div>
 
       {/* ── Middle Row ─────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-        {/* Departing This Week */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-blue-600" />
-                Departing This Week
-              </CardTitle>
-              <button
-                onClick={() => navigate('/trips')}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-              >
-                View all <ArrowRight className="w-3 h-3" />
-              </button>
-            </div>
-          </CardHeader>
-          <Separator />
-          <CardContent className="pt-0 pb-3">
-            {stats.departingThisWeek.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-400">
-                No departures scheduled this week
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-50">
-                {stats.departingThisWeek.map(t => {
-                  const days = daysUntil(t.departure);
-                  return (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-3 py-3 cursor-pointer group hover:bg-gray-50 -mx-3 px-3 rounded-lg transition-colors"
-                      onClick={() => navigate(`/trips/${t.id}`)}
-                    >
-                      <div
-                        className={cn(
-                          'w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0',
-                          days === 0 ? 'bg-red-100 text-red-700' :
-                          days === 1 ? 'bg-orange-100 text-orange-700' :
-                          'bg-blue-100 text-blue-700'
-                        )}
-                      >
-                        {days}d
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{t.customer}</p>
-                        <p className="text-xs text-gray-500 truncate">{t.destination} · {t.pax} pax</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-xs font-semibold text-gray-700">{fmtDate(t.departure)}</p>
-                        {(t.balanceDue ?? 0) > 0 && (
-                          <p className="text-xs text-red-500 font-medium">{formatCurrency(t.balanceDue)} due</p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-5">
 
         {/* Urgent Reminders */}
         <Card>
@@ -715,7 +805,7 @@ export default function Dashboard() {
               </div>
             ))}
             <button
-              onClick={() => navigate('/finance')}
+              onClick={() => navigate('/analytics')}
               className="w-full mt-2 text-xs text-blue-600 hover:text-blue-700 font-medium text-center"
             >
               Full report →
@@ -750,7 +840,7 @@ export default function Dashboard() {
               );
             })}
             <button
-              onClick={() => navigate('/leads')}
+              onClick={() => navigate('/enquiries')}
               className="w-full mt-1 text-xs text-blue-600 hover:text-blue-700 font-medium text-center"
             >
               View pipeline →

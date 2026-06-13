@@ -4,7 +4,7 @@ import {
   ArrowLeft, MapPin, Calendar, Users, Phone, IndianRupee,
   Edit2, Trash2, CheckCircle, Clock, Plane, Hotel, Globe, Plus, Receipt,
   Car, Shield, Activity, User, FileText, Package, AlertTriangle,
-  Bus, ExternalLink, Building2, CreditCard, ChevronRight, Sparkles, MessageSquare,
+  Bus, ExternalLink, Building2, CreditCard, ChevronRight, Sparkles, MessageSquare, Map,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
@@ -35,6 +35,7 @@ import { RecordReceiptForm } from '@/shared/components/RecordReceiptForm';
 import { GmailButton } from '@/shared/components/GmailButton';
 import { gmail } from '@/shared/utils/email';
 import { ActivityTimeline } from '@/components/activity/ActivityTimeline';
+import { TripServicesPanel } from '@/shared/components/TripServicesPanel';
 import { AiMessagePanel } from '@/shared/components/AiMessagePanel';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 
@@ -258,10 +259,17 @@ export default function TripDetail() {
           Back to Trips
         </button>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="ghost" size="sm" className="gap-1.5"
-            onClick={() => navigate(`/itineraries/new?tripId=${id}`)}>
-            <Plus className="w-3.5 h-3.5" /> Itinerary
-          </Button>
+          {itineraries.length > 0 ? (
+            <Button variant="ghost" size="sm" className="gap-1.5"
+              onClick={() => navigate(`/itineraries/${itineraries[0].id}`)}>
+              <Map className="w-3.5 h-3.5" /> View Itinerary
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" className="gap-1.5"
+              onClick={() => navigate(`/itineraries/new?tripId=${id}`)}>
+              <Plus className="w-3.5 h-3.5" /> Itinerary
+            </Button>
+          )}
           {can('ai:use') && (
             <>
               <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setShowAiPanel(true)}>
@@ -430,6 +438,7 @@ export default function TripDetail() {
           <TabsTrigger value="finance">Finance</TabsTrigger>
           <TabsTrigger value="bookings">Bookings ({bookings.length})</TabsTrigger>
           <TabsTrigger value="vouchers">Vouchers ({vouchers.length})</TabsTrigger>
+          <TabsTrigger value="services">Services</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
@@ -1378,6 +1387,12 @@ export default function TripDetail() {
         </TabsContent>
 
         {/* ─────────────── TIMELINE TAB ─────────────── */}
+        <TabsContent value="services">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <TripServicesPanel tripId={trip.id} />
+          </div>
+        </TabsContent>
+
         <TabsContent value="timeline">
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <ActivityTimeline

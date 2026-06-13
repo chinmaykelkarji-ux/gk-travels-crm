@@ -55,6 +55,17 @@ router.post('/', async (req, res) => {
   try {
     const { days = [], ...body } = req.body as { days?: Record<string, unknown>[]; [k: string]: unknown };
     const { updatedAt, createdAt, ...iData } = stripMeta(body as Record<string, unknown>);
+
+    // A trip may only have one linked itinerary.
+    const tripId = iData.tripId as string | undefined;
+    if (tripId) {
+      const existing = await prisma.itinerary.findFirst({ where: { tripId } });
+      if (existing) {
+        res.status(409).json({ error: 'This trip already has a linked itinerary', itineraryId: existing.id });
+        return;
+      }
+    }
+
     const normDays = normaliseDays(days as Record<string, unknown>[]);
 
     const it = await prisma.itinerary.create({

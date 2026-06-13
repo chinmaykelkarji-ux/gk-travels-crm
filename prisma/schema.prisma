@@ -896,8 +896,9 @@ model TripService {
   supplier    Vendor?       @relation(fields: [supplierId], references: [id])
   costPrice   Decimal       @default(0) @db.Decimal(10, 2)
   sellPrice   Decimal       @default(0) @db.Decimal(10, 2)
-  details     Json
+  details     Json          @default("{}")
   notes       String?
+  completedAt DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -914,12 +915,17 @@ enum ServiceType {
   VEHICLE
   ACTIVITY
   TRANSFER
+  VISA
+  INSURANCE
+  OTHER
 }
 
 enum ServiceStatus {
   DRAFT
   REQUESTED
+  PENDING
   CONFIRMED
+  COMPLETED
   VOUCHER_RECEIVED
   CANCELLED
 }

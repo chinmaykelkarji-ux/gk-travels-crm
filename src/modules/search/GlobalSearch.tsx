@@ -6,7 +6,7 @@ import { cn } from '@/shared/utils/cn';
 
 interface SearchResult {
   id:       string;
-  type:     'trip' | 'customer' | 'booking' | 'passenger' | 'voucher';
+  type:     'trip' | 'customer' | 'booking' | 'voucher';
   title:    string;
   subtitle: string;
   meta?:    string;
@@ -37,7 +37,6 @@ export function GlobalSearch({ open, onClose }: Props) {
   const trips      = useStore(s => s.trips);
   const customers  = useStore(s => s.customers);
   const bookings   = useStore(s => s.bookings);
-  const passengers = useStore(s => s.passengers);
   const vouchers   = useStore(s => s.vouchers);
 
   const [query,     setQuery]     = useState('');
@@ -127,26 +126,6 @@ export function GlobalSearch({ open, onClose }: Props) {
       }
     });
 
-    // Passengers — by name, passport number, nationality
-    passengers.forEach(p => {
-      if (
-        scoreMatch(`${p.firstName} ${p.lastName}`, q) ||
-        scoreMatch(p.passportNumber ?? '', q) ||
-        scoreMatch(p.nationality    ?? '', q) ||
-        scoreMatch(p.id, q)
-      ) {
-        out.push({
-          id:       p.id,
-          type:     'passenger',
-          title:    `${p.firstName} ${p.lastName}`,
-          subtitle: p.passportNumber ? `Passport: ${p.passportNumber}` : p.id,
-          meta:     p.nationality,
-          url:      `/passengers`,
-          icon:     Users,
-        });
-      }
-    });
-
     // Vouchers — by voucher number, type
     vouchers.forEach(v => {
       if (
@@ -166,7 +145,7 @@ export function GlobalSearch({ open, onClose }: Props) {
     });
 
     return out.slice(0, 12);
-  }, [query, trips, customers, bookings, passengers, vouchers]);
+  }, [query, trips, customers, bookings, vouchers]);
 
   useEffect(() => { setActiveIdx(0); }, [results]);
 
@@ -196,7 +175,6 @@ export function GlobalSearch({ open, onClose }: Props) {
     trip:      'Trip',
     customer:  'Customer',
     booking:   'Booking',
-    passenger: 'Passenger',
     voucher:   'Voucher',
   };
 
@@ -204,7 +182,6 @@ export function GlobalSearch({ open, onClose }: Props) {
     trip:      'bg-indigo-50 text-indigo-600',
     customer:  'bg-blue-50 text-blue-600',
     booking:   'bg-emerald-50 text-emerald-600',
-    passenger: 'bg-purple-50 text-purple-600',
     voucher:   'bg-amber-50 text-amber-600',
   };
 

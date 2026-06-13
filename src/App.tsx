@@ -31,11 +31,9 @@ const LoginPage      = lazy(() => import('@/modules/auth/LoginPage'));
 const Dashboard      = lazy(() => import('@/modules/dashboard/Dashboard'));
 const Trips          = lazy(() => import('@/modules/trips/Trips'));
 const TripDetail     = lazy(() => import('@/modules/trips/TripDetail'));
-const Leads          = lazy(() => import('@/modules/leads/Leads'));
 const Bookings       = lazy(() => import('@/modules/bookings/Bookings'));
 const BookingDetail  = lazy(() => import('@/modules/bookings/BookingDetail'));
 const Customers      = lazy(() => import('@/modules/customers/Customers'));
-const Finance        = lazy(() => import('@/modules/finance/Finance'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -53,7 +51,6 @@ const Receivables       = lazy(() => import('@/modules/receivables/Receivables')
 const Vouchers          = lazy(() => import('@/modules/vouchers/Vouchers'));
 const VoucherFormPage   = lazy(() => import('@/modules/vouchers/VoucherForm'));
 const VoucherDetail     = lazy(() => import('@/modules/vouchers/VoucherDetail'));
-const Passengers        = lazy(() => import('@/modules/passengers/Passengers'));
 const DailyOps          = lazy(() => import('@/modules/ops/DailyOps'));
 const Settings          = lazy(() => import('@/modules/settings/Settings'));
 const Invoices          = lazy(() => import('@/modules/invoices/Invoices'));
@@ -241,7 +238,6 @@ export default function App() {
             <Route element={<ProtectedRoute redirectTo="/login" />}>
               <Route element={<AppShell />}>
                 <Route index                         element={<Dashboard />} />
-                <Route path="/leads"                 element={<Leads />} />
                 <Route path="/trips"                 element={<Trips />} />
                 <Route path="/trips/:id"             element={<TripDetail />} />
                 <Route path="/trips/:tripId/itinerary" element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><AiItineraryBuilder /></RoleGuard>} />
@@ -283,9 +279,7 @@ export default function App() {
                 <Route path="/debit-notes/:id"       element={<CreditDebitNoteDetail kind="debit" />} />
                 <Route path="/debit-notes/:id/edit"  element={<CreditDebitNoteForm kind="debit" />} />
                 <Route path="/gst-reports"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><GstReports /></RoleGuard>} />
-                <Route path="/finance"               element={<Finance />} />
                 <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
-                <Route path="/passengers"            element={<Passengers />} />
                 <Route path="/daily-ops"             element={<DailyOps />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
