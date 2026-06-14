@@ -32,9 +32,10 @@ export const TYPE_COLOR: Record<BookingType, string> = {
 export interface DetailFieldDef {
   key:         string;
   label:       string;
-  type:        'text' | 'date' | 'time' | 'number' | 'textarea';
+  type:        'text' | 'date' | 'time' | 'number' | 'textarea' | 'select';
   placeholder?: string;
   span?:       'full';
+  options?:    string[];
 }
 
 export const DETAIL_FIELDS: Partial<Record<BookingType, DetailFieldDef[]>> = {
@@ -108,6 +109,22 @@ export const DETAIL_FIELDS: Partial<Record<BookingType, DetailFieldDef[]>> = {
     { key: 'provider',          label: 'Provider',         type: 'text',    placeholder: 'e.g. Desert Adventures LLC' },
     { key: 'confirmationNumber', label: 'Confirmation No.', type: 'text',   placeholder: 'e.g. DA-2024-001' },
   ],
+  bus: [
+    { key: 'travelDate',    label: 'Travel Date',     type: 'date' },
+    { key: 'operatorName',  label: 'Operator Name',   type: 'text',   placeholder: 'e.g. VRL Travels, KSRTC, Neeta Tours' },
+    { key: 'busType',       label: 'Bus Type',        type: 'select', options: ['Sleeper', 'Semi-Sleeper', 'Seater', 'AC Sleeper', 'Volvo', 'Other'] },
+    { key: 'busNumber',     label: 'Bus Number',      type: 'text',   placeholder: 'e.g. KA-01-AB-1234' },
+    { key: 'pnr',           label: 'PNR / Ticket No', type: 'text',   placeholder: 'e.g. VRL-2024-9876' },
+    { key: 'from',          label: 'From',            type: 'text',   placeholder: 'e.g. Bengaluru' },
+    { key: 'to',            label: 'To',              type: 'text',   placeholder: 'e.g. Hyderabad' },
+    { key: 'boardingPoint', label: 'Boarding Point',  type: 'text',   placeholder: 'Exact boarding location / address', span: 'full' },
+    { key: 'droppingPoint', label: 'Dropping Point',  type: 'text',   placeholder: 'Exact drop location / address', span: 'full' },
+    { key: 'departureTime', label: 'Departure Time',  type: 'time' },
+    { key: 'arrivalTime',   label: 'Arrival Time',    type: 'time' },
+    { key: 'duration',      label: 'Duration',        type: 'text',   placeholder: 'e.g. 9 hours' },
+    { key: 'seatNumbers',   label: 'Seat Numbers',    type: 'text',   placeholder: 'e.g. A1, A2, B3' },
+    { key: 'reportingTime', label: 'Reporting Time',  type: 'text',   placeholder: 'e.g. Report 30 mins before departure' },
+  ],
 };
 
 // ─── Primary date extractor ───────────────────────────────────
@@ -122,6 +139,7 @@ export function getBookingPrimaryDate(booking: Booking): string | null {
     case 'hotel':    return pick('checkIn');
     case 'cab':      return pick('pickupDate');
     case 'train':    return pick('departure');
+    case 'bus':      return pick('travelDate');
     case 'activity': return pick('date');
     case 'visa':     return pick('appointmentDate') ?? pick('expectedDate');
     default:         return null;

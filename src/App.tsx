@@ -66,6 +66,11 @@ const AiItineraryBuilder   = lazy(() => import('@/modules/trips/AiItineraryBuild
 const TripTimeline         = lazy(() => import('@/modules/operations/TripTimeline'));
 const UserManagement       = lazy(() => import('@/modules/users/UserManagement'));
 
+const ItineraryPrintPage = lazy(() => import('@/pages/print/ItineraryPrintPage'));
+const InvoicePrintPage   = lazy(() => import('@/pages/print/InvoicePrintPage'));
+const VoucherPrintPage   = lazy(() => import('@/pages/print/VoucherPrintPage'));
+const QuotationPrintPage = lazy(() => import('@/pages/print/QuotationPrintPage'));
+
 // ─── QueryClient ─────────────────────────────────────────────
 
 const queryClient = new QueryClient({
@@ -285,6 +290,12 @@ export default function App() {
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />
               </Route>
+
+              {/* ── Standalone print pages (no sidebar/navbar) ──── */}
+              <Route path="/print/itinerary/:id" element={<Suspense fallback={<PageSpinner />}><ItineraryPrintPage /></Suspense>} />
+              <Route path="/print/invoice/:id"   element={<Suspense fallback={<PageSpinner />}><InvoicePrintPage /></Suspense>} />
+              <Route path="/print/voucher/:id"   element={<Suspense fallback={<PageSpinner />}><VoucherPrintPage /></Suspense>} />
+              <Route path="/print/quotation/:id" element={<Suspense fallback={<PageSpinner />}><QuotationPrintPage /></Suspense>} />
             </Route>
 
           </Routes>

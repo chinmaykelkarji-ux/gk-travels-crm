@@ -15,6 +15,17 @@ export function fmtDate(dateStr: string | null | undefined): string {
   }
 }
 
+export function fmtDateLong(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—';
+  try {
+    const d = parseISO(dateStr);
+    if (!isValid(d)) return '—';
+    return format(d, 'EEEE, dd MMMM yyyy');
+  } catch {
+    return '—';
+  }
+}
+
 export function fmtDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
   try {

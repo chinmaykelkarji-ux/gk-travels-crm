@@ -200,7 +200,7 @@ export function TripForm({ open, onClose, onSubmit, defaultValues, loading, titl
                 <FieldError name="departure" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="returnDate">Return Date</Label>
+                <Label htmlFor="returnDate">Return Date (Optional)</Label>
                 <Input
                   id="returnDate"
                   type="date"

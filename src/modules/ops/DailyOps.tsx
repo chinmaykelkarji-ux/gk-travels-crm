@@ -1,19 +1,33 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plane, Hotel, Train, CheckSquare, FileSearch,
+  Plane, Hotel, Train, Car, CheckSquare, FileSearch,
   ChevronRight, MapPin, Clock, IndianRupee, AlertTriangle,
 } from 'lucide-react';
 import { useStore } from '@/store';
+import apiClient from '@/lib/apiClient';
 import { today, fmtDate } from '@/shared/utils/date';
 import { formatCurrency } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
-import type { Booking } from '@/shared/types';
+import type { Booking, TripServiceType } from '@/shared/types';
 
 const todayStr = today();
 
 function getDetail(b: Booking): Record<string, string> {
   return ((b.detail ?? {}) as Record<string, string | undefined>) as Record<string, string>;
+}
+
+// Raw row shape returned by GET /api/trip-services/upcoming (no DTO transform).
+interface UpcomingTripService {
+  id:          string;
+  tripId:      string;
+  type:        TripServiceType;
+  status:      string;
+  serviceDate: string;
+  startTime:   string | null;
+  endTime:     string | null;
+  details:     Record<string, unknown>;
+  notes:       string | null;
 }
 
 interface OpsSection {
@@ -39,6 +53,18 @@ export default function DailyOps() {
   const bookings      = useStore(s => s.bookings);
   const vendorPayments = useStore(s => s.vendorPayments);
   const trips         = useStore(s => s.trips);
+
+  // TripService records for today + tomorrow (the legacy Booking-based
+  // sections below only cover the old bookings model).
+  const [tripServices, setTripServices] = useState<UpcomingTripService[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    apiClient.get<UpcomingTripService[]>('/trip-services/upcoming', { params: { days: 1 } })
+      .then(res => { if (mounted) setTripServices(res.data); })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const sections = useMemo((): OpsSection[] => {
 
@@ -155,16 +181,56 @@ export default function DailyOps() {
         };
       });
 
+    // ── TripService records (today + tomorrow) ────────────────────
+    const serviceItem = (s: UpcomingTripService, subtitle: string, time?: string | null): OpsItem => ({
+      id:          s.id,
+      title:       subtitle,
+      subtitle:    `Trip ${s.tripId}${trips.find(t => t.id === s.tripId)?.customer ? ` · ${trips.find(t => t.id === s.tripId)?.customer}` : ''} · ${fmtDate(s.serviceDate)}`,
+      time:        time ?? undefined,
+      url:         `/trips/${s.tripId}`,
+      status:      s.status.toLowerCase(),
+      statusColor: s.status === 'CONFIRMED' || s.status === 'COMPLETED' ? 'text-emerald-600' : 'text-amber-600',
+    });
+
+    const flightServices = tripServices
+      .filter(s => s.type === 'FLIGHT')
+      .map(s => {
+        const d = s.details as Record<string, string>;
+        return serviceItem(s, `${d.airline ?? 'Flight'} ${d.flightNo ?? ''}`.trim() || 'Flight', s.startTime);
+      });
+
+    const hotelServices = tripServices
+      .filter(s => s.type === 'HOTEL' && s.serviceDate.slice(0, 10) === todayStr)
+      .map(s => {
+        const d = s.details as Record<string, string>;
+        return serviceItem(s, d.hotelName ?? 'Hotel', s.startTime);
+      });
+
+    const vehicleServices = tripServices
+      .filter(s => s.type === 'VEHICLE')
+      .map(s => {
+        const d = s.details as Record<string, string>;
+        return serviceItem(s, d.vehicleType ?? d.vendorName ?? 'Vehicle', s.startTime);
+      });
+
+    const activityServices = tripServices
+      .filter(s => s.type === 'ACTIVITY')
+      .map(s => {
+        const d = s.details as Record<string, string>;
+        return serviceItem(s, d.activityName ?? 'Activity', s.startTime);
+      });
+
     return [
-      { label: 'Departures',        icon: Plane,       color: 'text-blue-600',    bg: 'bg-blue-50',    items: departures  },
+      { label: 'Departures',        icon: Plane,       color: 'text-blue-600',    bg: 'bg-blue-50',    items: [...departures, ...flightServices] },
       { label: 'Arrivals',          icon: Plane,       color: 'text-emerald-600', bg: 'bg-emerald-50', items: arrivals    },
-      { label: 'Hotel Check-Ins',   icon: Hotel,       color: 'text-indigo-600',  bg: 'bg-indigo-50',  items: checkIns    },
+      { label: 'Hotel Check-Ins',   icon: Hotel,       color: 'text-indigo-600',  bg: 'bg-indigo-50',  items: [...checkIns, ...hotelServices] },
       { label: 'Hotel Check-Outs',  icon: Hotel,       color: 'text-purple-600',  bg: 'bg-purple-50',  items: checkOuts   },
-      { label: 'Activities',        icon: MapPin,      color: 'text-amber-600',   bg: 'bg-amber-50',   items: activities  },
+      { label: 'Vehicle Schedule',  icon: Car,         color: 'text-cyan-600',    bg: 'bg-cyan-50',    items: vehicleServices },
+      { label: 'Activities',        icon: MapPin,      color: 'text-amber-600',   bg: 'bg-amber-50',   items: [...activities, ...activityServices] },
       { label: 'Visa Tasks',        icon: FileSearch,  color: 'text-teal-600',    bg: 'bg-teal-50',    items: visaTasks   },
       { label: 'Supplier Payments', icon: IndianRupee, color: 'text-red-600',     bg: 'bg-red-50',     items: vendorDue   },
     ].filter(s => s.items.length > 0);
-  }, [bookings, vendorPayments, trips]);
+  }, [bookings, vendorPayments, trips, tripServices]);
 
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
 

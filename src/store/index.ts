@@ -122,7 +122,7 @@ interface StoreActions {
   // â”€â”€ Trips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   createTrip:  (data: Partial<Trip>) => Trip;
   updateTrip:  (id: string, data: Partial<Trip>) => void;
-  deleteTrip:  (id: string) => void;
+  deleteTrip:  (id: string) => Promise<{ ok: boolean; reason?: string }>;
   setTripStatus: (id: string, status: TripStatus) => { ok: boolean; reason?: string };
   recalcTripFinance: (tripId: string) => void;
   recalcAllTrips:    () => void;
@@ -414,12 +414,17 @@ export const useStore = create<GKStore>()(
         get().refreshAllReminders();
       },
 
-      deleteTrip(id) {
-        set((s: GKStore) => ({
-          trips:       s.trips.filter(t => t.id !== id),
-          receivables: s.receivables.filter(r => r.tripId !== id),
-        }));
-        void apiClient.delete(`/trips/${id}`).catch(onMutationError(''));
+      async deleteTrip(id) {
+        try {
+          await apiClient.delete(`/trips/${id}`);
+          set((s: GKStore) => ({
+            trips:       s.trips.filter(t => t.id !== id),
+            receivables: s.receivables.filter(r => r.tripId !== id),
+          }));
+          return { ok: true };
+        } catch (err: unknown) {
+          return { ok: false, reason: getApiErrorMessage(err, 'Trip deletion failed') };
+        }
       },
 
       setTripStatus(id, status) {

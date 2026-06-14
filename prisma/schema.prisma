@@ -531,6 +531,16 @@ model Voucher {
   activityTime     String?
   activityVenue    String?
   activityNotes    String?
+  operatorName     String?
+  busType          String?
+  busNumber        String?
+  fromLocation     String?
+  toLocation       String?
+  boardingPoint    String?
+  droppingPoint    String?
+  seatNumbers      String?
+  duration         String?
+  reportingTime    String?
   airline          String?
   flightNumber     String?
   pnr              String?
@@ -886,7 +896,7 @@ enum GstMode {
 model TripService {
   id          String        @id @default(cuid())
   tripId      String
-  trip        Trip          @relation(fields: [tripId], references: [id])
+  trip        Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
   type        ServiceType
   status      ServiceStatus @default(DRAFT)
   serviceDate DateTime
@@ -911,6 +921,7 @@ model TripService {
 
 enum ServiceType {
   FLIGHT
+  BUS
   HOTEL
   VEHICLE
   ACTIVITY

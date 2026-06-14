@@ -1,10 +1,27 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 
 const router = Router();
 router.use(requireAuth);
+
+// Mirrors src/shared/utils/id.ts nextTripId() — used when the client
+// doesn't supply an id (e.g. direct API calls).
+async function nextTripId(): Promise<string> {
+  const year = new Date().getFullYear();
+  const existing = await prisma.trip.findMany({
+    where:  { id: { startsWith: `GK-${year}-` } },
+    select: { id: true },
+  });
+  const seq = existing.reduce((max, t) => {
+    const n = parseInt(t.id.split('-')[2], 10);
+    return isNaN(n) ? max : Math.max(max, n);
+  }, 0) + 1;
+  return `GK-${year}-${String(seq).padStart(4, '0')}`;
+}
 
 // GET /api/trips
 router.get('/', async (_req, res) => {
@@ -27,10 +44,17 @@ router.post('/', async (req: AuthRequest, res) => {
   try {
     // tripNumber is DB-generated only (sequence-backed) — never accept it
     // from the client on create or update.
-    const { payments, tasks, tripNumber, ...data } = req.body;
-    const existed = await prisma.trip.findUnique({ where: { id: data.id }, select: { id: true } });
+    const { payments, tasks, tripNumber, ...rest } = req.body;
+    const id   = (rest.id as string | undefined) || await nextTripId();
+    const data = {
+      createdDate: new Date().toISOString().split('T')[0],
+      ...rest,
+      id,
+    };
+
+    const existed = await prisma.trip.findUnique({ where: { id }, select: { id: true } });
     const trip = await prisma.trip.upsert({
-      where:  { id: data.id },
+      where:  { id },
       update: data,
       create: data,
     });
@@ -69,21 +93,49 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/trips/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('trips:write'), async (req, res) => {
   try {
-    await prisma.payment.updateMany({
-      where: { tripId: req.params.id },
-      data:  { tripId: null },
+    const { id } = req.params;
+
+    const trip = await prisma.trip.findUnique({ where: { id }, select: { id: true } });
+    if (!trip) { res.status(404).json({ error: 'Trip not found' }); return; }
+
+    // Financial records must be preserved — block deletion while invoices
+    // reference this trip rather than silently orphaning them.
+    const invoiceCount = await prisma.invoice.count({
+      where: { tripIds: { array_contains: id } },
     });
-    await prisma.task.updateMany({
-      where: { tripId: req.params.id },
-      data:  { tripId: null },
+    if (invoiceCount > 0) {
+      res.status(409).json({
+        error: `Cannot delete trip — ${invoiceCount} invoice(s) reference this trip. Cancel or remove those invoices first.`,
+      });
+      return;
+    }
+
+    // Unlink (but don't delete) payments/tasks recorded against this trip.
+    await prisma.payment.updateMany({ where: { tripId: id }, data: { tripId: null } });
+    await prisma.task.updateMany({ where: { tripId: id }, data: { tripId: null } });
+
+    // A sales quote that was converted into this trip should survive the
+    // trip's deletion — just clear the back-reference.
+    await prisma.salesQuote.updateMany({
+      where: { convertedTripId: id },
+      data:  { convertedTripId: null },
     });
-    await prisma.trip.delete({ where: { id: req.params.id } });
+
+    // Trip services cascade-delete via the schema; everything else above
+    // is unlinked, so the trip itself can now be removed.
+    await prisma.trip.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[trips DELETE]', err);
-    res.status(500).json({ error: String(err) });
+
+    if (err instanceof Prisma.PrismaClientKnownRequestError && (err.code === 'P2003' || err.code === 'P2014')) {
+      res.status(409).json({ error: 'Cannot delete trip — related records still exist. Remove bookings, vouchers, or services first.' });
+      return;
+    }
+
+    res.status(500).json({ error: 'Failed to delete trip', details: String(err) });
   }
 });
 

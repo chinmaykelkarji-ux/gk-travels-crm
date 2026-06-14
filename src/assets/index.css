@@ -101,23 +101,26 @@
 /* ── Print / PDF ────────────────────────────────────────────── */
 @page {
   size: A4;
-  margin: 18mm 16mm 20mm 16mm;
+  margin: 12mm 15mm;
 }
+
+/* Hide on screen, show only when printing */
+.print-only { display: none; }
 
 @media print {
   /* Hide all navigation chrome */
   nav, aside, header, footer,
-  .sidebar, [class*="sidebar"],
-  .print\:hidden { display: none !important; }
+  .sidebar, [class*="sidebar"], [class*="navbar"],
+  .print\:hidden, .no-print { display: none !important; }
 
   /* Reset page to white */
-  html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }
+  html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; font-size: 11pt; color: #000 !important; }
 
   /* Show print-only content */
-  .print\:block { display: block !important; }
+  .print\:block, .print-only { display: block !important; }
 
   /* Preserve exact colours and backgrounds */
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 
   /* Table pagination */
   table { page-break-inside: auto; border-collapse: collapse; }
@@ -129,10 +132,108 @@
   h1, h2, h3, h4 { page-break-after: avoid; }
 
   /* Avoid breaking inside key content blocks */
-  .print-avoid-break { page-break-inside: avoid; }
+  .print-avoid-break, .page-break-avoid { page-break-inside: avoid; }
+  .page-break-before { page-break-before: always; }
+
+  .document-container { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
 
   /* Reset any box shadows for clean print */
   * { box-shadow: none !important; text-shadow: none !important; }
+}
+
+/* ── Standalone print pages (/print/*) ──────────────────────── */
+.print-page-root {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: white;
+  min-height: 100vh;
+  color: #1A1A1A;
+}
+
+.print-action-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: #1A1A2E;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  gap: 16px;
+}
+
+.print-action-bar .btn-back {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.print-action-bar .btn-print {
+  background: #C8590A;
+  border: none;
+  color: white;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.print-action-bar .btn-pdf {
+  background: #1a56db;
+  border: none;
+  color: white;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.print-action-bar .btn-whatsapp {
+  background: #25D366;
+  border: none;
+  color: white;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.print-action-center {
+  font-size: 14px;
+  color: rgba(255,255,255,0.7);
+  flex: 1;
+  text-align: center;
+}
+
+.print-action-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.print-document {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  background: white;
+}
+
+@media print {
+  .print-action-bar { display: none !important; }
+  .print-document { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+  .print-page-root { background: white !important; }
+  .day-card { page-break-inside: avoid; }
+  .invoice-table-row { page-break-inside: avoid; }
 }
 
 /* ── Focus visible ──────────────────────────────────────────── */

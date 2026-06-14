@@ -19,6 +19,7 @@ export const VOUCHER_TYPES: { value: VoucherType; label: string; emoji: string }
   { value: 'transfer', label: 'Transfer', emoji: '🚗' },
   { value: 'activity', label: 'Activity', emoji: '🎯' },
   { value: 'flight',   label: 'Flight',   emoji: '✈️' },
+  { value: 'bus',      label: 'Bus',      emoji: '🚌' },
   { value: 'visa',     label: 'Visa',     emoji: '📋' },
   { value: 'general',  label: 'General',  emoji: '📄' },
 ];

@@ -65,7 +65,10 @@ export function TripCard({ trip, selected, onToggleSelect }: TripCardProps) {
           <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
         </div>
         <h3 className="text-sm font-bold text-gray-900">{trip.customer}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{trip.type} · {trip.pax} pax</p>
+        <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
+          <span>{trip.type}</span>
+          <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{trip.pax} Pax</span>
+        </p>
       </div>
 
       {/* Body */}

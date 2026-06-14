@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Ticket, Search, Plus, HelpCircle, IndianRupee, Package,
-  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt, Eye, UserPlus,
+  AlertTriangle, CheckCircle, Clock, Filter, X, Pencil, Trash2, Receipt, Eye, UserPlus, Users,
 } from 'lucide-react';
 import { CustomerQuickCreate } from '@/shared/components/CustomerQuickCreate';
 import { useStore } from '@/store';
@@ -558,6 +558,20 @@ export function BookingFormDialog({ open, onClose, booking }: BookingFormDialogP
                         rows={3}
                         className="text-sm"
                       />
+                    ) : field.type === 'select' ? (
+                      <Select
+                        value={form.detailStr[field.key] ?? ''}
+                        onValueChange={v => set('detailStr', { ...form.detailStr, [field.key]: v })}
+                      >
+                        <SelectTrigger id={`detail-${field.key}`}>
+                          <SelectValue placeholder={field.placeholder} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(field.options ?? []).map(opt => (
+                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <Input
                         id={`detail-${field.key}`}
@@ -992,7 +1006,7 @@ export default function Bookings() {
                       aria-label="Select all bookings"
                     />
                   </th>
-                  {['Type', 'Customer', 'Linked Trip', 'Selling Price', 'Cost', 'Balance', 'Margin', 'Status', 'Date'].map(h => (
+                  {['Type', 'Customer', 'Pax', 'Linked Trip', 'Selling Price', 'Cost', 'Balance', 'Margin', 'Status', 'Date'].map(h => (
                     <th key={h} className="text-left text-[11px] font-semibold text-gray-400 px-4 py-3 whitespace-nowrap">
                       {h}
                     </th>
@@ -1041,6 +1055,16 @@ export default function Bookings() {
                       <td className="px-4 py-3">
                         <div className="font-semibold text-gray-900 text-sm">{b.customerName}</div>
                         <div className="text-[10px] text-gray-400 font-mono">{b.id}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        {(b.passengerIds?.length ?? 0) > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Users className="w-3 h-3 text-gray-400" />
+                            {b.passengerIds!.length}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {b.refId ? (

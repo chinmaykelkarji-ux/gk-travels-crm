@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Plus, Pencil, Trash2, Plane, Building2, Car, Camera, ArrowLeftRight,
+  Plus, Pencil, Trash2, Plane, Bus, Building2, Car, Camera, ArrowLeftRight,
   FileText, Shield, Package, CheckCircle2, Clock,
 } from 'lucide-react';
 import apiClient from '@/lib/apiClient';
@@ -30,6 +30,7 @@ interface TripServicesPanelProps {
 
 const SERVICE_TYPES: Array<{ value: TripServiceType; label: string; Icon: typeof Plane }> = [
   { value: 'FLIGHT',    label: 'Flight',    Icon: Plane },
+  { value: 'BUS',       label: 'Bus',       Icon: Bus },
   { value: 'HOTEL',     label: 'Hotel',     Icon: Building2 },
   { value: 'VEHICLE',   label: 'Vehicle',   Icon: Car },
   { value: 'ACTIVITY',  label: 'Activity',  Icon: Camera },
@@ -94,7 +95,8 @@ const STATUS_TRANSITIONS: Record<StatusGroup, StatusGroup[]> = {
 interface DetailField {
   key:   string;
   label: string;
-  type?: 'text' | 'date' | 'number';
+  type?: 'text' | 'date' | 'number' | 'time' | 'select';
+  options?: string[];
 }
 
 const DETAILS_FIELDS: Record<TripServiceType, DetailField[]> = {
@@ -106,6 +108,21 @@ const DETAILS_FIELDS: Record<TripServiceType, DetailField[]> = {
     { key: 'departureTime', label: 'Departure Time' },
     { key: 'arrivalTime',   label: 'Arrival Time' },
     { key: 'pnr',           label: 'PNR' },
+  ],
+  BUS: [
+    { key: 'operatorName',  label: 'Operator Name' },
+    { key: 'busType',       label: 'Bus Type', type: 'select', options: ['Sleeper', 'Semi-Sleeper', 'Seater', 'AC Sleeper', 'Volvo', 'Other'] },
+    { key: 'busNumber',     label: 'Bus Number' },
+    { key: 'pnr',           label: 'PNR' },
+    { key: 'from',          label: 'From' },
+    { key: 'to',            label: 'To' },
+    { key: 'boardingPoint', label: 'Boarding Point' },
+    { key: 'droppingPoint', label: 'Dropping Point' },
+    { key: 'departure',     label: 'Departure', type: 'time' },
+    { key: 'arrival',       label: 'Arrival', type: 'time' },
+    { key: 'duration',      label: 'Duration' },
+    { key: 'seatNumbers',   label: 'Seat Numbers' },
+    { key: 'reportingTime', label: 'Reporting Time' },
   ],
   HOTEL: [
     { key: 'propertyName',   label: 'Property Name' },
@@ -464,6 +481,18 @@ export function TripServicesPanel({ tripId }: TripServicesPanelProps) {
                       {s.startTime ?? '—'} {s.endTime ? `→ ${s.endTime}` : ''}
                     </div>
                   )}
+                  {s.type === 'BUS' && (
+                    <div className="text-xs text-gray-500 truncate max-w-md">
+                      {[
+                        s.details.operatorName,
+                        s.details.busType,
+                        (s.details.from || s.details.to) ? `${s.details.from ?? '—'} → ${s.details.to ?? '—'}` : null,
+                        (s.details.departure || s.details.arrival) ? `${s.details.departure ?? '—'} / ${s.details.arrival ?? '—'}` : null,
+                        s.details.seatNumbers ? `Seats: ${s.details.seatNumbers}` : null,
+                        s.details.pnr ? `PNR: ${s.details.pnr}` : null,
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
                   {s.supplierName && (
                     <div className="text-xs text-gray-500">Supplier: {s.supplierName}</div>
                   )}
@@ -618,11 +647,24 @@ export function TripServicesPanel({ tripId }: TripServicesPanelProps) {
                   {DETAILS_FIELDS[form.type].map(field => (
                     <div key={field.key}>
                       <Label>{field.label}</Label>
-                      <Input
-                        type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
-                        value={form.details[field.key] ?? ''}
-                        onChange={e => setDetail(field.key, e.target.value)}
-                      />
+                      {field.type === 'select' ? (
+                        <select
+                          className={SELECT_CLASS}
+                          value={form.details[field.key] ?? ''}
+                          onChange={e => setDetail(field.key, e.target.value)}
+                        >
+                          <option value="">— Select —</option>
+                          {(field.options ?? []).map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          type={field.type === 'date' ? 'date' : field.type === 'time' ? 'time' : field.type === 'number' ? 'number' : 'text'}
+                          value={form.details[field.key] ?? ''}
+                          onChange={e => setDetail(field.key, e.target.value)}
+                        />
+                      )}
                     </div>
                   ))}
                   {form.type === 'HOTEL' && hotelNights !== null && (

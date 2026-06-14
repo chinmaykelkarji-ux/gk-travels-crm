@@ -16,6 +16,8 @@ import { confirm } from '@/shared/hooks/useConfirm';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { VOUCHER_TYPES, VOUCHER_STATUS_BADGE } from './Vouchers';
+import { DocumentActionBar } from '@/shared/components/documents/DocumentActionBar';
+import { voucherSummary } from '@/shared/components/documents/VoucherPrintView';
 
 const MEAL_EMOJI: Record<string, string> = {
   'Room Only': '🛏', 'Bed & Breakfast': '🌅', 'Half Board': '☀️',
@@ -116,13 +118,10 @@ export default function VoucherDetail() {
     if (copy) { toast.success('Voucher duplicated', copy.id); navigate(`/vouchers/${copy.id}`); }
   }
 
-  // QR code via free public API (works with internet access during print)
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&bgcolor=ffffff&data=${encodeURIComponent(voucher.voucherNumber)}`;
-
   return (
     <>
       {/* ── Screen view ─────────────────────────────────────── */}
-      <div className="p-5 space-y-5 animate-fade-in print:hidden">
+      <div className="p-5 pb-20 space-y-5 animate-fade-in print:hidden">
 
         {/* Top bar */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -141,7 +140,7 @@ export default function VoucherDetail() {
                 <Mail className="w-3.5 h-3.5" /> Email
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.print()}>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.open(`/print/voucher/${voucher.id}`, '_blank')}>
               <Printer className="w-3.5 h-3.5" /> Print / PDF
             </Button>
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={handleDuplicate}>
@@ -284,6 +283,34 @@ export default function VoucherDetail() {
                 </div>
               )}
 
+              {/* Bus */}
+              {voucher.type === 'bus' && (
+                <div className="space-y-2">
+                  {voucher.operatorName && <p className="text-base font-bold text-gray-900">{voucher.operatorName}</p>}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100"><p className="text-[10px] text-gray-400 uppercase tracking-wide">From</p><p className="text-sm font-semibold">{voucher.fromLocation || '—'}</p></div>
+                    <span className="text-gray-400">→</span>
+                    <div className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100"><p className="text-[10px] text-gray-400 uppercase tracking-wide">To</p><p className="text-sm font-semibold">{voucher.toLocation || '—'}</p></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    {voucher.busType && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Bus Type</p><p className="text-sm">{voucher.busType}</p></div>}
+                    {voucher.busNumber && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Bus Number</p><p className="text-sm font-mono">{voucher.busNumber}</p></div>}
+                    {voucher.departure && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Departure</p><p className="text-sm font-bold">{voucher.departure}</p></div>}
+                    {voucher.arrival && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Arrival</p><p className="text-sm font-bold">{voucher.arrival}</p></div>}
+                    {voucher.duration && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Duration</p><p className="text-sm">{voucher.duration}</p></div>}
+                    {voucher.pnr && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">PNR</p><p className="text-sm font-mono font-bold text-indigo-600">{voucher.pnr}</p></div>}
+                    {voucher.seatNumbers && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Seats</p><p className="text-sm">{voucher.seatNumbers}</p></div>}
+                    {voucher.reportingTime && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Reporting</p><p className="text-sm">{voucher.reportingTime}</p></div>}
+                  </div>
+                  {(voucher.boardingPoint || voucher.droppingPoint) && (
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      {voucher.boardingPoint && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Boarding Point</p><p className="text-sm">{voucher.boardingPoint}</p></div>}
+                      {voucher.droppingPoint && <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Dropping Point</p><p className="text-sm">{voucher.droppingPoint}</p></div>}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Visa */}
               {voucher.type === 'visa' && (
                 <div className="grid grid-cols-2 gap-3">
@@ -327,146 +354,15 @@ export default function VoucherDetail() {
         </div>
       </div>
 
-      {/* ── Professional PDF Print View ──────────────────────── */}
-      <div className="hidden print:block font-sans text-gray-900" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '3px solid #4F46E5', paddingBottom: 16, marginBottom: 24 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#1E1B4B', marginBottom: 2 }}>{companySettings?.companyName || 'GK TRAVELS'}</div>
-            {companySettings?.addressLine1 && (
-              <div style={{ fontSize: 11, color: '#6B7280', maxWidth: 280 }}>
-                {[companySettings.addressLine1, companySettings.addressLine2, companySettings.city, companySettings.state, companySettings.pincode].filter(Boolean).join(', ')}
-              </div>
-            )}
-            {companySettings?.gstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>GSTIN: {companySettings.gstin}</div>}
-            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{companySettings?.email || 'gktravels8249@gmail.com'}{companySettings?.phone ? ` · ${companySettings.phone}` : ''}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{typeMeta?.emoji} {typeMeta?.label} Voucher</div>
-            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: '#4F46E5', marginTop: 4 }}>{voucher.voucherNumber}</div>
-            {voucher.issueDate && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>Issued: {fmtDate(voucher.issueDate)}</div>}
-          </div>
-        </div>
-
-        {/* Customer + QR row */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, gap: 24 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Guest Details</div>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{voucher.customerName}</div>
-            {voucher.guestNames  && <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>Guests: {voucher.guestNames}</div>}
-            {voucher.customerPhone && <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>📞 {voucher.customerPhone}</div>}
-            {voucher.destination && <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>📍 {voucher.destination}</div>}
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>👥 {voucher.pax} guest{voucher.pax !== 1 ? 's' : ''}</div>
-          </div>
-          {/* QR Code */}
-          <div style={{ textAlign: 'center', flexShrink: 0 }}>
-            <img src={qrUrl} alt={voucher.voucherNumber} style={{ width: 90, height: 90, display: 'block' }} />
-            <div style={{ fontSize: 9, color: '#9CA3AF', marginTop: 4, fontFamily: 'monospace' }}>{voucher.voucherNumber}</div>
-          </div>
-        </div>
-
-        {/* Type-specific content */}
-        <div style={{ border: '2px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
-          <div style={{ background: '#4F46E5', padding: '12px 20px', color: 'white', fontSize: 14, fontWeight: 700 }}>
-            {typeMeta?.emoji} {typeMeta?.label} Details
-          </div>
-          <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            {voucher.type === 'hotel' && (
-              <>
-                {voucher.hotelName      && renderPrintField('Hotel', voucher.hotelName)}
-                {voucher.confirmationNo && renderPrintField('Confirmation No.', voucher.confirmationNo)}
-                {voucher.checkIn        && renderPrintField('Check-in', fmtDate(voucher.checkIn))}
-                {voucher.checkOut       && renderPrintField('Check-out', fmtDate(voucher.checkOut))}
-                {voucher.roomType       && renderPrintField('Room Type', voucher.roomType)}
-                {voucher.mealPlan       && renderPrintField('Meal Plan', voucher.mealPlan)}
-                {voucher.hotelAddress   && renderPrintField('Address', voucher.hotelAddress)}
-                {voucher.hotelPhone     && renderPrintField('Hotel Phone', voucher.hotelPhone)}
-              </>
-            )}
-            {voucher.type === 'transfer' && (
-              <>
-                {voucher.pickupPoint && renderPrintField('Pickup', voucher.pickupPoint)}
-                {voucher.dropPoint   && renderPrintField('Drop', voucher.dropPoint)}
-                {voucher.pickupDate  && renderPrintField('Date', fmtDate(voucher.pickupDate))}
-                {voucher.pickupTime  && renderPrintField('Time', voucher.pickupTime)}
-                {voucher.vehicleType && renderPrintField('Vehicle', voucher.vehicleType)}
-                {voucher.driverName  && renderPrintField('Driver', voucher.driverName)}
-                {voucher.driverPhone && renderPrintField('Driver Phone', voucher.driverPhone)}
-                {voucher.flightInfo  && renderPrintField('Flight Info', voucher.flightInfo)}
-              </>
-            )}
-            {voucher.type === 'activity' && (
-              <>
-                {voucher.activityName  && renderPrintField('Activity', voucher.activityName)}
-                {voucher.activityVenue && renderPrintField('Venue', voucher.activityVenue)}
-                {voucher.activityDate  && renderPrintField('Date', fmtDate(voucher.activityDate))}
-                {voucher.activityTime  && renderPrintField('Time', voucher.activityTime)}
-                {voucher.activityNotes && <div style={{ gridColumn: '1 / -1' }}>{renderPrintField('Notes', voucher.activityNotes)}</div>}
-              </>
-            )}
-            {voucher.type === 'flight' && (
-              <>
-                {voucher.airline       && renderPrintField('Airline', voucher.airline)}
-                {voucher.flightNumber  && renderPrintField('Flight', voucher.flightNumber)}
-                {voucher.pnr           && renderPrintField('PNR', voucher.pnr)}
-                {voucher.flightClass   && renderPrintField('Class', voucher.flightClass)}
-                {voucher.departure     && renderPrintField('From', voucher.departure)}
-                {voucher.arrival       && renderPrintField('To', voucher.arrival)}
-                {voucher.departureDate && renderPrintField('Departure', fmtDate(voucher.departureDate))}
-                {voucher.arrivalDate   && renderPrintField('Arrival', fmtDate(voucher.arrivalDate))}
-              </>
-            )}
-            {voucher.type === 'visa' && (
-              <>
-                {voucher.country   && renderPrintField('Country', voucher.country)}
-                {voucher.visaType  && renderPrintField('Visa Type', voucher.visaType)}
-                {voucher.entryType && renderPrintField('Entry', voucher.entryType)}
-                {voucher.validity  && renderPrintField('Validity', voucher.validity)}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Vendor */}
-        {(voucher.vendorName || voucher.vendorPhone) && (
-          <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-            {voucher.vendorName  && renderPrintField('Vendor', voucher.vendorName)}
-            {voucher.vendorPhone && renderPrintField('Vendor Phone', voucher.vendorPhone)}
-            {voucher.vendorEmail && renderPrintField('Vendor Email', voucher.vendorEmail)}
-          </div>
-        )}
-
-        {/* Notes */}
-        {voucher.notes && (
-          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Notes</div>
-            <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{voucher.notes}</p>
-          </div>
-        )}
-
-        {/* Emergency */}
-        {voucher.emergencyContact && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#991B1B', marginBottom: 4 }}>🚨 Emergency Contact</div>
-            <p style={{ fontSize: 13, color: '#7F1D1D' }}>{voucher.emergencyContact}</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-          <span>{companySettings?.companyName || 'GK Travels'} · {companySettings?.email || 'gktravels8249@gmail.com'}</span>
-          <span>{voucher.voucherNumber} · {voucher.createdDate}</span>
-        </div>
-      </div>
+      <DocumentActionBar
+        onPrint={() => window.open(`/print/voucher/${voucher.id}`, '_blank')}
+        whatsappMessage={`Dear ${voucher.customerName}, your ${typeMeta?.label ?? voucher.type} voucher ${voucher.voucherNumber} is confirmed. ${voucherSummary(voucher)}. Keep this voucher handy during travel. - GK Travels`}
+        customerPhone={voucher.customerPhone ?? ''}
+        customerEmail={linkedCustomer?.email ?? linkedTrip?.email}
+        backLabel="Back to Vouchers"
+        backHref="/vouchers"
+        documentTitle={`Voucher ${voucher.voucherNumber}`}
+      />
     </>
-  );
-}
-
-function renderPrintField(label: string, value: string) {
-  return (
-    <div>
-      <div style={{ fontSize: 9, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2937' }}>{value}</div>
-    </div>
   );
 }

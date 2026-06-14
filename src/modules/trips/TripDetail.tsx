@@ -95,6 +95,7 @@ export default function TripDetail() {
   const [showAiPanel, setShowAiPanel] = useState(false);
 
   const [editOpen,   setEditOpen]   = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
   const [payAmount,  setPayAmount]  = useState('');
   const [payMethod,  setPayMethod]  = useState('Cash');
   const [payFormOpen,    setPayFormOpen]    = useState(false);
@@ -159,10 +160,18 @@ export default function TripDetail() {
       cancelLabel:  'Cancel',
       variant:      'destructive',
     });
-    if (ok) {
-      deleteTrip(id!);
-      navigate('/trips');
-      toast.success('Trip deleted');
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const res = await deleteTrip(id!);
+      if (res.ok) {
+        toast.success('Trip deleted');
+        navigate('/trips');
+      } else {
+        toast.error('Delete failed', res.reason);
+      }
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -283,7 +292,7 @@ export default function TripDetail() {
           <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
             <Edit2 className="w-3.5 h-3.5" /> Edit
           </Button>
-          <Button variant="destructive" size="sm" onClick={handleDelete} className="gap-1.5">
+          <Button variant="destructive" size="sm" loading={deleting} onClick={handleDelete} className="gap-1.5">
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </Button>
         </div>

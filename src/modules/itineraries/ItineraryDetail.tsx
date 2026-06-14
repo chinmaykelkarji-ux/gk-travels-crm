@@ -16,6 +16,7 @@ import { confirm } from '@/shared/hooks/useConfirm';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { TEMPLATES } from './Itineraries';
+import { DocumentActionBar } from '@/shared/components/documents/DocumentActionBar';
 
 const MEAL_LABEL: Record<string, string> = {
   breakfast: '🌅 Breakfast',
@@ -120,7 +121,7 @@ export default function ItineraryDetail() {
   return (
     <>
       {/* ── Screen view ─────────────────────────────────────── */}
-      <div className="p-5 space-y-5 animate-fade-in print:hidden">
+      <div className="p-5 pb-20 space-y-5 animate-fade-in print:hidden">
 
         {/* Top bar */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -139,7 +140,7 @@ export default function ItineraryDetail() {
                 <Mail className="w-3.5 h-3.5" /> Email
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.print()}>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.open(`/print/itinerary/${itinerary.id}`, '_blank')}>
               <Printer className="w-3.5 h-3.5" /> Print / PDF
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5"
@@ -314,142 +315,15 @@ export default function ItineraryDetail() {
         )}
       </div>
 
-      {/* ── PDF / Print View ─────────────────────────────────── */}
-      <div className="hidden print:block">
-        {/* Cover page */}
-        <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '40px', background: '#0F172A', color: 'white', pageBreakAfter: 'always' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 14, letterSpacing: '0.3em', color: '#94A3B8', marginBottom: 32, textTransform: 'uppercase' }}>{companySettings?.companyName || 'GK Travels'} · Premium Itinerary</div>
-            <h1 style={{ fontSize: 36, fontWeight: 800, marginBottom: 12, fontFamily: 'sans-serif', lineHeight: 1.2 }}>{itinerary.title}</h1>
-            <p style={{ fontSize: 18, color: '#94A3B8', marginBottom: 40 }}>{itinerary.destination}</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, maxWidth: 400, margin: '0 auto', textAlign: 'left' }}>
-              {[
-                { label: 'Guest', value: itinerary.customerName },
-                { label: 'Pax',   value: String(itinerary.pax) },
-                ...(itinerary.startDate ? [{ label: 'From', value: fmtDate(itinerary.startDate) }] : []),
-                ...(itinerary.endDate   ? [{ label: 'To',   value: fmtDate(itinerary.endDate)   }] : []),
-                { label: 'Duration', value: `${itinerary.days.length} Days` },
-              ].map(item => (
-                <div key={item.label}>
-                  <p style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{item.label}</p>
-                  <p style={{ fontSize: 14, fontWeight: 600 }}>{item.value}</p>
-                </div>
-              ))}
-            </div>
-            {itinerary.customerPhone && (
-              <p style={{ marginTop: 40, color: '#64748B', fontSize: 12 }}>📞 {itinerary.customerPhone}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Day pages */}
-        {itinerary.days.map((day, idx) => (
-          <div key={day.id || idx} style={{ padding: '24px 32px', pageBreakAfter: 'always', fontFamily: 'sans-serif' }}>
-            {/* Day header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, borderBottom: '3px solid #4F46E5', paddingBottom: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 24, background: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 18, fontWeight: 800, flexShrink: 0 }}>
-                {day.dayNumber}
-              </div>
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>{day.title}</h2>
-                {day.date && <p style={{ fontSize: 12, color: '#6B7280', margin: '4px 0 0' }}>{fmtDate(day.date)}</p>}
-              </div>
-              {(day.meals ?? []).length > 0 && (
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                  {(day.meals ?? []).map(m => (
-                    <span key={m} style={{ fontSize: 11, background: '#EEF2FF', color: '#4F46E5', padding: '4px 10px', borderRadius: 20, fontWeight: 600 }}>
-                      {MEAL_LABEL[m]?.replace(/[^\w ]/g, '') ?? m}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Two-column body */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-              {/* Schedule */}
-              <div>
-                {[
-                  { label: 'Morning',   emoji: '🌅', value: day.morning   },
-                  { label: 'Afternoon', emoji: '☀️', value: day.afternoon },
-                  { label: 'Evening',   emoji: '🌙', value: day.evening   },
-                ].filter(s => s.value).map(slot => (
-                  <div key={slot.label} style={{ marginBottom: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
-                      {slot.emoji} {slot.label}
-                    </p>
-                    <p style={{ fontSize: 13, lineHeight: 1.6, color: '#374151', whiteSpace: 'pre-wrap' }}>{slot.value}</p>
-                  </div>
-                ))}
-                {(day.activities ?? []).filter(Boolean).length > 0 && (
-                  <div>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>🎯 Activities</p>
-                    <ul style={{ paddingLeft: 16, margin: 0 }}>
-                      {(day.activities ?? []).filter(Boolean).map((act, i) => (
-                        <li key={i} style={{ fontSize: 13, color: '#374151', marginBottom: 4 }}>{act}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              {/* Logistics */}
-              <div>
-                {day.hotelName && (
-                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>🏨 Accommodation</p>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: '#1E293B' }}>{day.hotelName}</p>
-                    {day.hotelAddress && <p style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{day.hotelAddress}</p>}
-                  </div>
-                )}
-                {day.transfers && (
-                  <div style={{ marginBottom: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>🚗 Transfers</p>
-                    <p style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap' }}>{day.transfers}</p>
-                  </div>
-                )}
-                {day.notes && (
-                  <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: 16 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>📝 Notes</p>
-                    <p style={{ fontSize: 12, color: '#78350F', whiteSpace: 'pre-wrap' }}>{day.notes}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Page footer */}
-            <div style={{ marginTop: 24, borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-              <span>{itinerary.title}</span>
-              <span>Day {day.dayNumber} of {itinerary.days.length}</span>
-            </div>
-          </div>
-        ))}
-
-        {/* Notes + Emergency page */}
-        {(itinerary.notes || itinerary.emergencyContact) && (
-          <div style={{ padding: '24px 32px', fontFamily: 'sans-serif' }}>
-            <h2 style={{ fontSize: 20, fontWeight: 800, borderBottom: '3px solid #4F46E5', paddingBottom: 12, marginBottom: 24 }}>
-              Important Information
-            </h2>
-            {itinerary.emergencyContact && (
-              <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: 16, marginBottom: 24 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#991B1B', marginBottom: 8 }}>🚨 Emergency Contact</p>
-                <p style={{ fontSize: 14, color: '#7F1D1D' }}>{itinerary.emergencyContact}</p>
-              </div>
-            )}
-            {itinerary.notes && (
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>General Notes</p>
-                <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{itinerary.notes}</p>
-              </div>
-            )}
-            <div style={{ marginTop: 48, textAlign: 'center', fontSize: 11, color: '#9CA3AF', borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
-              <p>{companySettings?.companyName || 'GK Travels'} · {companySettings?.email || 'gktravels8249@gmail.com'}</p>
-              <p style={{ marginTop: 4 }}>Thank you for choosing {companySettings?.companyName || 'GK Travels'}. Wishing you a wonderful journey! ✈️</p>
-            </div>
-          </div>
-        )}
-      </div>
+      <DocumentActionBar
+        onPrint={() => window.open(`/print/itinerary/${itinerary.id}`, '_blank')}
+        whatsappMessage={`Your itinerary for ${itinerary.destination} is ready! Trip: ${itinerary.id} | Dates: ${itinerary.startDate ? fmtDate(itinerary.startDate) : '—'} to ${itinerary.endDate ? fmtDate(itinerary.endDate) : '—'} | ${itinerary.pax} traveller(s). Contact GK Travels for any queries: ${companySettings?.phone ?? ''}`}
+        customerPhone={itinerary.customerPhone ?? ''}
+        customerEmail={itinerary.customerEmail}
+        backLabel="Back to Itineraries"
+        backHref="/itineraries"
+        documentTitle={`Itinerary ${itinerary.id}`}
+      />
     </>
   );
 }

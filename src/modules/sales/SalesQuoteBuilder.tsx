@@ -13,7 +13,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import type {
-  EnquiryDetail, SalesQuote, SalesQuoteLineItem, SalesQuotePdfData,
+  EnquiryDetail, SalesQuote, SalesQuoteLineItem,
   SalesQuoteServiceType, SalesQuoteStatus,
 } from '@/shared/types/salesQuote';
 
@@ -156,118 +156,6 @@ function WhatsAppModal({ quote, onClose }: WhatsAppModalProps) {
   );
 }
 
-// ── PDF preview modal ─────────────────────────────────────────
-
-interface PdfModalProps {
-  quoteId: string;
-  onClose: () => void;
-}
-
-function PdfModal({ quoteId, onClose }: PdfModalProps) {
-  const [data, setData] = useState<SalesQuotePdfData | null>(null);
-
-  useEffect(() => {
-    apiClient.get<SalesQuotePdfData>(`/sales-quotes/${quoteId}/pdf-data`)
-      .then(res => setData(res.data))
-      .catch(() => toast.error('Failed to load PDF data'));
-  }, [quoteId]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:p-0">
-      <div className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto print:max-h-none print:shadow-none print:rounded-none print:max-w-none">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 print:hidden">
-          <h3 className="text-sm font-bold text-gray-900">Quotation Preview</h3>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => window.print()}><Printer className="w-3.5 h-3.5" /> Print / Save PDF</Button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>
-          </div>
-        </div>
-
-        {!data ? (
-          <div className="p-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-        ) : (
-          <div className="p-8 text-sm text-gray-800" id="quote-pdf">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h1 className="text-lg font-bold">{data.agency.name}</h1>
-                {data.agency.address && <p className="text-xs text-gray-500 max-w-xs">{data.agency.address}</p>}
-                <p className="text-xs text-gray-500">
-                  {[data.agency.phone, data.agency.email].filter(Boolean).join(' · ')}
-                </p>
-                {data.agency.gstin && <p className="text-xs text-gray-500">GSTIN: {data.agency.gstin}</p>}
-              </div>
-              <div className="text-right">
-                <h2 className="text-base font-bold">Quotation</h2>
-                <p className="text-xs text-gray-500 font-mono">{data.quote.quoteNumber}</p>
-                <p className="text-xs text-gray-500">Valid until {new Date(data.quote.validUntil).toLocaleDateString('en-IN')}</p>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Customer</p>
-              <p className="font-semibold">{data.customer.name}</p>
-              <p className="text-xs text-gray-500">{data.customer.phone}{data.customer.email ? ` · ${data.customer.email}` : ''}</p>
-              {data.customer.address && <p className="text-xs text-gray-500">{data.customer.address}</p>}
-            </div>
-
-            <div className="mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Destination</p>
-              <p>{data.quote.destination}</p>
-            </div>
-
-            <table className="w-full text-xs mt-4 mb-4">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-gray-500">
-                  <th className="py-2">Service</th>
-                  <th className="py-2">Description</th>
-                  <th className="py-2 text-right">Qty</th>
-                  <th className="py-2 text-right">Rate</th>
-                  <th className="py-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.quote.lineItems.map(item => (
-                  <tr key={item.id} className="border-b border-gray-100">
-                    <td className="py-2">{item.serviceType}</td>
-                    <td className="py-2">{item.description}</td>
-                    <td className="py-2 text-right">{item.quantity}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.sellPrice)}</td>
-                    <td className="py-2 text-right">{formatCurrency(item.lineTotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="flex justify-end">
-              <div className="w-56 space-y-1 text-xs">
-                <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{formatCurrency(data.quote.subtotal)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{formatCurrency(data.quote.discountAmount)}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Tax</span><span>{formatCurrency(data.quote.taxAmount)}</span></div>
-                <div className="flex justify-between font-bold text-sm border-t border-gray-200 pt-1"><span>Total</span><span>{formatCurrency(data.quote.totalAmount)}</span></div>
-              </div>
-            </div>
-
-            {data.quote.notes && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Notes</p>
-                <p className="text-xs whitespace-pre-wrap">{data.quote.notes}</p>
-              </div>
-            )}
-
-            {data.quote.termsConditions && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Terms &amp; Conditions</p>
-                <p className="text-xs whitespace-pre-wrap">{data.quote.termsConditions}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────
 
 export default function SalesQuoteBuilder() {
@@ -290,7 +178,6 @@ export default function SalesQuoteBuilder() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
-  const [showPdf, setShowPdf] = useState(false);
 
   const isEdit = Boolean(id);
 
@@ -679,8 +566,13 @@ export default function SalesQuoteBuilder() {
               </Button>
             )}
             {quote && (
-              <Button variant="outline" className="w-full" onClick={() => setShowPdf(true)}>
-                <Printer className="w-3.5 h-3.5" /> Preview PDF
+              <Button variant="outline" className="w-full" onClick={() => window.open(`/print/quotation/${quote.id}`, '_blank')}>
+                <Printer className="w-3.5 h-3.5" /> Print / PDF
+              </Button>
+            )}
+            {quote && (quote.status === 'DRAFT' || quote.status === 'SENT') && (
+              <Button variant="success" className="w-full" loading={saving} onClick={() => void changeStatus('ACCEPTED')}>
+                <CheckCircle2 className="w-3.5 h-3.5" /> Accept Quote
               </Button>
             )}
             {quote && (
@@ -717,7 +609,6 @@ export default function SalesQuoteBuilder() {
       </div>
 
       {showWhatsApp && quote && <WhatsAppModal quote={quote} onClose={() => setShowWhatsApp(false)} />}
-      {showPdf && quote && <PdfModal quoteId={quote.id} onClose={() => setShowPdf(false)} />}
     </div>
   );
 }

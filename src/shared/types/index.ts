@@ -721,7 +721,7 @@ export interface VendorPayment {
 // ─── Trip Services ───────────────────────────────────────────
 
 export type TripServiceType =
-  'FLIGHT' | 'HOTEL' | 'VEHICLE' | 'ACTIVITY' | 'TRANSFER' | 'VISA' | 'INSURANCE' | 'OTHER';
+  'FLIGHT' | 'BUS' | 'HOTEL' | 'VEHICLE' | 'ACTIVITY' | 'TRANSFER' | 'VISA' | 'INSURANCE' | 'OTHER';
 
 export type TripServiceStatus =
   'DRAFT' | 'REQUESTED' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'VOUCHER_RECEIVED' | 'CANCELLED';
@@ -828,7 +828,7 @@ export interface Itinerary {
 
 // ─── Voucher ─────────────────────────────────────────────────
 
-export type VoucherType   = 'hotel' | 'transfer' | 'activity' | 'flight' | 'visa' | 'general';
+export type VoucherType   = 'hotel' | 'transfer' | 'activity' | 'flight' | 'visa' | 'bus' | 'general';
 export type VoucherStatus = 'draft' | 'issued' | 'completed' | 'cancelled';
 
 export interface Voucher {
@@ -874,6 +874,18 @@ export interface Voucher {
   activityTime?:  string;
   activityVenue?: string;
   activityNotes?: string;
+
+  // Bus
+  operatorName?: string;
+  busType?:      string;
+  busNumber?:    string;
+  fromLocation?: string;
+  toLocation?:   string;
+  boardingPoint?: string;
+  droppingPoint?: string;
+  seatNumbers?:  string;
+  duration?:     string;
+  reportingTime?: string;
 
   // Flight
   airline?:       string;

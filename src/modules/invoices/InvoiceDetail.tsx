@@ -17,6 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogBody,
 } from '@/shared/components/ui/dialog';
 import { INVOICE_STATUS_BADGE } from './Invoices';
+import { DocumentActionBar } from '@/shared/components/documents/DocumentActionBar';
 
 export default function InvoiceDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -28,6 +29,9 @@ export default function InvoiceDetail() {
   const debitNotes      = useStore(s => s.debitNotes.filter(d => d.invoiceId === id));
   const cancelInvoice   = useStore(s => s.cancelInvoice);
   const deleteInvoice   = useStore(s => s.deleteInvoice);
+  const linkedTrip      = useStore(s => invoice?.tripIds?.[0] ? s.trips.find(t => t.id === invoice.tripIds[0]) : undefined);
+  const receivable      = useStore(s => s.receivables.find(r => r.invoiceId === invoice?.id));
+  const customer        = useStore(s => invoice?.customerId ? s.customers.find(c => c.id === invoice.customerId) : undefined);
 
   const [cancelOpen,   setCancelOpen]   = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -93,7 +97,7 @@ export default function InvoiceDetail() {
   return (
     <>
       {/* ── Screen view ─────────────────────────────────────── */}
-      <div className="p-5 space-y-5 animate-fade-in print:hidden">
+      <div className="p-5 pb-20 space-y-5 animate-fade-in print:hidden">
 
         {/* Top bar */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -102,7 +106,7 @@ export default function InvoiceDetail() {
             <ArrowLeft className="w-4 h-4" /> Back to Invoices
           </button>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.print()}>
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => window.open(`/print/invoice/${invoice.id}`, '_blank')}>
               <Printer className="w-3.5 h-3.5" /> Print / PDF
             </Button>
             {!isCancelled && (
@@ -289,119 +293,15 @@ export default function InvoiceDetail() {
         )}
       </div>
 
-      {/* ── Print view ──────────────────────────────────────── */}
-      <div className="hidden print:block font-sans text-gray-900" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '3px solid #4F46E5', paddingBottom: 16, marginBottom: 20 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: '#1E1B4B', marginBottom: 2 }}>{invoice.companyName || 'GK TRAVELS'}</div>
-            {invoice.companyAddress && <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'pre-wrap', maxWidth: 280 }}>{invoice.companyAddress}</div>}
-            {invoice.companyGstin && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>GSTIN: {invoice.companyGstin}</div>}
-            {companySettings?.phone && <div style={{ fontSize: 11, color: '#6B7280' }}>Phone: {companySettings.phone}</div>}
-            {companySettings?.email && <div style={{ fontSize: 11, color: '#6B7280' }}>{companySettings.email}</div>}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Tax Invoice</div>
-            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'monospace', color: '#4F46E5', marginTop: 4 }}>{invoice.invoiceNumber}</div>
-            <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>Date: {fmtDate(invoice.invoiceDate)}</div>
-            {invoice.dueDate && <div style={{ fontSize: 11, color: '#6B7280' }}>Due: {fmtDate(invoice.dueDate)}</div>}
-            <div style={{ fontSize: 11, color: '#6B7280' }}>Place of Supply: {invoice.placeOfSupply || '—'}</div>
-          </div>
-        </div>
-
-        {/* Bill to */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Bill To</div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{invoice.customerName}</div>
-          {invoice.customerAddress && <div style={{ fontSize: 12, color: '#374151', marginTop: 2, whiteSpace: 'pre-wrap' }}>{invoice.customerAddress}</div>}
-          {invoice.customerGstin && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>GSTIN: {invoice.customerGstin}</div>}
-        </div>
-
-        {/* Items table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-          <thead>
-            <tr style={{ background: '#4F46E5', color: 'white' }}>
-              {['#', 'Description', 'HSN/SAC', 'Qty', 'Rate', 'Taxable', 'GST%', 'GST Amt', 'Total'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, padding: '8px 10px', textTransform: 'uppercase' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {invoice.items.map((it, idx) => (
-              <tr key={it.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                <td style={{ fontSize: 11, padding: '8px 10px', color: '#9CA3AF' }}>{idx + 1}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{it.description}</td>
-                <td style={{ fontSize: 11, padding: '8px 10px', fontFamily: 'monospace' }}>{it.hsnSac || '—'}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{it.quantity}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{formatCurrency(it.rate)}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{formatCurrency(it.amount)}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{it.gstRate}%</td>
-                <td style={{ fontSize: 12, padding: '8px 10px' }}>{formatCurrency(it.gstAmount)}</td>
-                <td style={{ fontSize: 12, padding: '8px 10px', fontWeight: 700 }}>{formatCurrency(it.totalAmount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Totals */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-          <table style={{ width: 280, fontSize: 12 }}>
-            <tbody>
-              <tr><td style={{ padding: '3px 0', color: '#6B7280' }}>Taxable Amount</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(invoice.taxableAmount)}</td></tr>
-              {invoice.gstType === 'INTRA' ? (
-                <>
-                  <tr><td style={{ padding: '3px 0', color: '#6B7280' }}>CGST</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(invoice.cgstAmount)}</td></tr>
-                  <tr><td style={{ padding: '3px 0', color: '#6B7280' }}>SGST</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(invoice.sgstAmount)}</td></tr>
-                </>
-              ) : (
-                <tr><td style={{ padding: '3px 0', color: '#6B7280' }}>IGST</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(invoice.igstAmount)}</td></tr>
-              )}
-              <tr style={{ borderTop: '2px solid #1F2937' }}>
-                <td style={{ padding: '6px 0', fontWeight: 800, fontSize: 14 }}>Grand Total</td>
-                <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 800, fontSize: 14 }}>{formatCurrency(invoice.totalAmount)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Bank details */}
-        {(companySettings?.bankName || companySettings?.bankAccountNumber) && (
-          <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 11, color: '#374151' }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Bank Details</div>
-            {companySettings.bankName && <div>Bank: {companySettings.bankName}</div>}
-            {companySettings.bankAccountName && <div>Account Name: {companySettings.bankAccountName}</div>}
-            {companySettings.bankAccountNumber && <div>Account No: {companySettings.bankAccountNumber}</div>}
-            {companySettings.bankIfsc && <div>IFSC: {companySettings.bankIfsc}</div>}
-            {companySettings.bankBranch && <div>Branch: {companySettings.bankBranch}</div>}
-          </div>
-        )}
-
-        {/* Terms */}
-        {invoice.termsAndConds && (
-          <div style={{ marginBottom: 24, fontSize: 11, color: '#374151' }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Terms &amp; Conditions</div>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{invoice.termsAndConds}</div>
-          </div>
-        )}
-
-        {/* Signature */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 48 }}>
-          <div style={{ textAlign: 'center' }}>
-            {companySettings?.signatureUrl && (
-              <img src={companySettings.signatureUrl} alt="Signature" style={{ height: 50, marginBottom: 4 }} />
-            )}
-            <div style={{ borderTop: '1px solid #1F2937', paddingTop: 4, fontSize: 11 }}>
-              {companySettings?.authorizedSignatory || 'Authorized Signatory'}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ marginTop: 32, borderTop: '1px solid #E5E7EB', paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#9CA3AF' }}>
-          <span>{invoice.companyName} {companySettings?.email ? `· ${companySettings.email}` : ''}</span>
-          <span>{invoice.invoiceNumber}</span>
-        </div>
-      </div>
+      <DocumentActionBar
+        onPrint={() => window.open(`/print/invoice/${invoice.id}`, '_blank')}
+        whatsappMessage={`Dear ${invoice.customerName}, your invoice ${invoice.invoiceNumber} for ${linkedTrip?.destination ?? 'your'} trip is ready. Amount: ${formatCurrency(invoice.totalAmount)} | Due: ${formatCurrency(receivable?.balanceDue ?? invoice.totalAmount)}. Please contact GK Travels to make payment: ${companySettings?.phone ?? ''}`}
+        customerPhone={linkedTrip?.phone ?? customer?.phone ?? ''}
+        customerEmail={linkedTrip?.email ?? customer?.email}
+        backLabel="Back to Invoices"
+        backHref="/invoices"
+        documentTitle={`Invoice ${invoice.invoiceNumber}`}
+      />
 
       {/* Cancel dialog */}
       <Dialog open={cancelOpen} onOpenChange={o => { if (!o) setCancelOpen(false); }}>

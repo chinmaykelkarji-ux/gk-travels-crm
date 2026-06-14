@@ -112,8 +112,11 @@ export default function Trips() {
     if (!ok) return;
     setBulkDeleting(true);
     try {
-      for (const id of ids) deleteTrip(id);
-      toast.success(`${ids.length} trip${ids.length > 1 ? 's' : ''} deleted`);
+      const results = await Promise.all(ids.map(id => deleteTrip(id)));
+      const failed = results.filter(r => !r.ok);
+      const deleted = results.length - failed.length;
+      if (deleted > 0) toast.success(`${deleted} trip${deleted > 1 ? 's' : ''} deleted`);
+      if (failed.length > 0) toast.error(`${failed.length} trip${failed.length > 1 ? 's' : ''} could not be deleted`, failed[0].reason);
       bulkSel.clear();
     } finally {
       setBulkDeleting(false);

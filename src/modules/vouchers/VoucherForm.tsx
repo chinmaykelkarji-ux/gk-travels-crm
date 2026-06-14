@@ -90,6 +90,21 @@ export default function VoucherForm() {
   const [activityVenue, setActivityVenue] = useState(existing?.activityVenue ?? '');
   const [activityNotes, setActivityNotes] = useState(existing?.activityNotes ?? '');
 
+  // Bus
+  const [operatorName,  setOperatorName]  = useState(existing?.operatorName  ?? '');
+  const [busType,       setBusType]       = useState(existing?.busType       ?? '');
+  const [busNumber,     setBusNumber]     = useState(existing?.busNumber     ?? '');
+  const [busPnr,        setBusPnr]        = useState(existing?.pnr           ?? '');
+  const [fromLocation,  setFromLocation]  = useState(existing?.fromLocation  ?? '');
+  const [toLocation,    setToLocation]    = useState(existing?.toLocation    ?? '');
+  const [boardingPoint, setBoardingPoint] = useState(existing?.boardingPoint ?? '');
+  const [droppingPoint, setDroppingPoint] = useState(existing?.droppingPoint ?? '');
+  const [busDeparture,  setBusDeparture]  = useState(existing?.departure     ?? '');
+  const [busArrival,    setBusArrival]    = useState(existing?.arrival       ?? '');
+  const [duration,      setDuration]      = useState(existing?.duration      ?? '');
+  const [seatNumbers,   setSeatNumbers]   = useState(existing?.seatNumbers   ?? '');
+  const [reportingTime, setReportingTime] = useState(existing?.reportingTime ?? '');
+
   // Flight
   const [airline,       setAirline]       = useState(existing?.airline       ?? '');
   const [flightNumber,  setFlightNumber]  = useState(existing?.flightNumber  ?? '');
@@ -176,10 +191,16 @@ export default function VoucherForm() {
       activityName: activityName || undefined, activityDate: activityDate || undefined,
       activityTime: activityTime || undefined, activityVenue: activityVenue || undefined,
       activityNotes: activityNotes || undefined,
+      // Bus
+      operatorName: operatorName || undefined, busType: busType || undefined,
+      busNumber: busNumber || undefined, fromLocation: fromLocation || undefined,
+      toLocation: toLocation || undefined, boardingPoint: boardingPoint || undefined,
+      droppingPoint: droppingPoint || undefined, duration: duration || undefined,
+      seatNumbers: seatNumbers || undefined, reportingTime: reportingTime || undefined,
       // Flight
       airline: airline || undefined, flightNumber: flightNumber || undefined,
-      pnr: pnr || undefined, departure: departure || undefined,
-      arrival: arrival || undefined, departureDate: departureDate || undefined,
+      pnr: pnr || busPnr || undefined, departure: departure || busDeparture || undefined,
+      arrival: arrival || busArrival || undefined, departureDate: departureDate || undefined,
       arrivalDate: arrivalDate || undefined, flightClass: flightClass || undefined,
       // Visa
       visaType: visaType || undefined, country: country || undefined,
@@ -425,6 +446,41 @@ export default function VoucherForm() {
                     </select>
                   </Field>
                 </div>
+              </div>
+            )}
+
+            {type === 'bus' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Operator Name" id="vf-bop" required><Input id="vf-bop" value={operatorName} onChange={e => setOperatorName(e.target.value)} placeholder="VRL Travels, KSRTC…" /></Field>
+                  <Field label="Bus Type" id="vf-btype">
+                    <select value={busType} onChange={e => setBusType(e.target.value)}
+                      className="w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/30">
+                      <option value="">— Select —</option>
+                      {['Sleeper', 'Semi-Sleeper', 'Seater', 'AC Sleeper', 'Volvo', 'Other'].map(b => <option key={b}>{b}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Bus Number" id="vf-bnum"><Input id="vf-bnum" value={busNumber} onChange={e => setBusNumber(e.target.value)} placeholder="KA-01-AB-1234" /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="From" id="vf-bfrom"><Input id="vf-bfrom" value={fromLocation} onChange={e => setFromLocation(e.target.value)} placeholder="Bengaluru" /></Field>
+                  <Field label="To" id="vf-bto"><Input id="vf-bto" value={toLocation} onChange={e => setToLocation(e.target.value)} placeholder="Hyderabad" /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Boarding Point" id="vf-bboard"><Input id="vf-bboard" value={boardingPoint} onChange={e => setBoardingPoint(e.target.value)} placeholder="Exact boarding location" /></Field>
+                  <Field label="Dropping Point" id="vf-bdrop"><Input id="vf-bdrop" value={droppingPoint} onChange={e => setDroppingPoint(e.target.value)} placeholder="Exact drop location" /></Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Departure Time" id="vf-bdep"><Input id="vf-bdep" type="time" value={busDeparture} onChange={e => setBusDeparture(e.target.value)} /></Field>
+                  <Field label="Arrival Time" id="vf-barr"><Input id="vf-barr" type="time" value={busArrival} onChange={e => setBusArrival(e.target.value)} /></Field>
+                  <Field label="Duration" id="vf-bdur"><Input id="vf-bdur" value={duration} onChange={e => setDuration(e.target.value)} placeholder="9 hours" /></Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="PNR / Ticket No" id="vf-bpnr"><Input id="vf-bpnr" value={busPnr} onChange={e => setBusPnr(e.target.value)} placeholder="VRL-2024-9876" /></Field>
+                  <Field label="Seat Numbers" id="vf-bseat"><Input id="vf-bseat" value={seatNumbers} onChange={e => setSeatNumbers(e.target.value)} placeholder="A1, A2, B3" /></Field>
+                  <Field label="Reporting Time" id="vf-brep"><Input id="vf-brep" value={reportingTime} onChange={e => setReportingTime(e.target.value)} placeholder="Report 30 mins before" /></Field>
+                </div>
+                {vendorSection}
               </div>
             )}
 

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, IndianRupee, Edit2, Trash2, Plus, CheckCircle,
   Receipt, HelpCircle, Activity, MessageCircle, Mail, Printer,
-  Clock, Circle, ChevronDown, ChevronUp,
+  Clock, Circle, ChevronDown, ChevronUp, Users,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import {
@@ -71,6 +71,7 @@ export default function BookingDetail() {
   const navigate = useNavigate();
 
   const booking          = useStore(selectors.bookingById(id ?? ''));
+  const bookingPassengers = useStore(selectors.passengersForBooking(id ?? ''));
   const trips            = useStore(s => s.trips);
   const customers        = useStore(s => s.customers);
   const deleteBooking    = useStore(s => s.deleteBooking);
@@ -426,6 +427,26 @@ export default function BookingDetail() {
                   <DetailCard detail={detail} type={bk.type} />
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {/* Passengers */}
+        {(bk.passengerIds?.length ?? 0) > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-gray-500" /> Passengers ({bk.passengerIds!.length})
+            </h3>
+            {bookingPassengers.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {bookingPassengers.map(p => (
+                  <span key={p.id} className="text-xs font-medium text-gray-700 bg-gray-50 border border-gray-100 rounded-full px-3 py-1">
+                    {p.displayName || `${p.firstName} ${p.lastName}`.trim()}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">{bk.passengerIds!.length} passenger{bk.passengerIds!.length === 1 ? '' : 's'} linked</p>
             )}
           </div>
         )}

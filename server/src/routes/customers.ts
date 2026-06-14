@@ -14,11 +14,18 @@ router.get('/', requirePermission('customers:read'), async (_req, res) => {
 
 router.post('/', requirePermission('customers:write'), async (req: AuthRequest, res) => {
   try {
-    const existed = await prisma.customer.findUnique({ where: { id: req.body.id }, select: { id: true } });
+    const id   = (req.body.id as string | undefined) || await nextCustomerId();
+    const data = {
+      createdDate: new Date().toISOString().split('T')[0],
+      ...sanitize(req.body),
+      id,
+    };
+
+    const existed = await prisma.customer.findUnique({ where: { id }, select: { id: true } });
     const c = await prisma.customer.upsert({
-      where:  { id: req.body.id },
-      update: sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
-      create: sanitize(req.body) as Parameters<typeof prisma.customer.create>[0]['data'],
+      where:  { id },
+      update: data as Parameters<typeof prisma.customer.update>[0]['data'],
+      create: data as Parameters<typeof prisma.customer.create>[0]['data'],
     });
 
     if (!existed) {
@@ -59,6 +66,21 @@ router.delete('/:id', requirePermission('customers:write'), async (req: AuthRequ
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
+
+// Mirrors src/shared/utils/id.ts nextCustomerId() — used when the client
+// doesn't supply an id (e.g. direct API calls).
+async function nextCustomerId(): Promise<string> {
+  const year = new Date().getFullYear();
+  const existing = await prisma.customer.findMany({
+    where:  { id: { startsWith: `CUS-${year}-` } },
+    select: { id: true },
+  });
+  const seq = existing.reduce((max, c) => {
+    const n = parseInt(c.id.split('-')[2], 10);
+    return isNaN(n) ? max : Math.max(max, n);
+  }, 0) + 1;
+  return `CUS-${year}-${String(seq).padStart(4, '0')}`;
+}
 
 function sanitize(body: Record<string, unknown>) {
   // customerNumber is DB-generated only (sequence-backed) — never accept it
