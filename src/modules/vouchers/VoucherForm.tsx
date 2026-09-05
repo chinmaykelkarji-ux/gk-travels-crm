@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle, IndianRupee } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
-import type { Voucher, VoucherType } from '@/shared/types';
+import type { GstMode, Voucher, VoucherType } from '@/shared/types';
 import { today } from '@/shared/utils/date';
 import { cn } from '@/shared/utils/cn';
+import { formatCurrency } from '@/shared/utils/format';
+import { calcVoucherPricing } from '@/shared/utils/finance';
 import { toast } from '@/shared/hooks/useToast';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -121,6 +123,13 @@ export default function VoucherForm() {
   const [entryType,   setEntryType]   = useState(existing?.entryType   ?? '');
   const [validity,    setValidity]    = useState(existing?.validity     ?? '');
 
+  // Pricing
+  const [costPrice,    setCostPrice]    = useState<string>(existing?.costPrice    != null ? String(existing.costPrice)    : '');
+  const [sellingPrice, setSellingPrice] = useState<string>(existing?.sellingPrice != null ? String(existing.sellingPrice) : '');
+  const [gstRate,      setGstRate]      = useState<number>(existing?.gstRate ?? 0);
+  const [gstMode,      setGstMode]      = useState<GstMode>(existing?.gstMode ?? 'EXCLUDED');
+  const [showPricing,  setShowPricing]  = useState<boolean>(existing?.showPricing ?? false);
+
   // Vendor (denormalized)
   const [vendorName,  setVendorName]  = useState(existing?.vendorName  ?? '');
   const [vendorPhone, setVendorPhone] = useState(existing?.vendorPhone ?? '');
@@ -128,6 +137,15 @@ export default function VoucherForm() {
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
+
+  // ── Derived pricing ───────────────────────────────────────
+
+  const pricing = useMemo(() => calcVoucherPricing({
+    costPrice:    costPrice    === '' ? 0 : Number(costPrice),
+    sellingPrice: sellingPrice === '' ? 0 : Number(sellingPrice),
+    gstRate,
+    gstMode,
+  }), [costPrice, sellingPrice, gstRate, gstMode]);
 
   // ── Auto-fill from trip ───────────────────────────────────
 
@@ -176,6 +194,16 @@ export default function VoucherForm() {
       vendorName: vendorName || undefined,
       vendorPhone: vendorPhone || undefined,
       vendorEmail: vendorEmail || undefined,
+      // Pricing — GST figures are derived, never hand-typed.
+      // Cleared fields go as null, not undefined: JSON.stringify drops
+      // undefined keys, so the old price would survive on the server.
+      costPrice:    costPrice    === '' ? null : Number(costPrice),
+      sellingPrice: sellingPrice === '' ? null : Number(sellingPrice),
+      showPricing,
+      gstRate, gstMode,
+      gstAmount:     pricing.gstAmount,
+      taxableAmount: pricing.taxableAmount,
+      totalPayable:  pricing.totalPayable,
       // Hotel
       hotelName: hotelName || undefined, hotelAddress: hotelAddress || undefined,
       hotelPhone: hotelPhone || undefined,
@@ -214,6 +242,8 @@ export default function VoucherForm() {
   async function handleSave() {
     setError('');
     if (!customerName.trim()) { setError('Customer name is required'); return; }
+    if (costPrice !== '' && Number(costPrice) < 0)       { setError('Cost price cannot be negative'); return; }
+    if (sellingPrice !== '' && Number(sellingPrice) < 0) { setError('Selling price cannot be negative'); return; }
     setSaving(true);
     try {
       const payload = buildPayload();
@@ -512,6 +542,52 @@ export default function VoucherForm() {
             )}
           </div>
 
+          {/* Pricing */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <IndianRupee className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-semibold text-gray-800">Pricing</h3>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Cost Price (vendor)" id="vf-cost">
+                <Input id="vf-cost" type="number" min={0} step="0.01" value={costPrice}
+                  onChange={e => setCostPrice(e.target.value)} placeholder="0" />
+              </Field>
+              <Field label="Selling Price (customer)" id="vf-sell">
+                <Input id="vf-sell" type="number" min={0} step="0.01" value={sellingPrice}
+                  onChange={e => setSellingPrice(e.target.value)} placeholder="0" />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="GST Mode" id="vf-gstmode">
+                <select id="vf-gstmode" value={gstMode} onChange={e => setGstMode(e.target.value as GstMode)}
+                  className="w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/30">
+                  <option value="EXCLUDED">GST Excluded (add on top)</option>
+                  <option value="INCLUDED">GST Included (in price)</option>
+                </select>
+              </Field>
+              <Field label="GST Rate" id="vf-gstrate">
+                <select id="vf-gstrate" value={gstRate} onChange={e => setGstRate(Number(e.target.value))}
+                  className="w-full h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/30">
+                  {[0, 5, 12, 18].map(r => (
+                    <option key={r} value={r}>{r === 0 ? 'No GST' : `GST ${r}%`}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={showPricing} onChange={e => setShowPricing(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-400/30" />
+              <span className="text-xs text-gray-600">
+                Show the customer amount on the printed voucher
+                <span className="block text-[11px] text-gray-400">Cost price and margin are internal — they are never printed.</span>
+              </span>
+            </label>
+          </div>
+
           {/* Notes */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">Notes & Emergency</h3>
@@ -548,6 +624,41 @@ export default function VoucherForm() {
               {vendorName && (
                 <div className="flex justify-between text-gray-600">
                   <span>Vendor</span><span className="font-medium text-gray-900">{vendorName}</span>
+                </div>
+              )}
+
+              <div className="h-px bg-gray-100 my-1" />
+
+              <div className="flex justify-between text-gray-600">
+                <span>Cost</span><span className="font-medium text-gray-900">{formatCurrency(pricing.costPrice)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>Selling</span><span className="font-medium text-gray-900">{formatCurrency(pricing.sellingPrice)}</span>
+              </div>
+              {gstRate > 0 && (
+                <>
+                  {gstMode === 'INCLUDED' && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>Taxable</span><span className="font-medium text-gray-700">{formatCurrency(pricing.taxableAmount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-gray-600">
+                    <span>GST ({gstRate}%)</span><span className="font-medium text-amber-600">{formatCurrency(pricing.gstAmount)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between text-gray-600">
+                <span className="font-medium">Total Payable</span>
+                <span className="font-bold text-indigo-700 text-sm">
+                  {pricing.totalPayable === null ? 'Unpriced' : formatCurrency(pricing.totalPayable)}
+                </span>
+              </div>
+              {pricing.totalPayable !== null && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Margin</span>
+                  <span className={cn('font-bold', pricing.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                    {formatCurrency(pricing.grossProfit)} · {pricing.marginPct.toFixed(1)}%
+                  </span>
                 </div>
               )}
             </div>

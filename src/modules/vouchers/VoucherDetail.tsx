@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Copy, Send, CheckCircle, XCircle, Printer,
-  MapPin, Phone, Mail, Calendar, Users, Building2, MessageCircle,
+  MapPin, Phone, Mail, Calendar, Users, Building2, MessageCircle, IndianRupee,
 } from 'lucide-react';
 import { useStore, selectors } from '@/store';
 import apiClient from '@/lib/apiClient';
 import { fmtDate } from '@/shared/utils/date';
+import { formatCurrency } from '@/shared/utils/format';
+import { calcVoucherPricing } from '@/shared/utils/finance';
 import { whatsapp, gmail } from '@/shared/utils/email';
 import { cn } from '@/shared/utils/cn';
 import { RecordNumberBadge } from '@/shared/components/RecordNumberBadge';
@@ -89,6 +91,7 @@ export default function VoucherDetail() {
   const typeMeta = VOUCHER_TYPES.find(t => t.value === voucher.type);
   const isDraft     = voucher.status === 'draft';
   const isIssued    = voucher.status === 'issued';
+  const pricing     = calcVoucherPricing(voucher);
 
   async function handleDelete() {
     const ok = await confirm({
@@ -337,6 +340,59 @@ export default function VoucherDetail() {
                   {voucher.vendorEmail && <p className="text-sm text-gray-600">{voucher.vendorEmail}</p>}
                 </div>
               )}
+
+              {/* Pricing — internal. Only the customer amount is ever printed. */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-2 flex items-center gap-1.5">
+                  <IndianRupee className="w-3 h-3" />Pricing
+                </p>
+                {pricing.totalPayable === null ? (
+                  <p className="text-sm text-gray-400">
+                    Not priced yet.
+                    {(isDraft || isIssued) && (
+                      <button onClick={() => navigate(`/vouchers/${voucher.id}/edit`)}
+                        className="ml-1.5 text-indigo-600 hover:underline">Add pricing</button>
+                    )}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between text-gray-600">
+                      <span>Cost (vendor)</span><span className="font-medium text-gray-900">{formatCurrency(pricing.costPrice)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Selling</span><span className="font-medium text-gray-900">{formatCurrency(pricing.sellingPrice)}</span>
+                    </div>
+                    {pricing.gstRate > 0 && (
+                      <>
+                        {pricing.gstMode === 'INCLUDED' && (
+                          <div className="flex justify-between text-gray-600">
+                            <span>Taxable</span><span className="font-medium text-gray-700">{formatCurrency(pricing.taxableAmount)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-gray-600">
+                          <span>GST ({pricing.gstRate}% {pricing.gstMode === 'INCLUDED' ? 'incl.' : 'extra'})</span>
+                          <span className="font-medium text-amber-600">{formatCurrency(pricing.gstAmount)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between pt-1.5 border-t border-gray-100">
+                      <span className="text-gray-600 font-medium">Total Payable</span>
+                      <span className="font-bold text-indigo-700">{formatCurrency(pricing.totalPayable)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-600">
+                      <span>Gross Margin</span>
+                      <span className={cn('font-bold', pricing.grossProfit >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                        {formatCurrency(pricing.grossProfit)} · {pricing.marginPct.toFixed(1)}%
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 pt-1">
+                      {voucher.showPricing
+                        ? 'Customer amount is printed on this voucher.'
+                        : 'Pricing is hidden on the printed voucher.'}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {voucher.notes && (
                 <div><p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Notes</p>

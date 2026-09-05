@@ -569,6 +569,9 @@ model Voucher {
   gstRate          Float    @default(0)
   taxableAmount    Float    @default(0)
   totalPayable     Float?
+  costPrice        Float?
+  sellingPrice     Float?
+  showPricing      Boolean  @default(false)
   passengerIds     Json     @default("[]")
 
   @@index([tripId])

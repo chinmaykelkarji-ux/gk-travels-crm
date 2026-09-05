@@ -580,3 +580,61 @@ export function calcQuotationTotals(items: QuotationItemTotals[]): QuotationItem
 
   return { totalCost, totalSelling, grossProfit, marginPct };
 }
+
+// ─── Voucher Pricing ─────────────────────────────────────────
+//
+// A voucher prices a single service (one hotel stay, one transfer,
+// one visa…), so there are no line items — just what the vendor
+// charges us (costPrice) and what the customer pays (sellingPrice).
+//
+// GST is applied to the selling price through calcGst(), so a
+// voucher's totalPayable follows the same EXCLUDED/INCLUDED contract
+// as trips, bookings and quotations. Margin is Revenue − Supplier
+// Cost and deliberately ignores GST (invariant #4 above): GST is
+// collected on the customer's behalf and remitted, never profit.
+
+export interface VoucherPricingResult {
+  costPrice:     number;
+  sellingPrice:  number;
+  gstMode:       GstMode;
+  gstRate:       number;
+  taxableAmount: number;
+  gstAmount:     number;
+  /** null when no selling price has been entered — voucher is 'unpriced'. */
+  totalPayable:  number | null;
+  grossProfit:   number;
+  marginPct:     number;
+}
+
+export function calcVoucherPricing(voucher: {
+  costPrice?:    number | null;
+  sellingPrice?: number | null;
+  gstRate?:      number | null;
+  gstMode?:      GstMode | null;
+}): VoucherPricingResult {
+  const costPrice    = voucher.costPrice    || 0;
+  const sellingPrice = voucher.sellingPrice || 0;
+  const gstRate      = voucher.gstRate      || 0;
+  const gstMode      = voucher.gstMode      ?? 'EXCLUDED';
+
+  const gst = calcGst(sellingPrice, gstRate, gstMode);
+
+  // Margin is measured against the taxable base, so an INCLUDED-GST
+  // voucher isn't credited with profit it has to remit to the government.
+  const grossProfit = Math.round((gst.taxableAmount - costPrice) * 100) / 100;
+  const marginPct   = gst.taxableAmount > 0
+    ? Math.round((grossProfit / gst.taxableAmount) * 10000) / 100
+    : 0;
+
+  return {
+    costPrice,
+    sellingPrice,
+    gstMode,
+    gstRate,
+    taxableAmount: gst.taxableAmount,
+    gstAmount:     gst.gstAmount,
+    totalPayable:  sellingPrice > 0 ? gst.totalPayable : null,
+    grossProfit,
+    marginPct,
+  };
+}

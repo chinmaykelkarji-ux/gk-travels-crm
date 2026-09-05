@@ -1,4 +1,6 @@
 import { fmtDate } from '@/shared/utils/date';
+import { formatCurrency } from '@/shared/utils/format';
+import { calcVoucherPricing } from '@/shared/utils/finance';
 import { DocumentHeader } from './DocumentHeader';
 import { DocumentFooter } from './DocumentFooter';
 import { DOC_COLORS } from './theme';
@@ -36,6 +38,12 @@ interface VoucherPrintViewProps {
 
 export function VoucherPrintView({ voucher, companySettings, linkedTrip }: VoucherPrintViewProps) {
   const typeMeta = VOUCHER_TYPES.find(t => t.value === voucher.type);
+
+  // Vouchers are handed to guests and suppliers, so pricing prints only when
+  // explicitly enabled — and even then only the customer-facing amount.
+  // Supplier cost and margin are never rendered here.
+  const pricing     = calcVoucherPricing(voucher);
+  const printPrice  = voucher.showPricing === true && pricing.totalPayable !== null;
 
   // QR code via free public API (works with internet access during print)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&bgcolor=ffffff&data=${encodeURIComponent(voucher.voucherNumber)}`;
@@ -148,6 +156,38 @@ export function VoucherPrintView({ voucher, companySettings, linkedTrip }: Vouch
           {voucher.vendorName  && <div style={{ fontSize: 13, fontWeight: 700 }}>{voucher.vendorName}</div>}
           {voucher.vendorPhone && <div style={{ fontSize: 12, color: DOC_COLORS.textMedium, marginTop: 2 }}>{voucher.vendorPhone}</div>}
           {voucher.vendorEmail && <div style={{ fontSize: 12, color: DOC_COLORS.textMedium, marginTop: 2 }}>{voucher.vendorEmail}</div>}
+        </div>
+      )}
+
+      {/* Payment details — printed only when showPricing is enabled */}
+      {printPrice && (
+        <div className="page-break-avoid" style={{ border: `1px solid ${DOC_COLORS.border}`, borderRadius: 6, padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: DOC_COLORS.primary, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Payment Details</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <tbody>
+              {pricing.gstRate > 0 && (
+                <>
+                  <tr>
+                    <td style={{ padding: '3px 0', color: DOC_COLORS.textMedium }}>Taxable Amount</td>
+                    <td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(pricing.taxableAmount)}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '3px 0', color: DOC_COLORS.textMedium }}>GST @ {pricing.gstRate}%</td>
+                    <td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(pricing.gstAmount)}</td>
+                  </tr>
+                </>
+              )}
+              <tr>
+                <td style={{ padding: '6px 0 0', borderTop: `1px solid ${DOC_COLORS.border}`, fontWeight: 700 }}>Total Amount</td>
+                <td style={{ padding: '6px 0 0', borderTop: `1px solid ${DOC_COLORS.border}`, textAlign: 'right', fontWeight: 700, fontSize: 14, color: DOC_COLORS.primary }}>
+                  {formatCurrency(pricing.totalPayable)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p style={{ fontSize: 10, color: DOC_COLORS.textLight, margin: '8px 0 0' }}>
+            This voucher confirms the service booking. It is not a tax invoice.
+          </p>
         </div>
       )}
 

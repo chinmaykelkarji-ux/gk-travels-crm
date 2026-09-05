@@ -1,12 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, FileCheck, Clock, CheckCircle, XCircle, Send,
+  Plus, Search, FileCheck, Clock, CheckCircle, Send, IndianRupee,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import type { VoucherStatus, VoucherType } from '@/shared/types';
 import { fmtDate } from '@/shared/utils/date';
+import { formatCurrency, formatCurrencyShort } from '@/shared/utils/format';
+import { calcVoucherPricing } from '@/shared/utils/finance';
 import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -52,6 +54,10 @@ export default function Vouchers() {
     draft:     vouchers.filter(v => v.status === 'draft').length,
     issued:    vouchers.filter(v => v.status === 'issued').length,
     completed: vouchers.filter(v => v.status === 'completed').length,
+    // Cancelled vouchers are excluded — they represent no billable value.
+    value:     vouchers
+      .filter(v => v.status !== 'cancelled')
+      .reduce((sum, v) => sum + (calcVoucherPricing(v).totalPayable ?? 0), 0),
   }), [vouchers]);
 
   const pipeline = useMemo(() => {
@@ -95,12 +101,13 @@ export default function Vouchers() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
-          { label: 'Total',     value: kpis.total,     icon: FileCheck,   color: 'text-gray-900'    },
-          { label: 'Draft',     value: kpis.draft,     icon: Clock,       color: 'text-amber-600'   },
-          { label: 'Issued',    value: kpis.issued,    icon: Send,        color: 'text-indigo-600'  },
-          { label: 'Completed', value: kpis.completed, icon: CheckCircle, color: 'text-emerald-600' },
+          { label: 'Total',       value: kpis.total,                      icon: FileCheck,   color: 'text-gray-900'    },
+          { label: 'Draft',       value: kpis.draft,                      icon: Clock,       color: 'text-amber-600'   },
+          { label: 'Issued',      value: kpis.issued,                     icon: Send,        color: 'text-indigo-600'  },
+          { label: 'Completed',   value: kpis.completed,                  icon: CheckCircle, color: 'text-emerald-600' },
+          { label: 'Total Value', value: formatCurrencyShort(kpis.value), icon: IndianRupee, color: 'text-teal-600'    },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-2xl border border-gray-200 p-4">
             <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center mb-2">
@@ -169,14 +176,16 @@ export default function Vouchers() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {['Voucher #', 'Type', 'Customer', 'Destination', 'Vendor', 'Issue Date', 'Status', ''].map(h => (
-                    <th key={h} className="text-left text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap">{h}</th>
+                  {['Voucher #', 'Type', 'Customer', 'Destination', 'Vendor', 'Issue Date', 'Amount', 'Status', ''].map(h => (
+                    <th key={h} className={cn('text-[11px] font-semibold text-gray-500 px-4 py-3 whitespace-nowrap',
+                      h === 'Amount' ? 'text-right' : 'text-left')}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((v, i) => {
                   const typeMeta = VOUCHER_TYPES.find(t => t.value === v.type);
+                  const total    = calcVoucherPricing(v).totalPayable;
                   return (
                     <motion.tr key={v.id}
                       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02 }}
@@ -197,6 +206,11 @@ export default function Vouchers() {
                       <td className="px-4 py-3 text-gray-600 text-xs whitespace-nowrap">{v.vendorName || '—'}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                         {v.issueDate ? fmtDate(v.issueDate) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        {total === null
+                          ? <span className="text-xs text-gray-400">Unpriced</span>
+                          : <span className="font-semibold text-gray-900">{formatCurrency(total)}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={VOUCHER_STATUS_BADGE[v.status]}>{v.status}</Badge>

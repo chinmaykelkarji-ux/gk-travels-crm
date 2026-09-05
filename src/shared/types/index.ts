@@ -909,6 +909,15 @@ export interface Voucher {
   vendorPhone?: string;
   vendorEmail?: string;
 
+  // Pricing
+  /** What we pay the vendor for this service — internal only, never printed.
+   *  null clears a previously entered price (undefined would be dropped by JSON). */
+  costPrice?:      number | null;
+  /** Customer-facing price for this service, before GST is added / back-calculated. */
+  sellingPrice?:   number | null;
+  /** Print the customer amount on the voucher PDF. Supplier cost is never printed. */
+  showPricing?:    boolean;
+
   // GST
   gstRate?:        number;
   gstMode?:        GstMode;
