@@ -49,7 +49,13 @@ export function verifyToken(token: string): TokenPayload {
 
 // ─── Augmented request ────────────────────────────────────────
 
-export interface AuthRequest extends Request {
+// Express 5's default params type is `{ [key: string]: string | string[] }`
+// (it allows for repeatable params like `:id+`). Every route in this app uses
+// plain `:id` segments, so params are flat strings. Saying so here keeps
+// `req.params.id` usable as a string without a cast at each call site.
+export type RouteParams = Record<string, string>;
+
+export interface AuthRequest extends Request<RouteParams> {
   userId?:    string;
   userEmail?: string;
   userName?:  string;

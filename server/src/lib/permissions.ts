@@ -9,7 +9,7 @@
 
 import type { Response, NextFunction, RequestHandler } from 'express';
 import type { Role as UserRole } from '@prisma/client';
-import type { AuthRequest } from '../middleware/auth.js';
+import type { AuthRequest, RouteParams } from '../middleware/auth.js';
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ADMIN: ['*', 'users:read', 'users:write', 'ai:use'],
@@ -60,7 +60,9 @@ export function hasPermission(role: UserRole, permission: string): boolean {
 // ── requirePermission ──────────────────────────────────────
 // Must come AFTER requireAuth in the middleware chain.
 
-export function requirePermission(permission: string): RequestHandler {
+// Returns a handler typed with flat (string) route params so the param type
+// survives into the route's own handler — see AuthRequest in middleware/auth.ts.
+export function requirePermission(permission: string): RequestHandler<RouteParams> {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.userRole) {
       res.status(401).json({ error: 'Not authenticated' });

@@ -369,7 +369,7 @@ router.post('/:id/duplicate', async (req, res) => {
 
 // ── Convert to Trip ───────────────────────────────────────────
 
-router.post('/:id/convert-trip', async (req, res) => {
+router.post('/:id/convert-trip', async (req: AuthRequest, res) => {
   try {
     const q = await prisma.quotation.findUnique({
       where:   { id: req.params.id },
