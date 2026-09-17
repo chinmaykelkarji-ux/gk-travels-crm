@@ -652,7 +652,8 @@ export default function Settings() {
   const trips     = useStore(s => s.trips);
   const leads     = useStore(s => s.leads);
   const customers = useStore(s => s.customers);
-  const canEditOrg = usePermission(PERMISSIONS.SETTINGS_ORG);
+  const canEditOrg      = usePermission(PERMISSIONS.SETTINGS_ORG);
+  const canManageUsers  = usePermission(PERMISSIONS.SETTINGS_USERS);
 
   async function handleClearAll() {
     const ok = await confirm({
@@ -670,11 +671,16 @@ export default function Settings() {
         <h2 className="text-base font-bold text-gray-900 font-display">Settings</h2>
       </div>
 
-      <Tabs defaultValue="users">
+      {/* User Management calls /api/users, which is ADMIN-only. Landing a
+          non-admin on it by default shows an empty panel and a console 403,
+          so the tab is hidden and the default falls through to Data. */}
+      <Tabs defaultValue={canManageUsers ? 'users' : 'data'}>
         <TabsList>
+          {canManageUsers && (
           <TabsTrigger value="users" className="gap-1.5">
             <Users className="w-3.5 h-3.5" /> User Management
           </TabsTrigger>
+          )}
           {canEditOrg && (
             <TabsTrigger value="company" className="gap-1.5">
               <Building2 className="w-3.5 h-3.5" /> Company Master
@@ -689,9 +695,11 @@ export default function Settings() {
         </TabsList>
 
         {/* Users tab */}
-        <TabsContent value="users">
-          <UsersTab />
-        </TabsContent>
+        {canManageUsers && (
+          <TabsContent value="users">
+            <UsersTab />
+          </TabsContent>
+        )}
 
         {/* Company Master tab */}
         {canEditOrg && (

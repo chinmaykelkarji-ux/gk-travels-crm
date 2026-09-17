@@ -10,6 +10,7 @@ import { Router } from 'express';
 import type { Response } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
+import { isAiConfigured } from '../lib/gemini.js';
 import {
   generatePaymentReminder,
   generateBookingConfirmation,
@@ -25,6 +26,19 @@ import {
 const router = Router();
 router.use(requireAuth);
 router.use(requirePermission('ai:use'));
+
+// AI is optional. When the key is absent every other part of the API keeps
+// working and only these routes report themselves unavailable.
+router.use((_req, res, next) => {
+  if (!isAiConfigured()) {
+    res.status(503).json({
+      error: 'AI features are not configured on this server.',
+      code:  'AI_NOT_CONFIGURED',
+    });
+    return;
+  }
+  next();
+});
 
 // ── handleAiRoute ─────────────────────────────────────────────
 // Wraps every AI call so generation failures never crash the server.

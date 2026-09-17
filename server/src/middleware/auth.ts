@@ -3,11 +3,20 @@ import jwt from 'jsonwebtoken';
 
 // ─── Constants ────────────────────────────────────────────────
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'gkcrm_dev_secret_change_in_production';
+// No fallback, in any environment. A default signing secret that ships in the
+// repository lets anyone mint a valid admin session, so a missing value must
+// stop the process rather than quietly downgrade every session to forgeable.
+const JWT_SECRET_RAW = process.env.JWT_SECRET;
 
-if (process.env.NODE_ENV === 'production' && JWT_SECRET === 'gkcrm_dev_secret_change_in_production') {
-  console.error('[auth] FATAL: JWT_SECRET is using the default dev value in production. Set a strong secret in your environment variables.');
+if (!JWT_SECRET_RAW || JWT_SECRET_RAW.length < 32) {
+  throw new Error(
+    '[auth] JWT_SECRET is missing or too short (min 32 chars). ' +
+    'Set a long random value in the environment before starting the API.',
+  );
 }
+
+// Re-bound as a plain string so jwt.sign/verify resolve their string overloads.
+const JWT_SECRET: string = JWT_SECRET_RAW;
 
 export const COOKIE_NAME = 'gkcrm_session';
 

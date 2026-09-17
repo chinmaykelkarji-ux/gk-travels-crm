@@ -82,11 +82,26 @@ async function nextCustomerId(): Promise<string> {
   return `CUS-${year}-${String(seq).padStart(4, '0')}`;
 }
 
+// Explicit allow-list of the columns a client may write. Anything else in the
+// body is ignored instead of being handed to Prisma, which (a) stops an unknown
+// field from failing the entire write and (b) keeps server-owned columns —
+// customerNumber, createdAt, updatedAt — out of reach.
+const WRITABLE_FIELDS = [
+  'name', 'phone', 'altPhone', 'email', 'address', 'city', 'state',
+  'preferences', 'notes', 'tripIds', 'documents', 'createdDate', 'sourceLeadId',
+  'billingAddress', 'companyName', 'gstNumber', 'gstRegistered',
+  // Identity documents are NOT listed yet — the columns do not exist in the
+  // database. Dropping them here is what stops the whole write failing with
+  // "Unknown argument `passportNo`". Add them only after running migration
+  // 20260917000000_customer_identity_documents. See prisma/schema.prisma.
+] as const;
+
 function sanitize(body: Record<string, unknown>) {
-  // customerNumber is DB-generated only (sequence-backed) — never accept it
-  // from the client on create or update.
-  const { createdAt, updatedAt, customerNumber, ...rest } = body;
-  return rest;
+  const clean: Record<string, unknown> = {};
+  for (const key of WRITABLE_FIELDS) {
+    if (body[key] !== undefined) clean[key] = body[key];
+  }
+  return clean;
 }
 
 export default router;

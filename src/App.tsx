@@ -266,7 +266,7 @@ export default function App() {
                 <Route path="/itineraries/new"       element={<ItineraryBuilder />} />
                 <Route path="/itineraries/:id"       element={<ItineraryDetail />} />
                 <Route path="/itineraries/:id/edit"  element={<ItineraryBuilder />} />
-                <Route path="/analytics"             element={<Analytics />} />
+                <Route path="/analytics"             element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Analytics /></RoleGuard>} />
                 <Route path="/vouchers"              element={<Vouchers />} />
                 <Route path="/vouchers/new"          element={<VoucherFormPage />} />
                 <Route path="/vouchers/:id"          element={<VoucherDetail />} />
@@ -275,14 +275,14 @@ export default function App() {
                 <Route path="/invoices/new"          element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceBuilder /></RoleGuard>} />
                 <Route path="/invoices/:id"          element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceDetail /></RoleGuard>} />
                 <Route path="/invoices/:id/edit"     element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><InvoiceBuilder /></RoleGuard>} />
-                <Route path="/credit-notes"          element={<CreditNotes />} />
-                <Route path="/credit-notes/new"      element={<CreditDebitNoteForm kind="credit" />} />
-                <Route path="/credit-notes/:id"      element={<CreditDebitNoteDetail kind="credit" />} />
-                <Route path="/credit-notes/:id/edit" element={<CreditDebitNoteForm kind="credit" />} />
-                <Route path="/debit-notes"           element={<DebitNotes />} />
-                <Route path="/debit-notes/new"       element={<CreditDebitNoteForm kind="debit" />} />
-                <Route path="/debit-notes/:id"       element={<CreditDebitNoteDetail kind="debit" />} />
-                <Route path="/debit-notes/:id/edit"  element={<CreditDebitNoteForm kind="debit" />} />
+                <Route path="/credit-notes"          element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditNotes /></RoleGuard>} />
+                <Route path="/credit-notes/new"      element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteForm kind="credit" /></RoleGuard>} />
+                <Route path="/credit-notes/:id"      element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteDetail kind="credit" /></RoleGuard>} />
+                <Route path="/credit-notes/:id/edit" element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteForm kind="credit" /></RoleGuard>} />
+                <Route path="/debit-notes"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><DebitNotes /></RoleGuard>} />
+                <Route path="/debit-notes/new"       element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteForm kind="debit" /></RoleGuard>} />
+                <Route path="/debit-notes/:id"       element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteDetail kind="debit" /></RoleGuard>} />
+                <Route path="/debit-notes/:id/edit"  element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><CreditDebitNoteForm kind="debit" /></RoleGuard>} />
                 <Route path="/gst-reports"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><GstReports /></RoleGuard>} />
                 <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
                 <Route path="/daily-ops"             element={<DailyOps />} />

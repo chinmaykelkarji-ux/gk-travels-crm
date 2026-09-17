@@ -44,9 +44,37 @@ model Customer {
   gstNumber      String?
   gstRegistered  Boolean  @default(false)
   state          String?
+
+  // ── PENDING: identity documents ────────────────────────────────────────
+  // The customer form has always submitted passportNo / passportExpiry /
+  // panNumber, but these columns do not exist, so Prisma rejects the whole
+  // write and the optimistic store still reports success. The route now
+  // drops unknown fields so saves succeed, but the data is not yet stored.
+  //
+  // To finish the fix, in this order:
+  //   1. Run prisma/migrations/20260917000000_customer_identity_documents
+  //      against the database.
+  //   2. Uncomment the four fields below.
+  //   3. Add them to WRITABLE_FIELDS in server/src/routes/customers.ts.
+  //   4. Deploy.
+  //
+  // Do NOT uncomment before step 1: Prisma lists every model column in its
+  // RETURNING clause, so declaring a column the database lacks breaks every
+  // customer read, not just writes.
+  //
+  // Aadhaar is deliberately excluded — UIDAI rules restrict retention and
+  // nothing in the product collects it.
+  //
+  // passportNo      String?
+  // passportExpiry  String?
+  // passportCountry String?
+  // panNumber       String?
+
   enquiries      Enquiry[]
   salesQuotes    SalesQuote[]
 
+  @@index([phone])
+  @@index([email])
   @@map("customers")
 }
 
@@ -75,6 +103,9 @@ model Lead {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  @@index([status])
+  @@index([assignedTo])
+  @@index([followUpDate])
   @@map("leads")
 }
 
@@ -126,6 +157,9 @@ model Trip {
   tasks               Task[]
   services            TripService[]
 
+  @@index([status])
+  @@index([departure])
+  @@index([invoiceId])
   @@map("trips")
 }
 
@@ -162,6 +196,10 @@ model Booking {
   serviceMarginMode Boolean  @default(false)
   passengerIds      Json     @default("[]")
 
+  @@index([refId])
+  @@index([status])
+  @@index([type])
+  @@index([invoiceId])
   @@map("bookings")
 }
 
@@ -183,6 +221,11 @@ model Payment {
   updatedAt  DateTime @updatedAt
   trip       Trip?    @relation(fields: [tripId], references: [id])
 
+  @@index([tripId])
+  @@index([customerId])
+  @@index([bookingId])
+  @@index([type, status])
+  @@index([date])
   @@map("payments")
 }
 
@@ -270,6 +313,9 @@ model Task {
   updatedAt     DateTime @updatedAt
   trip          Trip?    @relation(fields: [tripId], references: [id])
 
+  @@index([tripId])
+  @@index([status, dueDate])
+  @@index([assignedTo])
   @@map("tasks")
 }
 

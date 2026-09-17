@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 import { logActivity } from '../lib/activity.js';
 import { prisma } from '../lib/prisma.js';
 import { getOrCreateCompanySettings, updateCompanySettings } from '../services/invoiceService.js';
@@ -16,10 +16,30 @@ router.get('/', async (_req, res) => {
 });
 
 // ── Update ────────────────────────────────────────────────────
+//
+// ADMIN only. This single row holds the agency's GSTIN, PAN, bank account and
+// the GST period freeze date, and it is printed on every invoice — changing
+// the bank details silently redirects customer payments.
+//
+// Only these columns may be written. Anything else in the body is ignored
+// rather than passed through to Prisma.
+const EDITABLE_FIELDS = [
+  'companyName', 'legalName', 'gstin', 'pan',
+  'addressLine1', 'addressLine2', 'city', 'state', 'stateCode', 'pincode',
+  'phone', 'email', 'website', 'logoUrl',
+  'bankName', 'bankAccountName', 'bankAccountNumber', 'bankIfsc', 'bankBranch',
+  'invoicePrefix', 'invoiceTerms', 'authorizedSignatory', 'signatureUrl',
+  'gstFrozenUntil',
+] as const;
 
-router.put('/', async (req: AuthRequest, res) => {
+router.put('/', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
-    const { id, createdAt, updatedAt, ...data } = req.body as Record<string, unknown>;
+    const body = req.body as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    for (const key of EDITABLE_FIELDS) {
+      if (body[key] !== undefined) data[key] = body[key];
+    }
+
     const before = await getOrCreateCompanySettings();
     const updated = await updateCompanySettings(
       data as Parameters<typeof updateCompanySettings>[0],

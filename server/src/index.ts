@@ -23,9 +23,18 @@ const PORT = Number(process.env.PORT) || 3001;
 // if the admin already exists the password is NOT overwritten.
 
 async function ensureDefaultAdmin() {
-  const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL ?? 'chinmaykelkara@gmail.com').toLowerCase();
-  const ADMIN_NAME  =  process.env.DEFAULT_ADMIN_NAME  ?? 'Chinmay';
-  const ADMIN_PASS  =  process.env.DEFAULT_ADMIN_PASS  ?? 'Chinmay#1015';
+  const rawEmail   = process.env.DEFAULT_ADMIN_EMAIL;
+  const ADMIN_PASS = process.env.DEFAULT_ADMIN_PASS;
+  const ADMIN_NAME = process.env.DEFAULT_ADMIN_NAME ?? 'Admin';
+
+  // No default credentials. Set DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASS in
+  // .env to bootstrap the first account, or run `npm run seed:users`.
+  if (!rawEmail || !ADMIN_PASS) {
+    console.log('ℹ️  Admin bootstrap skipped — set DEFAULT_ADMIN_EMAIL and DEFAULT_ADMIN_PASS to enable it.');
+    return;
+  }
+
+  const ADMIN_EMAIL = rawEmail.toLowerCase();
 
   const existing = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
   if (existing) {

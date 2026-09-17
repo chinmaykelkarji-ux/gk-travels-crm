@@ -8,9 +8,16 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
+
+// Full P&L, per-trip margins, vendor costs and customer revenue. Previously
+// reachable by any authenticated account — the Sidebar hid the link but the
+// API did not check. Only Analytics.tsx consumes these endpoints, so gating
+// the whole router affects nothing else.
+router.use(requirePermission('reports:read'));
 
 // ── Date helpers ──────────────────────────────────────────────
 

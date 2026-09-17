@@ -8,11 +8,25 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-if (!process.env.GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY is required');
+// The client is built on first use, never at import time. AI is an optional
+// feature: throwing here would propagate up the import chain
+// (app.ts → routes/ai.ts → aiMessageService.ts → here) and prevent the whole
+// Express app from being constructed, taking down login and every other
+// endpoint because one optional key was missing.
+let genAI: GoogleGenerativeAI | null = null;
+
+/** True when the Gemini API key is configured — routes use this to return 503. */
+export function isAiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY);
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+function getClient(): GoogleGenerativeAI {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('AI is not configured — GEMINI_API_KEY is not set');
+  }
+  genAI ??= new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  return genAI;
+}
 
 export async function callGemini(
   systemPrompt: string,
@@ -20,7 +34,7 @@ export async function callGemini(
   maxTokens: number = 1000,
 ): Promise<string> {
   try {
-    const model = genAI.getGenerativeModel({
+    const model = getClient().getGenerativeModel({
       model: 'gemini-2.5-flash-lite',
       systemInstruction: systemPrompt,
       generationConfig: {

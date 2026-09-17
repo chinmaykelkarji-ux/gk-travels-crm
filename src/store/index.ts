@@ -52,10 +52,25 @@ function onMutationError(label: string) {
     // 401/403 — apiClient interceptor already redirects to /login, no toast needed
     if (status === 401 || status === 403) return;
     toast.error(
-      'Save failed',
-      `Could not save "${label}" to the database — check your connection.`,
+      `Could not save ${label}`,
+      'The change is showing on screen but was NOT written to the database. ' +
+      'Check your connection and try again — it will disappear on refresh.',
     );
   };
+}
+
+// ─── Persist a recalculated trip balance ─────────────────────────
+// Recording, editing or removing a receivable entry changes what a trip has
+// collected. Trip.paidAmount / Trip.balanceDue are cached columns that the
+// dashboard, the analytics KPIs, the alerts screen and the payment-reminder
+// scheduler all read straight from the database — so the recalculated figures
+// have to be written back, not just held in Zustand. Without this the trip
+// reads as unpaid again after the next refresh and paid customers get chased.
+function persistTripBalance(trips: Trip[], tripId: string | null | undefined): void {
+  if (!tripId) return;
+  const trip = trips.find(t => t.id === tripId);
+  if (!trip) return;
+  void apiClient.put(`/trips/${tripId}`, trip).catch(onMutationError('trip balance'));
 }
 
 // â”€â”€â”€ Activity Entry Factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -377,7 +392,7 @@ export const useStore = create<GKStore>()(
               }));
             }
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('trip'));
         get().refreshAllReminders();
         return trip;
       },
@@ -410,7 +425,7 @@ export const useStore = create<GKStore>()(
           return { trips: newTrips, receivables: newReceivables };
         });
         const updated = get().trips.find(t => t.id === id);
-        if (updated) void apiClient.put(`/trips/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/trips/${id}`, updated).catch(onMutationError('trip'));
         get().refreshAllReminders();
       },
 
@@ -531,7 +546,7 @@ export const useStore = create<GKStore>()(
           leads:       [lead, ...s.leads],
           activityLog: [leadEntry, ...s.activityLog].slice(0, 500),
         }));
-        void apiClient.post('/leads', lead).catch(onMutationError(''));
+        void apiClient.post('/leads', lead).catch(onMutationError('lead'));
         return lead;
       },
 
@@ -540,7 +555,7 @@ export const useStore = create<GKStore>()(
           leads: s.leads.map(l => l.id === id ? { ...l, ...data } : l),
         }));
         const updated = get().leads.find(l => l.id === id);
-        if (updated) void apiClient.put(`/leads/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/leads/${id}`, updated).catch(onMutationError('lead'));
       },
 
       deleteLead(id) {
@@ -659,7 +674,7 @@ export const useStore = create<GKStore>()(
               }));
             }
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('customer'));
         return cust;
       },
 
@@ -668,7 +683,7 @@ export const useStore = create<GKStore>()(
           customers: s.customers.map(c => c.id === id ? { ...c, ...data } : c),
         }));
         const updated = get().customers.find(c => c.id === id);
-        if (updated) void apiClient.put(`/customers/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/customers/${id}`, updated).catch(onMutationError('customer'));
       },
 
       deleteCustomer(id) {
@@ -692,7 +707,7 @@ export const useStore = create<GKStore>()(
         }
 
         set((s: GKStore) => ({ customers: s.customers.filter(c => c.id !== id) }));
-        void apiClient.delete(`/customers/${id}`).catch(onMutationError(''));
+        void apiClient.delete(`/customers/${id}`).catch(onMutationError('customer deletion'));
         get().logActivity('customer_deleted', `Customer ${id} (${customer.name}) deleted`, 'customer', id);
         return { ok: true };
       },
@@ -729,7 +744,7 @@ export const useStore = create<GKStore>()(
           createdDate:           today(),
         };
         set((s) => ({ passengers: [passenger, ...s.passengers] }));
-        void apiClient.post('/passengers', passenger).catch(onMutationError(''));
+        void apiClient.post('/passengers', passenger).catch(onMutationError('passenger'));
         return passenger;
       },
 
@@ -738,12 +753,12 @@ export const useStore = create<GKStore>()(
           passengers: s.passengers.map(p => p.id === id ? { ...p, ...data } : p),
         }));
         const updated = get().passengers.find(p => p.id === id);
-        if (updated) void apiClient.put('/passengers/' + id, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put('/passengers/' + id, updated).catch(onMutationError('passenger'));
       },
 
       deletePassenger(id) {
         set((s) => ({ passengers: s.passengers.filter(p => p.id !== id) }));
-        void apiClient.delete('/passengers/' + id).catch(onMutationError(''));
+        void apiClient.delete('/passengers/' + id).catch(onMutationError('passenger deletion'));
       },
 
       createBooking(data) {
@@ -777,7 +792,7 @@ export const useStore = create<GKStore>()(
           notes:         data.notes         ?? '',
         };
         set((s: GKStore) => ({ bookings: [booking, ...s.bookings] }));
-        void apiClient.post('/bookings', booking).catch(onMutationError(''));
+        void apiClient.post('/bookings', booking).catch(onMutationError('booking'));
         if (booking.refId) get().recalcTripFinance(booking.refId);
         return booking;
       },
@@ -799,7 +814,7 @@ export const useStore = create<GKStore>()(
           return { bookings: newBookings, receivables: newReceivables };
         });
         const booking = get().bookings.find(b => b.id === id);
-        if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(onMutationError(''));
+        if (booking) void apiClient.put(`/bookings/${id}`, booking).catch(onMutationError('booking'));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
@@ -809,7 +824,7 @@ export const useStore = create<GKStore>()(
           bookings:    s.bookings.filter(b => b.id !== id),
           receivables: s.receivables.filter(r => r.bookingId !== id),
         }));
-        void apiClient.delete(`/bookings/${id}`).catch(onMutationError(''));
+        void apiClient.delete(`/bookings/${id}`).catch(onMutationError('booking deletion'));
         if (booking?.refId) get().recalcTripFinance(booking.refId);
       },
 
@@ -859,7 +874,7 @@ export const useStore = create<GKStore>()(
           payment.tripId || payment.bookingId || id,
         );
 
-        void apiClient.post('/payments', payment).catch(onMutationError(''));
+        void apiClient.post('/payments', payment).catch(onMutationError('payment'));
         return payment;
       },
 
@@ -882,7 +897,7 @@ export const useStore = create<GKStore>()(
           : get().payments.supplierPayments;
         const pay = list.find(p => p.id === id);
         if (pay?.tripId) get().recalcTripFinance(pay.tripId);
-        if (pay) void apiClient.put(`/payments/${id}`, pay).catch(onMutationError(''));
+        if (pay) void apiClient.put(`/payments/${id}`, pay).catch(onMutationError('payment'));
       },
 
       deletePayment(id, type) {
@@ -899,7 +914,7 @@ export const useStore = create<GKStore>()(
           return { payments };
         });
         if (pay?.tripId) get().recalcTripFinance(pay.tripId);
-        void apiClient.delete(`/payments/${id}`).catch(onMutationError(''));
+        void apiClient.delete(`/payments/${id}`).catch(onMutationError('payment deletion'));
       },
 
       // â•â• Task Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -921,14 +936,14 @@ export const useStore = create<GKStore>()(
           createdDate: today(),
         };
         set((s: GKStore) => ({ tasks: [task, ...s.tasks] }));
-        void apiClient.post('/tasks', task).catch(onMutationError(''));
+        void apiClient.post('/tasks', task).catch(onMutationError('task'));
         return task;
       },
 
       updateTask(id, data) {
         set((s: GKStore) => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...data } : t) }));
         const updated = get().tasks.find(t => t.id === id);
-        if (updated) void apiClient.put(`/tasks/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/tasks/${id}`, updated).catch(onMutationError('task'));
       },
 
       completeTask(id) {
@@ -1046,7 +1061,7 @@ export const useStore = create<GKStore>()(
           subject:    input.subject,
           entityType: input.entityType,
           entityId:   input.entityId,
-        }).catch(onMutationError(''));
+        }).catch(onMutationError('communication log'));
       },
 
       // â•â• Vendor Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1072,7 +1087,7 @@ export const useStore = create<GKStore>()(
           createdDate:   today(),
         };
         set((s: GKStore) => ({ vendors: [vendor, ...s.vendors] }));
-        void apiClient.post('/vendors', vendor).catch(onMutationError(''));
+        void apiClient.post('/vendors', vendor).catch(onMutationError('vendor'));
         return vendor;
       },
 
@@ -1081,7 +1096,7 @@ export const useStore = create<GKStore>()(
           vendors: s.vendors.map(v => v.id === id ? { ...v, ...data } : v),
         }));
         const updated = get().vendors.find(v => v.id === id);
-        if (updated) void apiClient.put(`/vendors/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/vendors/${id}`, updated).catch(onMutationError('vendor'));
       },
 
       deleteVendor(id) {
@@ -1117,7 +1132,7 @@ export const useStore = create<GKStore>()(
           createdDate: today(),
         };
         set((s: GKStore) => ({ vendorPayments: [payment, ...s.vendorPayments] }));
-        void apiClient.post('/vendors/payments', payment).catch(onMutationError(''));
+        void apiClient.post('/vendors/payments', payment).catch(onMutationError('vendor payment'));
         return payment;
       },
 
@@ -1131,7 +1146,7 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const updated = get().vendorPayments.find(p => p.id === id);
-        if (updated) void apiClient.put(`/vendors/payments/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/vendors/payments/${id}`, updated).catch(onMutationError('vendor payment'));
       },
 
       deleteVendorPayment(id) {
@@ -1147,7 +1162,7 @@ export const useStore = create<GKStore>()(
           ),
         }));
         void apiClient.put(`/vendors/payments/${id}/mark-paid`, { paidDate: date })
-          .catch(onMutationError(''));
+          .catch(onMutationError('vendor settlement'));
       },
 
       // â•â• Quotation Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1190,7 +1205,7 @@ export const useStore = create<GKStore>()(
               quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
             }));
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('quotation'));
         return quotation;
       },
 
@@ -1204,7 +1219,7 @@ export const useStore = create<GKStore>()(
               quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
             }));
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('quotation'));
       },
 
       deleteQuotation(id) {
@@ -1228,7 +1243,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('quotation status'));
       },
 
       duplicateQuotation(sourceId) {
@@ -1253,7 +1268,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             quotations: s.quotations.map(q => q.id === id ? r.data as Quotation : q),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('quotation duplicate'));
         return copy;
       },
 
@@ -1335,7 +1350,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('itinerary'));
         return itinerary;
       },
 
@@ -1349,7 +1364,7 @@ export const useStore = create<GKStore>()(
             .then(r => set((s: GKStore) => ({
               itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
             })))
-            .catch(onMutationError(''));
+            .catch(onMutationError('itinerary'));
         }
       },
 
@@ -1365,7 +1380,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             itineraries: s.itineraries.map(i => i.id === id ? r.data as Itinerary : i),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('itinerary status'));
       },
 
       // â•â• Voucher Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1418,7 +1433,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('voucher'));
         return voucher;
       },
 
@@ -1431,7 +1446,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('voucher'));
       },
 
       deleteVoucher(id) {
@@ -1450,7 +1465,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('voucher status'));
       },
 
       duplicateVoucher(sourceId) {
@@ -1468,7 +1483,7 @@ export const useStore = create<GKStore>()(
           .then(r => set((s: GKStore) => ({
             vouchers: s.vouchers.map(v => v.id === id ? r.data as Voucher : v),
           })))
-          .catch(onMutationError(''));
+          .catch(onMutationError('voucher duplicate'));
         return copy;
       },
 
@@ -1513,7 +1528,7 @@ export const useStore = create<GKStore>()(
           id,
         );
 
-        void apiClient.post('/receivables', receivable).catch(onMutationError(''));
+        void apiClient.post('/receivables', receivable).catch(onMutationError('receivable'));
         return receivable;
       },
 
@@ -1531,7 +1546,7 @@ export const useStore = create<GKStore>()(
           }),
         }));
         const updated = get().receivables.find(r => r.id === id);
-        if (updated) void apiClient.put(`/receivables/${id}`, updated).catch(onMutationError(''));
+        if (updated) void apiClient.put(`/receivables/${id}`, updated).catch(onMutationError('receivable'));
       },
 
       deleteReceivable(id) {
@@ -1545,7 +1560,7 @@ export const useStore = create<GKStore>()(
             id,
           );
         }
-        void apiClient.delete(`/receivables/${id}`).catch(onMutationError(''));
+        void apiClient.delete(`/receivables/${id}`).catch(onMutationError('receivable deletion'));
       },
 
       addReceivableEntry(receivableId, entry) {
@@ -1604,7 +1619,8 @@ export const useStore = create<GKStore>()(
             const updated = get().receivables.find(r => r.id === receivableId);
             if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('receivable payment'));
+        persistTripBalance(get().trips, get().receivables.find(r => r.id === receivableId)?.tripId);
         return newEntry;
       },
 
@@ -1636,7 +1652,8 @@ export const useStore = create<GKStore>()(
             const updated = get().receivables.find(r => r.id === receivableId);
             if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('receivable payment removal'));
+        persistTripBalance(get().trips, get().receivables.find(r => r.id === receivableId)?.tripId);
       },
 
       updateReceivableEntry(receivableId, entryId, data) {
@@ -1675,7 +1692,8 @@ export const useStore = create<GKStore>()(
             const updated = get().receivables.find(r => r.id === receivableId);
             if (updated) return apiClient.put(`/receivables/${receivableId}`, updated);
           })
-          .catch(onMutationError(''));
+          .catch(onMutationError('receivable payment update'));
+        persistTripBalance(get().trips, get().receivables.find(r => r.id === receivableId)?.tripId);
       },
 
       // â•â• Invoice Actions (GST) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

@@ -1,0 +1,29 @@
+{
+  // Type-checking for the Express API and the Vercel function entry point.
+  //
+  // The root tsconfig.json sets "include": ["src"], so `npm run build` has
+  // never type-checked server/ or api/ — errors there surface only as runtime
+  // 500s in production. This config makes them visible.
+  //
+  // Run with: npm run typecheck:server
+  //
+  // It is deliberately NOT part of `npm run build` yet: there is an existing
+  // backlog of ~72 errors (mostly req.query typed string | string[] and cast
+  // to string before reaching Prisma). Burn that down, then add this to the
+  // build and to CI so it can never regress.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["server/src", "api"]
+}

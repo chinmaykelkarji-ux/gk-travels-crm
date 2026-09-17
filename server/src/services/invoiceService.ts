@@ -61,14 +61,10 @@ async function getNextDocNumber(tx: DbClient, docType: string, financialYear: st
   return seq.lastNumber;
 }
 
-// Frees a number only if it was the most-recently issued one for that FY —
-// per spec, deleting a non-latest invoice does NOT renumber/reuse earlier gaps.
-async function releaseDocNumber(tx: DbClient, docType: string, financialYear: string, sequenceNumber: number) {
-  await tx.numberingSequence.updateMany({
-    where: { docType, financialYear, lastNumber: sequenceNumber },
-    data:  { lastNumber: { decrement: 1 } },
-  });
-}
+// NOTE: document numbers are never released back to the sequence. Decrementing
+// the counter after a delete lets the next document re-use an already-issued
+// GST number, putting two documents in the same slot in the series. A gap is
+// explainable at filing time; a duplicate is an audit finding.
 
 // ── GST period freeze ───────────────────────────────────────────
 
@@ -379,6 +375,19 @@ export async function cancelInvoice(id: string, reason: string, userId?: string 
       },
     });
 
+    // Release the invoice lock taken in createInvoice. Without this the source
+    // bookings/trips stay pointed at a cancelled invoice and can never be
+    // re-invoiced — which pushes staff to delete invoices instead of
+    // cancelling them, destroying the payment history with it.
+    const lockedBookingIds = (existing.bookingIds as string[] | null) ?? [];
+    const lockedTripIds    = (existing.tripIds    as string[] | null) ?? [];
+    if (lockedBookingIds.length) {
+      await tx.booking.updateMany({ where: { id: { in: lockedBookingIds } }, data: { invoiceId: null } });
+    }
+    if (lockedTripIds.length) {
+      await tx.trip.updateMany({ where: { id: { in: lockedTripIds } }, data: { invoiceId: null } });
+    }
+
     if (existing.receivableId) {
       const rcv = await tx.receivable.findUnique({ where: { id: existing.receivableId }, include: { entries: true } });
       if (rcv) {
@@ -417,15 +426,34 @@ export async function deleteInvoice(id: string, userId?: string | null) {
       throw new Error('Cannot delete an invoice that has Credit/Debit Notes issued against it — cancel those first');
     }
 
+    // The linked Receivable cascade-deletes its ReceivableEntry rows, so
+    // deleting an invoice that has collected money would destroy the record
+    // that the customer paid. Cancel it instead — cancellation zeroes the
+    // receivable and releases the booking/trip locks without losing history.
+    if (existing.receivableId) {
+      const entryCount = await tx.receivableEntry.count({
+        where: { receivableId: existing.receivableId },
+      });
+      if (entryCount > 0) {
+        throw new Error(
+          `Cannot delete invoice ${existing.invoiceNumber} — ${entryCount} payment(s) have been recorded against it. ` +
+          'Cancel the invoice instead so the payment history is preserved.',
+        );
+      }
+    }
+
     const bookingIds = (existing.bookingIds as string[]) ?? [];
     const tripIds    = (existing.tripIds as string[]) ?? [];
     if (bookingIds.length) await tx.booking.updateMany({ where: { id: { in: bookingIds } }, data: { invoiceId: null } });
     if (tripIds.length)    await tx.trip.updateMany({ where: { id: { in: tripIds } }, data: { invoiceId: null } });
 
-    await releaseDocNumber(tx, 'INV', existing.financialYear, existing.sequenceNumber);
+    // NOTE: the sequence number is deliberately NOT released. Re-using an
+    // issued GST invoice number would put two documents into the same slot in
+    // the series. A gap is explainable at filing time; a duplicate is not.
 
     if (existing.receivableId) {
-      await tx.receivable.delete({ where: { id: existing.receivableId } }).catch(() => {});
+      // Safe now: guarded above, so this receivable has no payment entries.
+      await tx.receivable.delete({ where: { id: existing.receivableId } });
     }
 
     await tx.invoice.delete({ where: { id } });
@@ -657,7 +685,7 @@ export async function deleteCreditNote(id: string, userId?: string | null) {
       }
     }
 
-    await releaseDocNumber(tx, 'CN', existing.financialYear, existing.sequenceNumber);
+    // Sequence number deliberately not released — see deleteInvoice.
     await tx.creditNote.delete({ where: { id } });
 
     await logActivity(tx, {
@@ -878,7 +906,7 @@ export async function deleteDebitNote(id: string, userId?: string | null) {
       }
     }
 
-    await releaseDocNumber(tx, 'DN', existing.financialYear, existing.sequenceNumber);
+    // Sequence number deliberately not released — see deleteInvoice.
     await tx.debitNote.delete({ where: { id } });
 
     await logActivity(tx, {
