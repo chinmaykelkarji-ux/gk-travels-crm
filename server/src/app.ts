@@ -13,6 +13,7 @@ import cookieParser from 'cookie-parser';
 
 import { requestContextMiddleware } from './core/requestContext.js';
 import { errorHandler, notFoundHandler } from './core/errors.js';
+import { securityHeaders, apiLimiter } from './core/security.js';
 
 import authRouter        from './routes/auth.js';
 import dataRouter        from './routes/data.js';
@@ -50,6 +51,7 @@ const app = express();
 // Vercel/other proxies terminate TLS; trust the first hop so `secure` cookies
 // and client IPs (rate limiting) are read from the forwarded headers.
 app.set('trust proxy', 1);
+app.use(securityHeaders);
 
 // ── CORS ───────────────────────────────────────────────────────
 // Same-origin in production (frontend and API share the Vercel origin).
@@ -76,6 +78,7 @@ app.use(express.json({ limit: '2mb' }));
 
 // Request id + actor context for every request (core/requestContext.ts).
 app.use(requestContextMiddleware);
+app.use('/api', apiLimiter);
 
 // ── Request logging ────────────────────────────────────────────
 

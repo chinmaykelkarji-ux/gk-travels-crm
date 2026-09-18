@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { setContextUser, DEFAULT_ORGANIZATION_ID } from '../core/requestContext.js';
+import { validateSession } from '../core/sessions.js';
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -47,8 +48,10 @@ export interface TokenPayload {
   email:  string;
   name:   string;
   role:   string;
-  /** Organisation the session belongs to. Absent on sessions issued before tenancy → default org. */
+  /** Organisation the session belongs to. */
   orgId?: string;
+  /** Server-side session id (core/sessions.ts). Tokens without it are rejected. */
+  sid?:   string;
 }
 
 export function signToken(payload: TokenPayload): string {
@@ -67,15 +70,21 @@ export interface AuthRequest extends Request {
   userName?:       string;
   userRole?:       string;
   organizationId?: string;
+  sessionId?:      string;
+}
+
+function reject(res: Response, message: string): void {
+  res.clearCookie(COOKIE_NAME, CLEAR_COOKIE_OPTIONS);
+  res.status(401).json({ error: message });
 }
 
 // ─── requireAuth middleware ───────────────────────────────────
-// Validates the JWT cookie on every protected route and publishes the actor
-// into the request context (core/requestContext.ts) so the tenant-scoped
-// Prisma client and the audit writer know who is acting.
+// Verifies the JWT cookie, then the server-side session it names (cached for
+// 60 s), and publishes the actor into the request context so the tenant-
+// scoped Prisma client and the audit writer know who is acting.
 // On failure: clears the stale cookie and returns 401.
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const token = (req.cookies as Record<string, string | undefined>)[COOKIE_NAME];
 
   if (!token) {
@@ -83,21 +92,36 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     return;
   }
 
+  let payload: TokenPayload;
   try {
-    const payload      = verifyToken(token);
-    req.userId         = payload.id;
-    req.userEmail      = payload.email;
-    req.userName       = payload.name;
-    req.userRole       = payload.role;
-    req.organizationId = payload.orgId ?? DEFAULT_ORGANIZATION_ID;
-    setContextUser({ userId: payload.id, userRole: payload.role, organizationId: req.organizationId });
-    next();
+    payload = verifyToken(token);
   } catch (err) {
-    // Expired or tampered — remove the invalid cookie immediately
     console.warn('[auth] Invalid or expired token:', (err as Error).message);
-    res.clearCookie(COOKIE_NAME, CLEAR_COOKIE_OPTIONS);
-    res.status(401).json({ error: 'Session expired. Please sign in again.' });
+    reject(res, 'Session expired. Please sign in again.');
+    return;
   }
+
+  if (!payload.sid) {
+    // Issued before server-side sessions existed — one re-login is required.
+    reject(res, 'Session expired. Please sign in again.');
+    return;
+  }
+
+  const organizationId = payload.orgId ?? DEFAULT_ORGANIZATION_ID;
+  const session = await validateSession(payload.sid, organizationId);
+  if (!session || session.userId !== payload.id) {
+    reject(res, 'Session expired. Please sign in again.');
+    return;
+  }
+
+  req.userId         = payload.id;
+  req.userEmail      = payload.email;
+  req.userName       = payload.name;
+  req.userRole       = payload.role;
+  req.organizationId = session.organizationId;
+  req.sessionId      = payload.sid;
+  setContextUser({ userId: payload.id, userRole: payload.role, organizationId: session.organizationId });
+  next();
 }
 
 // ─── requireRole middleware ───────────────────────────────────

@@ -29,7 +29,7 @@ New schema change recipe (never `db push`): edit `prisma/schema.prisma` → depl
 | 1.6 | Migration baseline: drift adopted, 14 unreplayable folders squashed into one generated baseline (+ ledger view), migration-chain test, production catch-up SQL and runbook | ☑ | `bbe1a9fd` | Production execution is the owner's step at cutover (RUNBOOK) |
 | 1.7 | Tenancy: `Organization`, `organizationId` on all 35 models, tenant-scoped Prisma client (`core/tenant.ts`), org in session, per-org numbering + company settings, ledger view carries org | ☑ | (this commit) | Nested writes rely on the column default until Phase 9 removes it; raw SQL must filter explicitly |
 | 1.8 | Core: request context (request id, actor, source), error envelope (`core/errors.ts`), zod validation middleware, audit writer with source/request id, `/api/v2/me` | ☑ | (this commit) | RBAC tables + custom roles ⇢ Phase 9; the static catalogue is served by `/api/v2/me` |
-| 1.9 | Sessions with refresh + revocation, login rate limit, helmet, CORS by environment | ◐ | | CORS by environment done in `app.ts` |
+| 1.9 | Server-side sessions with instant revocation (logout, deactivation, role change, password reset), 30-day idle expiry, login rate limit per (IP, email), API ceiling, helmet, CORS by environment | ☑ | (this commit) | Sessions cached 60 s in-process; revocation clears the cache |
 | 1.10 | Job runner: `Job` table, idempotent tick endpoint, scheduler rules + outbox moved onto it, cron config | ☐ | | |
 | 1.11 | Storage: R2/S3 adapter with presigned URLs, `Document`/`DocumentLink`, upload/download API (shows "not configured" without credentials) | ☐ | | |
 | 1.12 | Repo hygiene: Gen 0 removal, junk files, README | ☐ | | |

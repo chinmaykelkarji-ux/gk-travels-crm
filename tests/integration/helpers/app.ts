@@ -18,7 +18,7 @@ export const app = hasTestDb
 
 export function cookieFor(role: Role): string {
   const token = jwt.sign(
-    { id: USER_IDS[role], email: `${role.toLowerCase()}@example.test`, name: role, role },
+    { id: USER_IDS[role], email: `${role.toLowerCase()}@example.test`, name: role, role, orgId: 'org_gktravels', sid: `S-${role}` },
     process.env.JWT_SECRET as string,
     { expiresIn: '10m' },
   );

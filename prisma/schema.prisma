@@ -61,6 +61,8 @@ model Organization {
   salesQuotes           SalesQuote[]
   salesQuoteItems       SalesQuoteItem[]
 
+  sessions Session[]
+
   @@map("organizations")
 }
 
@@ -76,9 +78,34 @@ model User {
   lastLoginAt    DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  sessions       Session[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+// ── Server-side sessions (core/sessions.ts) ─────────────────
+// One row per sign-in. The JWT cookie names the row (sid); revoking it takes
+// effect on the next request, which is what deactivation, role changes and
+// password resets rely on.
+model Session {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  lastSeenAt     DateTime     @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  revokedReason  String?
+  ip             String?
+  userAgent      String?
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Customer {

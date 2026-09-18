@@ -3,6 +3,8 @@ import bcrypt      from 'bcryptjs';
 import { prisma }  from '../lib/prisma.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
+import { revokeUserSessions } from '../core/sessions.js';
+import { currentOrganizationId } from '../core/requestContext.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -136,6 +138,14 @@ router.put('/:id', requirePermission('users:write'), async (req: AuthRequest, re
       data,
       select: SAFE_SELECT,
     });
+
+    // A changed role or a deactivation must take effect on the next request.
+    if (data.isActive === false) {
+      await revokeUserSessions(user.id, currentOrganizationId(), 'deactivated');
+    } else if (data.role !== undefined) {
+      await revokeUserSessions(user.id, currentOrganizationId(), 'role_changed');
+    }
+
     res.json(user);
   } catch (err) {
     console.error('[users PUT]', err);
@@ -158,6 +168,7 @@ router.put('/:id/password', requireRole('ADMIN'), async (req: AuthRequest, res) 
       where: { id: req.params.id as string },
       data:  { passwordHash },
     });
+    await revokeUserSessions(req.params.id as string, currentOrganizationId(), 'password_reset');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: String(err) });
@@ -172,6 +183,7 @@ router.delete('/:id', requirePermission('users:write'), async (req: AuthRequest,
       return;
     }
     await prisma.user.update({ where: { id: req.params.id as string }, data: { isActive: false } });
+    await revokeUserSessions(req.params.id as string, currentOrganizationId(), 'deactivated');
     res.json({ ok: true });
   } catch (err) {
     console.error('[users DELETE]', err);
