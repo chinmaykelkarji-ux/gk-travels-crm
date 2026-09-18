@@ -2,6 +2,7 @@
 // singleton the server uses, so service functions and assertions share one
 // connection (and one transaction view).
 import { assertTestDatabase } from './guard';
+import { currentOrganizationId } from '../../../server/src/core/requestContext';
 
 export const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? '';
 export const hasTestDb   = Boolean(TEST_DB_URL);
@@ -18,18 +19,25 @@ export async function resetDb(): Promise<void> {
     `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
   );
   if (!rows.length) return;
-  const list = rows.map(r => `"${r.tablename}"`).join(', ');
+  const list = rows.filter(r => r.tablename !== 'organizations').map(r => `"${r.tablename}"`).join(', ');
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  await ensureOrganization('org_gktravels', 'GK Travels');
+}
+
+export async function ensureOrganization(id: string, name: string): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "organizations" ("id", "slug", "name", "updatedAt") VALUES ($1, $1, $2, NOW()) ON CONFLICT ("id") DO NOTHING`,
+    id, name,
+  );
 }
 
 // ── Fixtures ────────────────────────────────────────────────
 
 export async function seedCompany(overrides: Record<string, unknown> = {}) {
   return prisma.companySettings.upsert({
-    where:  { id: 'default' },
+    where:  { organizationId: (overrides.organizationId as string | undefined) ?? currentOrganizationId() },
     update: { ...overrides },
     create: {
-      id:            'default',
       companyName:   'GK Travels',
       gstin:         '29AAAAA0000A1Z5',
       stateCode:     '29',

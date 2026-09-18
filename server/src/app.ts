@@ -1,5 +1,5 @@
 // ============================================================
-// GK TRAVELS CRM — Express Application
+// GK TRAVELS CRM / TravelOS — Express Application
 //
 // Shared by both:
 //   - server/src/index.ts  (local dev: app.listen)
@@ -10,6 +10,9 @@ import 'dotenv/config';
 import express     from 'express';
 import cors        from 'cors';
 import cookieParser from 'cookie-parser';
+
+import { requestContextMiddleware } from './core/requestContext.js';
+import { errorHandler, notFoundHandler } from './core/errors.js';
 
 import authRouter        from './routes/auth.js';
 import dataRouter        from './routes/data.js';
@@ -40,25 +43,28 @@ import dashboardRouter      from './routes/dashboard.js';
 import enquiryRouter        from './routes/enquiry.js';
 import salesQuoteRouter     from './routes/salesQuote.js';
 import aiRouter              from './routes/ai.js';
+import meV2Router            from './routes/v2/me.js';
 
 const app = express();
 
+// Vercel/other proxies terminate TLS; trust the first hop so `secure` cookies
+// and client IPs (rate limiting) are read from the forwarded headers.
+app.set('trust proxy', 1);
+
 // ── CORS ───────────────────────────────────────────────────────
-// Allow credentials (cookies) from the Vite dev server and
-// the production Vercel frontend.  Same-origin requests on Vercel
-// (frontend + API share *.vercel.app) also pass through cleanly.
+// Same-origin in production (frontend and API share the Vercel origin).
+// Localhost origins are only allowed outside production.
 
 const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
-  'http://localhost:5173',
   process.env.FRONTEND_URL,
+  ...(process.env.NODE_ENV === 'production'
+    ? []
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:5173']),
 ].filter(Boolean) as string[];
 
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow requests with no origin (curl, Postman, SSR, same-origin)
+    // Allow requests with no origin (curl, same-origin navigations)
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
@@ -66,14 +72,19 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
+
+// Request id + actor context for every request (core/requestContext.ts).
+app.use(requestContextMiddleware);
 
 // ── Request logging ────────────────────────────────────────────
 
-app.use((req, _res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.use((req, _res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+}
 
 // ── Health check ───────────────────────────────────────────────
 
@@ -113,19 +124,12 @@ app.use('/api/enquiries',     enquiryRouter);
 app.use('/api/sales-quotes',  salesQuoteRouter);
 app.use('/api/ai',            aiRouter);
 
-// ── 404 ────────────────────────────────────────────────────────
+// ── v2 (server-authoritative modules; see docs/travelos/02-target-architecture.md) ──
+app.use('/api/v2/me',         meV2Router);
 
-app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+// ── 404 + error envelope ───────────────────────────────────────
 
-// ── Global error handler ───────────────────────────────────────
-
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('GLOBAL SERVER ERROR:', err);
-
-  res.status(500).json({
-    error: 'Internal Server Error',
-    details: err?.message || String(err),
-  });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;

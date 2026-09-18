@@ -51,6 +51,7 @@ router.post('/login', async (req, res) => {
       email: user.email,
       name:  user.name,
       role:  user.role,
+      orgId: user.organizationId,
     });
 
     await prisma.user.update({
@@ -92,7 +93,7 @@ router.get('/me', requireAuth, async (req: AuthRequest, res) => {
   try {
     const user = await prisma.user.findUnique({
       where:  { id: req.userId! },
-      select: { id: true, email: true, name: true, role: true, isActive: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true, organizationId: true },
     });
 
     if (!user || !user.isActive) {
@@ -104,11 +105,12 @@ router.get('/me', requireAuth, async (req: AuthRequest, res) => {
 
     res.json({
       user: {
-        id:       user.id,
-        email:    user.email,
-        name:     user.name,
-        role:     user.role,
-        isActive: user.isActive,
+        id:             user.id,
+        email:          user.email,
+        name:           user.name,
+        role:           user.role,
+        isActive:       user.isActive,
+        organizationId: user.organizationId,
       },
     });
   } catch (err) {

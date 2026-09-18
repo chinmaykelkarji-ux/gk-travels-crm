@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
+import { currentOrganizationId } from '../core/requestContext.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -44,8 +45,9 @@ interface CustomerLedgerRow {
 
 router.get('/customer-ledger', requirePermission('finance:read'), async (_req, res) => {
   try {
+    const organizationId = currentOrganizationId();
     const rows = await prisma.$queryRaw<CustomerLedgerRow[]>`
-      SELECT * FROM "customer_ledger_balances" ORDER BY "balanceDue" DESC
+      SELECT * FROM "customer_ledger_balances" WHERE "organizationId" = ${organizationId} ORDER BY "balanceDue" DESC
     `;
     res.json(rows);
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -53,8 +55,9 @@ router.get('/customer-ledger', requirePermission('finance:read'), async (_req, r
 
 router.get('/customer-ledger/:customerId', requirePermission('finance:read'), async (req, res) => {
   try {
+    const organizationId = currentOrganizationId();
     const rows = await prisma.$queryRaw<CustomerLedgerRow[]>`
-      SELECT * FROM "customer_ledger_balances" WHERE "customerId" = ${String(req.params.customerId)}
+      SELECT * FROM "customer_ledger_balances" WHERE "customerId" = ${String(req.params.customerId)} AND "organizationId" = ${organizationId}
     `;
     res.json(rows[0] ?? null);
   } catch (err) { res.status(500).json({ error: String(err) }); }

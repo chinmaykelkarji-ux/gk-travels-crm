@@ -117,6 +117,30 @@ describe.skipIf(!hasTestDb)('API authorization matrix', () => {
     }
   });
 
+  describe('GET /api/v2/me', () => {
+    it('returns the session, organisation and effective permissions', async () => {
+      const admin = await as('ADMIN').get('/api/v2/me');
+      expect(admin.status).toBe(200);
+      expect(admin.body.user).toMatchObject({ id: USER_IDS.ADMIN, role: 'ADMIN', organizationId: 'org_gktravels' });
+      expect(admin.body.organization).toMatchObject({ id: 'org_gktravels', name: 'GK Travels', currency: 'INR' });
+      expect(admin.body.permissions).toEqual(['*']);
+      expect(admin.body.user.passwordHash).toBeUndefined();
+
+      const ops = await as('OPERATIONS').get('/api/v2/me');
+      expect(ops.body.permissions).toContain('trips:read');
+      expect(ops.body.permissions).not.toContain('finance:read');
+      expect(typeof ops.headers['x-request-id']).toBe('string');
+    });
+
+    it('rejects a valid token whose user no longer exists', async () => {
+      await prisma.user.delete({ where: { id: USER_IDS.BOOKING } });
+      const r = await as('BOOKING').get('/api/v2/me');
+      expect(r.status).toBe(401);
+      expect(r.body.error.code).toBe('UNAUTHENTICATED');
+      await seedAll();
+    });
+  });
+
   describe('write-side protections', () => {
     beforeEach(async () => { await seedAll(); });
 

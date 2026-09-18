@@ -19,4 +19,11 @@ export default async function globalSetup() {
     stdio: 'inherit',
     env: { ...process.env, DATABASE_URL: url },
   });
+  // The tenant row every scoped table defaults to (created by the tenancy
+  // migration in real databases; db push creates no rows).
+  execSync(`npx prisma db execute --url "${url}" --stdin`, {
+    input: `INSERT INTO "organizations" ("id","slug","name","updatedAt") VALUES ('org_gktravels','org_gktravels','GK Travels',NOW()) ON CONFLICT ("id") DO NOTHING;`,
+    stdio: ['pipe', 'inherit', 'inherit'],
+    env: { ...process.env, DATABASE_URL: url },
+  });
 }

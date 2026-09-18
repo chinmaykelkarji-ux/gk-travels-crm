@@ -1,7 +1,8 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import type { DbClient } from './prisma.js';
 import { today } from '../../../src/shared/utils/date.js';
 
-export type DbClient = PrismaClient | Prisma.TransactionClient;
+export type { DbClient };
 
 // ─── Action labels ────────────────────────────────────────────
 // Single source of truth mapping an activity `action` key to the
@@ -12,6 +13,7 @@ export const ACTIVITY_ACTION_LABEL: Record<string, string> = {
   customer_created:            'Customer Added',
   customer_updated:            'Customer Updated',
   customer_deleted:            'Customer Deleted',
+  customer_merged:             'Customers Merged',
   lead_created:                'Lead Added',
   lead_status_changed:         'Lead Status Changed',
   lead_converted:              'Lead Converted',
@@ -24,15 +26,25 @@ export const ACTIVITY_ACTION_LABEL: Record<string, string> = {
   quotation_converted:         'Quotation Converted to Trip',
   trip_created:                'Trip Created',
   trip_status_changed:         'Trip Status Changed',
+  trip_deleted:                'Trip Deleted',
   booking_created:             'Booking Created',
   booking_updated:             'Booking Updated',
   booking_cancelled:           'Booking Cancelled',
+  booking_deleted:             'Booking Deleted',
   voucher_issued:              'Voucher Issued',
   voucher_sent:                'Voucher Sent',
+  voucher_deleted:             'Voucher Deleted',
+  vendor_deleted:              'Vendor Deleted',
   communication_sent:          'Message Sent',
   itinerary_sent:              'Itinerary Sent',
   quotation_sent_comm:         'Quotation Sent',
+  invoice_created:             'Invoice Created',
+  invoice_edited:              'Invoice Edited',
+  invoice_cancelled:           'Invoice Cancelled',
+  invoice_deleted:             'Invoice Deleted',
+  credit_note_created:         'Credit Note Created',
   credit_note_edited:          'Credit Note Edited',
+  debit_note_created:          'Debit Note Created',
   debit_note_edited:           'Debit Note Edited',
   receivable_created:          'Receivable Raised',
   receivable_payment_recorded: 'Payment Recorded',
@@ -46,6 +58,8 @@ export const ACTIVITY_ACTION_LABEL: Record<string, string> = {
   adjustment_recorded:         'Adjustment Recorded',
   task_completed:              'Task Completed',
   reminder_completed:          'Reminder Completed',
+  company_settings_updated:    'Company Master Updated',
+  user_credentials_rotated:    'User Credentials Rotated',
 };
 
 /**
@@ -65,7 +79,6 @@ export function buildActivityTitle(action: string): string {
  * Builds a plain-language description from an action and a subject/detail
  * pair, e.g. ('payment_received', 'Rohan Sharma', '₹25,000 via UPI') →
  * 'Payment received — Rohan Sharma: ₹25,000 via UPI'.
- * Used for events whose message doesn't need bespoke phrasing per call site.
  */
 export function buildActivityDescription(action: string, subject: string, detail?: string): string {
   const verb = buildActivityTitle(action);
@@ -84,11 +97,16 @@ export interface ActivityInput {
   userId?:     string | null;
   before?:     unknown;
   after?:      unknown;
+  /** HUMAN (API call), SYSTEM (job/migration) or AI (copilot/extraction). */
+  source?:     'HUMAN' | 'SYSTEM' | 'AI';
+  requestId?:  string | null;
 }
 
 // Single writer for ActivityLog — every operational/financial event that
 // should appear in the global activity feed and per-entity timelines goes
 // through here so the feed stays chronological and consistently shaped.
+// Prefer core/audit.ts audit(), which fills actor/source/request id from the
+// request context.
 export async function logActivity(db: DbClient, input: ActivityInput) {
   const now = new Date();
   return db.activityLog.create({
@@ -104,6 +122,8 @@ export async function logActivity(db: DbClient, input: ActivityInput) {
       date:        today(),
       before:      (input.before ?? undefined) as Prisma.InputJsonValue | undefined,
       after:       (input.after  ?? undefined) as Prisma.InputJsonValue | undefined,
+      source:      input.source ?? 'HUMAN',
+      requestId:   input.requestId ?? undefined,
     },
   });
 }

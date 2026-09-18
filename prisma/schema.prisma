@@ -8,41 +8,102 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  role         Role      @default(ADMIN)
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+// ── Tenancy ──────────────────────────────────────────────────
+// One row per travel company. Every business table carries organizationId
+// (server/src/core/tenant.ts scopes every query to the current one). The
+// default "org_gktravels" keeps the single-tenant deployment working and is
+// removed once the platform phase adds organisation onboarding.
+model Organization {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  legalName String?
+  currency  String   @default("INR")
+  timezone  String   @default("Asia/Kolkata")
+  settings  Json     @default("{}")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  users                 User[]
+  customers             Customer[]
+  leads                 Lead[]
+  trips                 Trip[]
+  bookings              Booking[]
+  payments              Payment[]
+  receivables           Receivable[]
+  receivableEntrys      ReceivableEntry[]
+  financialTransactions FinancialTransaction[]
+  tasks                 Task[]
+  activityLogs          ActivityLog[]
+  communications        Communication[]
+  reminders             Reminder[]
+  vendors               Vendor[]
+  vendorPayments        VendorPayment[]
+  quotations            Quotation[]
+  quotationItems        QuotationItem[]
+  itinerarys            Itinerary[]
+  itineraryDays         ItineraryDay[]
+  vouchers              Voucher[]
+  passengers            Passenger[]
+  companySettingss      CompanySettings[]
+  numberingSequences    NumberingSequence[]
+  invoices              Invoice[]
+  invoiceLineItems      InvoiceLineItem[]
+  creditNotes           CreditNote[]
+  creditNoteLineItems   CreditNoteLineItem[]
+  debitNotes            DebitNote[]
+  debitNoteLineItems    DebitNoteLineItem[]
+  tripServices          TripService[]
+  outboxEvents          OutboxEvent[]
+  messageLogs           MessageLog[]
+  enquirys              Enquiry[]
+  salesQuotes           SalesQuote[]
+  salesQuoteItems       SalesQuoteItem[]
+
+  @@map("organizations")
+}
+
+model User {
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  name           String
+  role           Role         @default(ADMIN)
+  isActive       Boolean      @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
   @@map("users")
 }
 
 model Customer {
-  id             String   @id
-  customerNumber Int      @unique @default(autoincrement())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  customerNumber Int          @unique @default(autoincrement())
   name           String
   phone          String
   altPhone       String?
   email          String?
   address        String?
   city           String?
-  preferences    Json     @default("{}")
+  preferences    Json         @default("{}")
   notes          String?
-  tripIds        Json     @default("[]")
-  documents      Json     @default("[]")
+  tripIds        Json         @default("[]")
+  documents      Json         @default("[]")
   createdDate    String
   sourceLeadId   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   billingAddress String?
   companyName    String?
   gstNumber      String?
-  gstRegistered  Boolean  @default(false)
+  gstRegistered  Boolean      @default(false)
   state          String?
 
   // Identity documents (columns added by migration 20260917000000). Aadhaar is
@@ -53,28 +114,31 @@ model Customer {
   passportCountry String?
   panNumber       String?
 
-  enquiries      Enquiry[]
-  salesQuotes    SalesQuote[]
+  enquiries   Enquiry[]
+  salesQuotes SalesQuote[]
 
+  @@index([organizationId])
   @@index([phone])
   @@index([email])
   @@map("customers")
 }
 
 model Lead {
-  id                  String   @id
+  organizationId      String       @default("org_gktravels")
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  id                  String       @id
   name                String
   phone               String
   email               String?
   source              String
-  destination         String   @default("")
+  destination         String       @default("")
   travelDate          String?
-  pax                 Int      @default(1)
+  pax                 Int          @default(1)
   budget              Float?
-  tripType            String   @default("")
-  status              String   @default("new")
-  priority            String   @default("medium")
-  notes               String   @default("")
+  tripType            String       @default("")
+  status              String       @default("new")
+  priority            String       @default("medium")
+  notes               String       @default("")
   followUpDate        String?
   assignedTo          String?
   createdDate         String
@@ -82,10 +146,11 @@ model Lead {
   convertedCustomerId String?
   convertedAt         String?
   convertedBy         String?
-  timeline            Json     @default("[]")
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  timeline            Json         @default("[]")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
+  @@index([organizationId])
   @@index([status])
   @@index([assignedTo])
   @@index([followUpDate])
@@ -93,34 +158,36 @@ model Lead {
 }
 
 model Trip {
-  id                  String    @id
-  tripNumber          Int       @unique @default(autoincrement())
+  organizationId      String        @default("org_gktravels")
+  organization        Organization  @relation(fields: [organizationId], references: [id])
+  id                  String        @id
+  tripNumber          Int           @unique @default(autoincrement())
   invoiceId           String?
   customer            String
-  phone               String    @default("")
+  phone               String        @default("")
   email               String?
   customerId          String?
   destination         String
-  type                String    @default("Leisure")
-  pax                 Int       @default(1)
+  type                String        @default("Leisure")
+  pax                 Int           @default(1)
   departure           String?
   returnDate          String?
-  status              String    @default("draft")
+  status              String        @default("draft")
   totalAmount         Float?
-  gstRate             Float     @default(5)
-  discount            Float     @default(0)
-  gstAmount           Float     @default(0)
+  gstRate             Float         @default(5)
+  discount            Float         @default(0)
+  gstAmount           Float         @default(0)
   totalPayable        Float?
-  paidAmount          Float     @default(0)
-  balanceDue          Float     @default(0)
-  supplierCost        Float     @default(0)
-  grossMargin         Float     @default(0)
-  marginPct           Float     @default(0)
-  visaStatus          String    @default("pending")
-  hotelStatus         String    @default("pending")
-  flightStatus        String    @default("pending")
-  checkInStatus       String    @default("not_due")
-  notes               String    @default("")
+  paidAmount          Float         @default(0)
+  balanceDue          Float         @default(0)
+  supplierCost        Float         @default(0)
+  grossMargin         Float         @default(0)
+  marginPct           Float         @default(0)
+  visaStatus          String        @default("pending")
+  hotelStatus         String        @default("pending")
+  flightStatus        String        @default("pending")
+  checkInStatus       String        @default("not_due")
+  notes               String        @default("")
   assignedTo          String?
   createdDate         String
   createdBy           String?
@@ -128,18 +195,19 @@ model Trip {
   convertedFromLeadId String?
   convertedAt         String?
   convertedBy         String?
-  timeline            Json      @default("[]")
-  itinerary           Json      @default("[]")
-  documents           Json      @default("[]")
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  gstMode             GstMode   @default(EXCLUDED)
-  taxableAmount       Float     @default(0)
-  passengerIds        Json      @default("[]")
+  timeline            Json          @default("[]")
+  itinerary           Json          @default("[]")
+  documents           Json          @default("[]")
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  gstMode             GstMode       @default(EXCLUDED)
+  taxableAmount       Float         @default(0)
+  passengerIds        Json          @default("[]")
   payments            Payment[]
   tasks               Task[]
   services            TripService[]
 
+  @@index([organizationId])
   @@index([status])
   @@index([departure])
   @@index([customerId])
@@ -148,38 +216,41 @@ model Trip {
 }
 
 model Booking {
-  id                String   @id
+  organizationId    String       @default("org_gktravels")
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  id                String       @id
   invoiceId         String?
   type              String
-  status            String   @default("pending")
+  status            String       @default("pending")
   customerName      String
   customerId        String?
   refId             String?
   sellingPrice      Float?
-  supplierCost      Float    @default(0)
-  advance           Float    @default(0)
-  supplierPaid      Float    @default(0)
-  gstRate           Float    @default(0)
-  gstAmount         Float    @default(0)
+  supplierCost      Float        @default(0)
+  advance           Float        @default(0)
+  supplierPaid      Float        @default(0)
+  gstRate           Float        @default(0)
+  gstAmount         Float        @default(0)
   totalPayable      Float?
-  balanceDue        Float    @default(0)
-  supplierPending   Float    @default(0)
-  grossMargin       Float    @default(0)
-  marginPct         Float    @default(0)
-  detail            Json     @default("{}")
-  notes             String   @default("")
+  balanceDue        Float        @default(0)
+  supplierPending   Float        @default(0)
+  grossMargin       Float        @default(0)
+  marginPct         Float        @default(0)
+  detail            Json         @default("{}")
+  notes             String       @default("")
   createdDate       String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  gstMode           GstMode  @default(EXCLUDED)
-  taxableAmount     Float    @default(0)
-  convenienceFee    Float    @default(0)
-  financialStatus   String   @default("unpaid")
-  gstOnFee          Float    @default(0)
-  taxableFee        Float    @default(0)
-  serviceMarginMode Boolean  @default(false)
-  passengerIds      Json     @default("[]")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  gstMode           GstMode      @default(EXCLUDED)
+  taxableAmount     Float        @default(0)
+  convenienceFee    Float        @default(0)
+  financialStatus   String       @default("unpaid")
+  gstOnFee          Float        @default(0)
+  taxableFee        Float        @default(0)
+  serviceMarginMode Boolean      @default(false)
+  passengerIds      Json         @default("[]")
 
+  @@index([organizationId])
   @@index([refId])
   @@index([status])
   @@index([type])
@@ -189,23 +260,26 @@ model Booking {
 }
 
 model Payment {
-  id         String   @id
-  type       String
-  tripId     String?
-  bookingId  String?
-  customer   String?
-  customerId String?
-  amount     Float
-  method     String
-  date       String
-  paidDate   String?
-  status     String
-  reference  String?
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  trip       Trip?    @relation(fields: [tripId], references: [id])
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  type           String
+  tripId         String?
+  bookingId      String?
+  customer       String?
+  customerId     String?
+  amount         Float
+  method         String
+  date           String
+  paidDate       String?
+  status         String
+  reference      String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  trip           Trip?        @relation(fields: [tripId], references: [id])
 
+  @@index([organizationId])
   @@index([tripId])
   @@index([customerId])
   @@index([bookingId])
@@ -215,23 +289,26 @@ model Payment {
 }
 
 model Receivable {
-  id            String            @id
-  customerId    String?
-  customerName  String
-  bookingId     String?
-  tripId        String?
-  invoiceId     String?
-  invoiceAmount Float
-  description   String            @default("")
-  dueDate       String?
-  totalReceived Float             @default(0)
-  balanceDue    Float             @default(0)
-  notes         String            @default("")
-  createdDate   String
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  entries       ReceivableEntry[]
+  organizationId String            @default("org_gktravels")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  id             String            @id
+  customerId     String?
+  customerName   String
+  bookingId      String?
+  tripId         String?
+  invoiceId      String?
+  invoiceAmount  Float
+  description    String            @default("")
+  dueDate        String?
+  totalReceived  Float             @default(0)
+  balanceDue     Float             @default(0)
+  notes          String            @default("")
+  createdDate    String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  entries        ReceivableEntry[]
 
+  @@index([organizationId])
   @@index([customerId])
   @@index([bookingId])
   @@index([tripId])
@@ -240,21 +317,26 @@ model Receivable {
 }
 
 model ReceivableEntry {
-  id           String     @id
-  receivableId String
-  amount       Float
-  paymentDate  String
-  paymentMode  String
-  reference    String?
-  notes        String?
-  createdAt    DateTime   @default(now())
-  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  receivableId   String
+  amount         Float
+  paymentDate    String
+  paymentMode    String
+  reference      String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  receivable     Receivable   @relation(fields: [receivableId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([receivableId])
   @@map("receivable_entries")
 }
 
 model FinancialTransaction {
+  organizationId  String                   @default("org_gktravels")
+  organization    Organization             @relation(fields: [organizationId], references: [id])
   id              String                   @id @default(cuid())
   type            FinancialTransactionType
   sourceType      String
@@ -273,6 +355,7 @@ model FinancialTransaction {
   createdBy       String?
   createdAt       DateTime                 @default(now())
 
+  @@index([organizationId])
   @@index([customerId])
   @@index([vendorId])
   @@index([tripId])
@@ -282,22 +365,25 @@ model FinancialTransaction {
 }
 
 model Task {
-  id            String   @id
-  title         String
-  description   String?
-  priority      String   @default("medium")
-  status        String   @default("pending")
-  tripId        String?
-  bookingId     String?
-  customerId    String?
-  dueDate       String?
-  assignedTo    String?
-  completedDate String?
-  createdDate   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  trip          Trip?    @relation(fields: [tripId], references: [id])
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  title          String
+  description    String?
+  priority       String       @default("medium")
+  status         String       @default("pending")
+  tripId         String?
+  bookingId      String?
+  customerId     String?
+  dueDate        String?
+  assignedTo     String?
+  completedDate  String?
+  createdDate    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  trip           Trip?        @relation(fields: [tripId], references: [id])
 
+  @@index([organizationId])
   @@index([tripId])
   @@index([status, dueDate])
   @@index([assignedTo])
@@ -305,20 +391,25 @@ model Task {
 }
 
 model ActivityLog {
-  id          String   @id @default(cuid())
-  action      String
-  description String
-  entityType  String
-  entityId    String
-  userId      String?
-  timestamp   String
-  date        String
-  before      Json?
-  after       Json?
-  createdAt   DateTime @default(now())
-  metadata    Json?
-  title       String?
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  action         String
+  description    String
+  entityType     String
+  entityId       String
+  userId         String?
+  timestamp      String
+  date           String
+  before         Json?
+  after          Json?
+  createdAt      DateTime     @default(now())
+  metadata       Json?
+  title          String?
+  source         String       @default("HUMAN")
+  requestId      String?
 
+  @@index([organizationId])
   @@index([entityType, entityId])
   @@index([date])
   @@index([action])
@@ -326,87 +417,101 @@ model ActivityLog {
 }
 
 model Communication {
-  id         String   @id @default(cuid())
-  type       String
-  recipient  String
-  subject    String?
-  entityType String
-  entityId   String
-  userId     String?
-  createdAt  DateTime @default(now())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  type           String
+  recipient      String
+  subject        String?
+  entityType     String
+  entityId       String
+  userId         String?
+  createdAt      DateTime     @default(now())
 
+  @@index([organizationId])
   @@index([entityType, entityId])
   @@index([type])
   @@map("communications")
 }
 
 model Reminder {
-  id        String   @id @default(cuid())
-  tripId    String?
-  type      String
-  priority  String
-  message   String
-  dueDate   String
-  sent      Boolean  @default(false)
-  sentAt    String?
-  createdAt DateTime @default(now())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  tripId         String?
+  type           String
+  priority       String
+  message        String
+  dueDate        String
+  sent           Boolean      @default(false)
+  sentAt         String?
+  createdAt      DateTime     @default(now())
 
+  @@index([organizationId])
   @@map("reminders")
 }
 
 model Vendor {
-  id            String          @id
-  name          String
-  companyName   String?
-  type          String
-  contactPerson String?
-  phone         String
-  whatsapp      String?
-  email         String?
-  destinations  Json            @default("[]")
-  paymentTerms  String?
-  bankDetails   Json            @default("{}")
-  gstNumber     String?
-  notes         String?
-  isActive      Boolean         @default(true)
-  createdDate   String
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  payments      VendorPayment[]
-  tripServices  TripService[]
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  id              String           @id
+  name            String
+  companyName     String?
+  type            String
+  contactPerson   String?
+  phone           String
+  whatsapp        String?
+  email           String?
+  destinations    Json             @default("[]")
+  paymentTerms    String?
+  bankDetails     Json             @default("{}")
+  gstNumber       String?
+  notes           String?
+  isActive        Boolean          @default(true)
+  createdDate     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  payments        VendorPayment[]
+  tripServices    TripService[]
   salesQuoteItems SalesQuoteItem[]
 
+  @@index([organizationId])
   @@index([type])
   @@map("vendors")
 }
 
 model VendorPayment {
-  id          String   @id
-  vendorId    String
-  vendorName  String
-  tripId      String?
-  tripName    String?
-  description String?
-  totalCost   Float    @default(0)
-  advancePaid Float    @default(0)
-  outstanding Float    @default(0)
-  isPaid      Boolean  @default(false)
-  paidDate    String?
-  dueDate     String?
-  notes       String?
-  createdDate String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  vendorId       String
+  vendorName     String
+  tripId         String?
+  tripName       String?
+  description    String?
+  totalCost      Float        @default(0)
+  advancePaid    Float        @default(0)
+  outstanding    Float        @default(0)
+  isPaid         Boolean      @default(false)
+  paidDate       String?
+  dueDate        String?
+  notes          String?
+  createdDate    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  vendor         Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([vendorId])
   @@index([tripId])
   @@map("vendor_payments")
 }
 
 model Quotation {
+  organizationId  String          @default("org_gktravels")
+  organization    Organization    @relation(fields: [organizationId], references: [id])
   id              String          @id
-  quotationNumber String          @unique
+  quotationNumber String
   customerId      String?
   customerName    String
   customerPhone   String?
@@ -446,6 +551,8 @@ model Quotation {
   submittedBy     String?
   items           QuotationItem[]
 
+  @@unique([organizationId, quotationNumber])
+  @@index([organizationId])
   @@index([status])
   @@index([approvalStatus])
   @@index([customerId])
@@ -453,29 +560,34 @@ model Quotation {
 }
 
 model QuotationItem {
-  id           String    @id @default(cuid())
-  quotationId  String
-  category     String
-  description  String
-  quantity     Int       @default(1)
-  costPrice    Float     @default(0)
-  sellingPrice Float     @default(0)
-  vendorId     String?
-  vendorName   String?
-  totalCost    Float     @default(0)
-  totalSelling Float     @default(0)
-  grossProfit  Float     @default(0)
-  marginPct    Float     @default(0)
-  sortOrder    Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  quotationId    String
+  category       String
+  description    String
+  quantity       Int          @default(1)
+  costPrice      Float        @default(0)
+  sellingPrice   Float        @default(0)
+  vendorId       String?
+  vendorName     String?
+  totalCost      Float        @default(0)
+  totalSelling   Float        @default(0)
+  grossProfit    Float        @default(0)
+  marginPct      Float        @default(0)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  quotation      Quotation    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([quotationId])
   @@map("quotation_items")
 }
 
 model Itinerary {
+  organizationId   String         @default("org_gktravels")
+  organization     Organization   @relation(fields: [organizationId], references: [id])
   id               String         @id
   tripId           String?
   quotationId      String?
@@ -497,6 +609,7 @@ model Itinerary {
   passengerIds     Json           @default("[]")
   days             ItineraryDay[]
 
+  @@index([organizationId])
   @@index([tripId])
   @@index([quotationId])
   @@index([status])
@@ -504,130 +617,137 @@ model Itinerary {
 }
 
 model ItineraryDay {
-  id           String    @id @default(cuid())
-  itineraryId  String
-  dayNumber    Int
-  date         String?
-  title        String
-  morning      String?
-  afternoon    String?
-  evening      String?
-  hotelName    String?
-  hotelAddress String?
-  meals        Json      @default("[]")
-  transfers    String?
-  activities   Json      @default("[]")
-  notes        String?
-  sortOrder    Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  itinerary    Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  itineraryId    String
+  dayNumber      Int
+  date           String?
+  title          String
+  morning        String?
+  afternoon      String?
+  evening        String?
+  hotelName      String?
+  hotelAddress   String?
+  meals          Json         @default("[]")
+  transfers      String?
+  activities     Json         @default("[]")
+  notes          String?
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  itinerary      Itinerary    @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([itineraryId])
   @@map("itinerary_days")
 }
 
 model Voucher {
-  id               String   @id
-  voucherNumber    String   @unique
-  tripId           String?
-  customerId       String?
-  vendorId         String?
-  type             String
-  status           String   @default("draft")
-  issueDate        String?
-  customerName     String
-  customerPhone    String?
-  guestNames       String?
-  destination      String?
-  hotelName        String?
-  hotelAddress     String?
-  hotelPhone       String?
-  checkIn          String?
-  checkOut         String?
-  roomType         String?
-  mealPlan         String?
-  confirmationNo   String?
-  nights           Int?
-  pickupPoint      String?
-  dropPoint        String?
-  pickupDate       String?
-  pickupTime       String?
-  vehicleType      String?
-  driverName       String?
-  driverPhone      String?
-  flightInfo       String?
-  activityName     String?
-  activityDate     String?
-  activityTime     String?
-  activityVenue    String?
-  activityNotes    String?
-  operatorName     String?
-  busType          String?
-  busNumber        String?
-  fromLocation     String?
-  toLocation       String?
-  boardingPoint    String?
-  droppingPoint    String?
-  seatNumbers      String?
-  duration         String?
-  reportingTime    String?
-  airline          String?
-  flightNumber     String?
-  pnr              String?
-  departure        String?
-  arrival          String?
-  departureDate    String?
-  arrivalDate      String?
-  flightClass      String?
-  visaType         String?
-  country          String?
-  entryType        String?
-  validity         String?
-  visaFee          Float?
-  vendorName       String?
-  vendorPhone      String?
-  vendorEmail      String?
-  pax              Int      @default(1)
-  notes            String?
-  emergencyContact String?
-  internalNotes    String?
-  createdDate      String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  gstAmount        Float    @default(0)
-  gstMode          GstMode  @default(EXCLUDED)
-  gstRate          Float    @default(0)
-  taxableAmount    Float    @default(0)
-  totalPayable     Float?
-  passengerIds     Json     @default("[]")
+  organizationId         String       @default("org_gktravels")
+  organization           Organization @relation(fields: [organizationId], references: [id])
+  id                     String       @id
+  voucherNumber          String
+  tripId                 String?
+  customerId             String?
+  vendorId               String?
+  type                   String
+  status                 String       @default("draft")
+  issueDate              String?
+  customerName           String
+  customerPhone          String?
+  guestNames             String?
+  destination            String?
+  hotelName              String?
+  hotelAddress           String?
+  hotelPhone             String?
+  checkIn                String?
+  checkOut               String?
+  roomType               String?
+  mealPlan               String?
+  confirmationNo         String?
+  nights                 Int?
+  pickupPoint            String?
+  dropPoint              String?
+  pickupDate             String?
+  pickupTime             String?
+  vehicleType            String?
+  driverName             String?
+  driverPhone            String?
+  flightInfo             String?
+  activityName           String?
+  activityDate           String?
+  activityTime           String?
+  activityVenue          String?
+  activityNotes          String?
+  operatorName           String?
+  busType                String?
+  busNumber              String?
+  fromLocation           String?
+  toLocation             String?
+  boardingPoint          String?
+  droppingPoint          String?
+  seatNumbers            String?
+  duration               String?
+  reportingTime          String?
+  airline                String?
+  flightNumber           String?
+  pnr                    String?
+  departure              String?
+  arrival                String?
+  departureDate          String?
+  arrivalDate            String?
+  flightClass            String?
+  visaType               String?
+  country                String?
+  entryType              String?
+  validity               String?
+  visaFee                Float?
+  vendorName             String?
+  vendorPhone            String?
+  vendorEmail            String?
+  pax                    Int          @default(1)
+  notes                  String?
+  emergencyContact       String?
+  internalNotes          String?
+  createdDate            String
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  gstAmount              Float        @default(0)
+  gstMode                GstMode      @default(EXCLUDED)
+  gstRate                Float        @default(0)
+  taxableAmount          Float        @default(0)
+  totalPayable           Float?
+  passengerIds           Json         @default("[]")
   // ── Voucher pricing (adopted 2026-09-18) ────────────────────────────────
   // These 21 columns already exist in the production database (pushed from an
   // unmerged branch). Declaring them stops `migrate diff` from wanting to drop
   // them. They are nullable/defaulted so fresh databases need no data. The
   // voucher refactor in Phase 3 decides which survive.
-  items                  Json     @default("[]")
-  gstType                String   @default("INTRA")
+  items                  Json         @default("[]")
+  gstType                String       @default("INTRA")
   placeOfSupplyStateCode String?
   voucherDate            String?
   customerCompany        String?
   customerAddress        String?
   customerGstin          String?
-  subtotal               Float    @default(0)
-  totalDiscount          Float    @default(0)
-  cgstAmount             Float    @default(0)
-  sgstAmount             Float    @default(0)
-  igstAmount             Float    @default(0)
-  totalGstAmount         Float    @default(0)
-  grandTotal             Float    @default(0)
-  amountPaid             Float    @default(0)
-  balanceDue             Float    @default(0)
-  paymentStatus          String   @default("unpaid")
+  subtotal               Float        @default(0)
+  totalDiscount          Float        @default(0)
+  cgstAmount             Float        @default(0)
+  sgstAmount             Float        @default(0)
+  igstAmount             Float        @default(0)
+  totalGstAmount         Float        @default(0)
+  grandTotal             Float        @default(0)
+  amountPaid             Float        @default(0)
+  balanceDue             Float        @default(0)
+  paymentStatus          String       @default("unpaid")
   paymentMethod          String?
   costPrice              Float?
   sellingPrice           Float?
-  showPricing            Boolean  @default(false)
+  showPricing            Boolean      @default(false)
 
+  @@unique([organizationId, voucherNumber])
+  @@index([organizationId])
   @@index([tripId])
   @@index([vendorId])
   @@index([status])
@@ -636,7 +756,9 @@ model Voucher {
 }
 
 model Passenger {
-  id                    String   @id
+  organizationId        String       @default("org_gktravels")
+  organization          Organization @relation(fields: [organizationId], references: [id])
+  id                    String       @id
   customerId            String?
   firstName             String
   lastName              String
@@ -660,9 +782,10 @@ model Passenger {
   emergencyRelation     String?
   notes                 String?
   createdDate           String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
+  @@index([organizationId])
   @@index([customerId])
   @@index([passportNumber])
   @@map("passengers")
@@ -675,8 +798,10 @@ model Passenger {
 // Singleton row (id = "default") holding the agency's GST/legal/bank
 // details. Printed on Invoices, Credit/Debit Notes, Quotations, Vouchers.
 model CompanySettings {
-  id                  String   @id @default("default")
-  companyName         String   @default("GK Travels")
+  organizationId      String       @unique @default("org_gktravels")
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  id                  String       @id @default(cuid())
+  companyName         String       @default("GK Travels")
   legalName           String?
   gstin               String?
   pan                 String?
@@ -695,29 +820,33 @@ model CompanySettings {
   bankAccountNumber   String?
   bankIfsc            String?
   bankBranch          String?
-  invoicePrefix       String   @default("GK")
+  invoicePrefix       String       @default("GK")
   invoiceTerms        String?
   authorizedSignatory String?
   signatureUrl        String?
   // GST returns filed up to this date (inclusive) — invoices/CN/DN dated on
   // or before this date are frozen (no edit/cancel/delete).
   gstFrozenUntil      String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
+  @@index([organizationId])
   @@map("company_settings")
 }
 
 // Per (docType, financialYear) running counter for sequential, gap-free
 // document numbering (GK/2026-27/01, CN/2026-27/0001, DN/2026-27/0001).
 model NumberingSequence {
-  id            String   @id
-  docType       String
-  financialYear String
-  lastNumber    Int      @default(0)
-  updatedAt     DateTime @updatedAt
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id
+  docType        String
+  financialYear  String
+  lastNumber     Int          @default(0)
+  updatedAt      DateTime     @updatedAt
 
-  @@unique([docType, financialYear])
+  @@unique([organizationId, docType, financialYear])
+  @@index([organizationId])
   @@map("numbering_sequences")
 }
 
@@ -738,13 +867,15 @@ enum GstType {
 }
 
 model Invoice {
-  id                String          @id
-  invoiceNumber     String          @unique
-  financialYear     String
-  sequenceNumber    Int
-  status            InvoiceStatus   @default(ISSUED)
-  invoiceDate       String
-  dueDate           String?
+  organizationId String        @default("org_gktravels")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  id             String        @id
+  invoiceNumber  String
+  financialYear  String
+  sequenceNumber Int
+  status         InvoiceStatus @default(ISSUED)
+  invoiceDate    String
+  dueDate        String?
 
   // Customer / billing snapshot
   customerId        String?
@@ -755,41 +886,43 @@ model Invoice {
   placeOfSupply     String?
 
   // Company snapshot at time of issue (immutable even if Company Master changes later)
-  companyName       String
-  companyAddress    String?
-  companyGstin      String?
-  companyStateCode  String?
+  companyName      String
+  companyAddress   String?
+  companyGstin     String?
+  companyStateCode String?
 
   // GST breakdown
-  gstType           GstType         @default(INTRA)
-  taxableAmount     Float           @default(0)
-  cgstAmount        Float           @default(0)
-  sgstAmount        Float           @default(0)
-  igstAmount        Float           @default(0)
-  totalGstAmount    Float           @default(0)
-  totalAmount       Float           @default(0)
+  gstType        GstType @default(INTRA)
+  taxableAmount  Float   @default(0)
+  cgstAmount     Float   @default(0)
+  sgstAmount     Float   @default(0)
+  igstAmount     Float   @default(0)
+  totalGstAmount Float   @default(0)
+  totalAmount    Float   @default(0)
 
-  notes             String?
-  termsAndConds     String?
+  notes         String?
+  termsAndConds String?
 
   // Source bookings/trips this invoice was generated from (locked once invoiced)
-  bookingIds        Json            @default("[]")
-  tripIds           Json            @default("[]")
-  receivableId      String?
+  bookingIds   Json    @default("[]")
+  tripIds      Json    @default("[]")
+  receivableId String?
 
-  createdDate       String
-  createdBy         String?
-  cancelledAt       String?
-  cancelledBy       String?
-  cancelReason      String?
+  createdDate  String
+  createdBy    String?
+  cancelledAt  String?
+  cancelledBy  String?
+  cancelReason String?
 
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items             InvoiceLineItem[]
-  creditNotes       CreditNote[]
-  debitNotes        DebitNote[]
+  items       InvoiceLineItem[]
+  creditNotes CreditNote[]
+  debitNotes  DebitNote[]
 
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId])
   @@index([customerId])
   @@index([financialYear])
   @@index([status])
@@ -797,53 +930,60 @@ model Invoice {
 }
 
 model InvoiceLineItem {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  description String
-  hsnSac      String?
-  serviceType String?
-  bookingId   String?
-  quantity    Float   @default(1)
-  rate        Float   @default(0)
-  amount      Float   @default(0)
-  gstRate     Float   @default(0)
-  gstAmount   Float   @default(0)
-  totalAmount Float   @default(0)
-  sortOrder   Int     @default(0)
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  invoiceId      String
+  description    String
+  hsnSac         String?
+  serviceType    String?
+  bookingId      String?
+  quantity       Float        @default(1)
+  rate           Float        @default(0)
+  amount         Float        @default(0)
+  gstRate        Float        @default(0)
+  gstAmount      Float        @default(0)
+  totalAmount    Float        @default(0)
+  sortOrder      Int          @default(0)
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([invoiceId])
   @@map("invoice_line_items")
 }
 
 model CreditNote {
-  id               String              @id
-  creditNoteNumber String              @unique
+  organizationId   String               @default("org_gktravels")
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  id               String               @id
+  creditNoteNumber String
   financialYear    String
   sequenceNumber   Int
-  status           DocStatus           @default(ISSUED)
+  status           DocStatus            @default(ISSUED)
   date             String
   invoiceId        String
-  invoice          Invoice             @relation(fields: [invoiceId], references: [id])
+  invoice          Invoice              @relation(fields: [invoiceId], references: [id])
   customerId       String?
   customerName     String
   reason           String
   reasonDetails    String?
-  taxableAmount    Float               @default(0)
-  cgstAmount       Float               @default(0)
-  sgstAmount       Float               @default(0)
-  igstAmount       Float               @default(0)
-  totalGstAmount   Float               @default(0)
-  totalAmount      Float               @default(0)
+  taxableAmount    Float                @default(0)
+  cgstAmount       Float                @default(0)
+  sgstAmount       Float                @default(0)
+  igstAmount       Float                @default(0)
+  totalGstAmount   Float                @default(0)
+  totalAmount      Float                @default(0)
   notes            String?
   createdDate      String
   createdBy        String?
   cancelledAt      String?
   cancelledBy      String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
   items            CreditNoteLineItem[]
 
+  @@unique([organizationId, creditNoteNumber])
+  @@index([organizationId])
   @@index([invoiceId])
   @@index([financialYear])
   @@index([customerId])
@@ -851,51 +991,58 @@ model CreditNote {
 }
 
 model CreditNoteLineItem {
-  id           String     @id @default(cuid())
-  creditNoteId String
-  description  String
-  hsnSac       String?
-  quantity     Float      @default(1)
-  rate         Float      @default(0)
-  amount       Float      @default(0)
-  gstRate      Float      @default(0)
-  gstAmount    Float      @default(0)
-  totalAmount  Float      @default(0)
-  sortOrder    Int        @default(0)
-  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  creditNoteId   String
+  description    String
+  hsnSac         String?
+  quantity       Float        @default(1)
+  rate           Float        @default(0)
+  amount         Float        @default(0)
+  gstRate        Float        @default(0)
+  gstAmount      Float        @default(0)
+  totalAmount    Float        @default(0)
+  sortOrder      Int          @default(0)
+  creditNote     CreditNote   @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([creditNoteId])
   @@map("credit_note_line_items")
 }
 
 model DebitNote {
-  id              String             @id
-  debitNoteNumber String             @unique
+  organizationId  String              @default("org_gktravels")
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  id              String              @id
+  debitNoteNumber String
   financialYear   String
   sequenceNumber  Int
-  status          DocStatus          @default(ISSUED)
+  status          DocStatus           @default(ISSUED)
   date            String
   invoiceId       String
-  invoice         Invoice            @relation(fields: [invoiceId], references: [id])
+  invoice         Invoice             @relation(fields: [invoiceId], references: [id])
   customerId      String?
   customerName    String
   reason          String
   reasonDetails   String?
-  taxableAmount   Float              @default(0)
-  cgstAmount      Float              @default(0)
-  sgstAmount      Float              @default(0)
-  igstAmount      Float              @default(0)
-  totalGstAmount  Float              @default(0)
-  totalAmount     Float              @default(0)
+  taxableAmount   Float               @default(0)
+  cgstAmount      Float               @default(0)
+  sgstAmount      Float               @default(0)
+  igstAmount      Float               @default(0)
+  totalGstAmount  Float               @default(0)
+  totalAmount     Float               @default(0)
   notes           String?
   createdDate     String
   createdBy       String?
   cancelledAt     String?
   cancelledBy     String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   items           DebitNoteLineItem[]
 
+  @@unique([organizationId, debitNoteNumber])
+  @@index([organizationId])
   @@index([invoiceId])
   @@index([financialYear])
   @@index([customerId])
@@ -903,19 +1050,22 @@ model DebitNote {
 }
 
 model DebitNoteLineItem {
-  id          String    @id @default(cuid())
-  debitNoteId String
-  description String
-  hsnSac      String?
-  quantity    Float     @default(1)
-  rate        Float     @default(0)
-  amount      Float     @default(0)
-  gstRate     Float     @default(0)
-  gstAmount   Float     @default(0)
-  totalAmount Float     @default(0)
-  sortOrder   Int       @default(0)
-  debitNote   DebitNote @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  debitNoteId    String
+  description    String
+  hsnSac         String?
+  quantity       Float        @default(1)
+  rate           Float        @default(0)
+  amount         Float        @default(0)
+  gstRate        Float        @default(0)
+  gstAmount      Float        @default(0)
+  totalAmount    Float        @default(0)
+  sortOrder      Int          @default(0)
+  debitNote      DebitNote    @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
   @@index([debitNoteId])
   @@map("debit_note_line_items")
 }
@@ -951,24 +1101,27 @@ enum GstMode {
 // vehicle, activity, transfer). Dashboards, timelines, and automations
 // query this single table rather than per-type tables.
 model TripService {
-  id          String        @id @default(cuid())
-  tripId      String
-  trip        Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  type        ServiceType
-  status      ServiceStatus @default(DRAFT)
-  serviceDate DateTime
-  startTime   String?
-  endTime     String?
-  supplierId  String?
-  supplier    Vendor?       @relation(fields: [supplierId], references: [id])
-  costPrice   Decimal       @default(0) @db.Decimal(10, 2)
-  sellPrice   Decimal       @default(0) @db.Decimal(10, 2)
-  details     Json          @default("{}")
-  notes       String?
-  completedAt DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  organizationId String        @default("org_gktravels")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  id             String        @id @default(cuid())
+  tripId         String
+  trip           Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  type           ServiceType
+  status         ServiceStatus @default(DRAFT)
+  serviceDate    DateTime
+  startTime      String?
+  endTime        String?
+  supplierId     String?
+  supplier       Vendor?       @relation(fields: [supplierId], references: [id])
+  costPrice      Decimal       @default(0) @db.Decimal(10, 2)
+  sellPrice      Decimal       @default(0) @db.Decimal(10, 2)
+  details        Json          @default("{}")
+  notes          String?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
+  @@index([organizationId])
   @@index([tripId])
   @@index([supplierId])
   @@index([serviceDate])
@@ -1006,6 +1159,8 @@ enum ServiceStatus {
 // worker dispatches PENDING rows exactly once (idempotencyKey-deduped),
 // giving automations a durable, restart-safe audit trail.
 model OutboxEvent {
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
   id             String       @id @default(cuid())
   eventType      String
   payload        Json
@@ -1017,6 +1172,7 @@ model OutboxEvent {
   lastError      String?
   createdAt      DateTime     @default(now())
 
+  @@index([organizationId])
   @@index([status, scheduledFor])
   @@map("outbox_events")
 }
@@ -1030,17 +1186,20 @@ enum OutboxStatus {
 
 // Record of every WhatsApp/email message sent to a customer or supplier.
 model MessageLog {
-  id           String   @id @default(cuid())
-  tripId       String?
-  customerId   String?
-  channel      String
-  templateName String?
-  recipient    String
-  content      String
-  status       String
-  sentAt       DateTime @default(now())
-  error        String?
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  tripId         String?
+  customerId     String?
+  channel        String
+  templateName   String?
+  recipient      String
+  content        String
+  status         String
+  sentAt         DateTime     @default(now())
+  error          String?
 
+  @@index([organizationId])
   @@index([tripId])
   @@index([customerId])
   @@map("message_logs")
@@ -1055,33 +1214,38 @@ model MessageLog {
 // ============================================================
 
 model Enquiry {
-  id            String        @id @default(cuid())
-  customerId    String
-  customer      Customer      @relation(fields: [customerId], references: [id])
-  source        EnquirySource @default(DIRECT)
-  destination   String
-  departureDate DateTime?
-  returnDate    DateTime?
-  pax           Int           @default(1)
-  requirements  String?
-  budget        Decimal?      @db.Decimal(10, 2)
-  status        EnquiryStatus @default(NEW)
-  assignedTo    String?
-  notes         String?
-  salesQuotes   SalesQuote[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  organizationId String        @default("org_gktravels")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  id             String        @id @default(cuid())
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  source         EnquirySource @default(DIRECT)
+  destination    String
+  departureDate  DateTime?
+  returnDate     DateTime?
+  pax            Int           @default(1)
+  requirements   String?
+  budget         Decimal?      @db.Decimal(10, 2)
+  status         EnquiryStatus @default(NEW)
+  assignedTo     String?
+  notes          String?
+  salesQuotes    SalesQuote[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
+  @@index([organizationId])
   @@index([customerId])
   @@index([status])
   @@map("enquiries")
 }
 
 model SalesQuote {
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
   id              String           @id @default(cuid())
   enquiryId       String
   enquiry         Enquiry          @relation(fields: [enquiryId], references: [id])
-  quoteNumber     String           @unique
+  quoteNumber     String
   customerId      String
   customer        Customer         @relation(fields: [customerId], references: [id])
   status          SalesQuoteStatus @default(DRAFT)
@@ -1100,6 +1264,8 @@ model SalesQuote {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  @@unique([organizationId, quoteNumber])
+  @@index([organizationId])
   @@index([enquiryId])
   @@index([customerId])
   @@index([status])
@@ -1107,22 +1273,25 @@ model SalesQuote {
 }
 
 model SalesQuoteItem {
-  id           String      @id @default(cuid())
-  salesQuoteId String
-  salesQuote   SalesQuote  @relation(fields: [salesQuoteId], references: [id], onDelete: Cascade)
-  serviceType  ServiceType
-  description  String
-  supplierId   String?
-  supplier     Vendor?     @relation(fields: [supplierId], references: [id])
-  costPrice    Decimal     @db.Decimal(10, 2)
-  markup       Decimal     @default(0) @db.Decimal(10, 2)
-  sellPrice    Decimal     @db.Decimal(10, 2)
-  quantity     Int         @default(1)
-  unit         String      @default("per person")
-  details      Json        @default("{}")
-  sortOrder    Int         @default(0)
-  createdAt    DateTime    @default(now())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  salesQuoteId   String
+  salesQuote     SalesQuote   @relation(fields: [salesQuoteId], references: [id], onDelete: Cascade)
+  serviceType    ServiceType
+  description    String
+  supplierId     String?
+  supplier       Vendor?      @relation(fields: [supplierId], references: [id])
+  costPrice      Decimal      @db.Decimal(10, 2)
+  markup         Decimal      @default(0) @db.Decimal(10, 2)
+  sellPrice      Decimal      @db.Decimal(10, 2)
+  quantity       Int          @default(1)
+  unit           String       @default("per person")
+  details        Json         @default("{}")
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
 
+  @@index([organizationId])
   @@index([salesQuoteId])
   @@index([supplierId])
   @@map("sales_quote_items")

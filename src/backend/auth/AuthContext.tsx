@@ -40,12 +40,13 @@ interface ApiUser {
   name:     string;
   role:     string;
   isActive: boolean;
+  organizationId?: string;
 }
 
 function apiUserToAuthUser(u: ApiUser): AuthUser {
   return {
     id:       u.id,
-    orgId:    'gktravel',
+    orgId:    u.organizationId ?? 'org_gktravels',
     email:    u.email,
     name:     u.name,
     role:     u.role.toUpperCase() as UserRole,

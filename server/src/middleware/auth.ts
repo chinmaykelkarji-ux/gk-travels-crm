@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { setContextUser, DEFAULT_ORGANIZATION_ID } from '../core/requestContext.js';
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -42,10 +43,12 @@ export const CLEAR_COOKIE_OPTIONS = {
 // ─── Token payload ────────────────────────────────────────────
 
 export interface TokenPayload {
-  id:    string;
-  email: string;
-  name:  string;
-  role:  string;
+  id:     string;
+  email:  string;
+  name:   string;
+  role:   string;
+  /** Organisation the session belongs to. Absent on sessions issued before tenancy → default org. */
+  orgId?: string;
 }
 
 export function signToken(payload: TokenPayload): string {
@@ -59,14 +62,17 @@ export function verifyToken(token: string): TokenPayload {
 // ─── Augmented request ────────────────────────────────────────
 
 export interface AuthRequest extends Request {
-  userId?:    string;
-  userEmail?: string;
-  userName?:  string;
-  userRole?:  string;
+  userId?:         string;
+  userEmail?:      string;
+  userName?:       string;
+  userRole?:       string;
+  organizationId?: string;
 }
 
 // ─── requireAuth middleware ───────────────────────────────────
-// Validates the JWT cookie on every protected route.
+// Validates the JWT cookie on every protected route and publishes the actor
+// into the request context (core/requestContext.ts) so the tenant-scoped
+// Prisma client and the audit writer know who is acting.
 // On failure: clears the stale cookie and returns 401.
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -78,11 +84,13 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 
   try {
-    const payload  = verifyToken(token);
-    req.userId     = payload.id;
-    req.userEmail  = payload.email;
-    req.userName   = payload.name;
-    req.userRole   = payload.role;
+    const payload      = verifyToken(token);
+    req.userId         = payload.id;
+    req.userEmail      = payload.email;
+    req.userName       = payload.name;
+    req.userRole       = payload.role;
+    req.organizationId = payload.orgId ?? DEFAULT_ORGANIZATION_ID;
+    setContextUser({ userId: payload.id, userRole: payload.role, organizationId: req.organizationId });
     next();
   } catch (err) {
     // Expired or tampered — remove the invalid cookie immediately

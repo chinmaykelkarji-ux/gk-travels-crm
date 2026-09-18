@@ -19,6 +19,13 @@ async function main() {
 
   console.log('🌱 Seeding database...');
 
+  // ── Organisation (single tenant) ───────────────────────────
+  await prisma.organization.upsert({
+    where:  { id: 'org_gktravels' },
+    update: {},
+    create: { id: 'org_gktravels', slug: 'org_gktravels', name: 'GK Travels' },
+  });
+
   // ── Admin user (optional, env-driven) ─────────────────────
   const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
   const ADMIN_PASS  = process.env.SEED_ADMIN_PASS;

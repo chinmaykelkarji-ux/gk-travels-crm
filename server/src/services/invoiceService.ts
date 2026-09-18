@@ -27,6 +27,7 @@ import {
   type GstSplitType,
 } from '../../../src/shared/utils/gst.js';
 import { createReceivable } from './financeService.js';
+import { currentOrganizationId } from '../core/requestContext.js';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -34,28 +35,36 @@ function round2(n: number): number {
 
 // ── Company Master ────────────────────────────────────────────
 
+// One row per organisation (CompanySettings.organizationId is unique). The
+// original single-tenant row keeps its historical id "default".
 export async function getOrCreateCompanySettings(db: DbClient = prisma) {
+  const organizationId = currentOrganizationId();
   return db.companySettings.upsert({
-    where:  { id: 'default' },
-    create: { id: 'default' },
+    where:  { organizationId },
+    create: { organizationId },
     update: {},
   });
 }
 
 export async function updateCompanySettings(data: Prisma.CompanySettingsUpdateInput, db: DbClient = prisma) {
+  const organizationId = currentOrganizationId();
   return db.companySettings.upsert({
-    where:  { id: 'default' },
-    create: { id: 'default', ...(data as Prisma.CompanySettingsCreateInput) },
+    where:  { organizationId },
+    create: { organizationId, ...data } as Prisma.CompanySettingsUncheckedCreateInput,
     update: data,
   });
 }
 
 // ── Document numbering (NumberingSequence) ─────────────────────
 
+// Sequences are per organisation, document type and financial year. The
+// upsert runs inside the caller's transaction; Postgres serialises the row
+// update, so concurrent invoices never receive the same number.
 async function getNextDocNumber(tx: DbClient, docType: string, financialYear: string): Promise<number> {
+  const organizationId = currentOrganizationId();
   const seq = await tx.numberingSequence.upsert({
-    where:  { docType_financialYear: { docType, financialYear } },
-    create: { id: `${docType}-${financialYear}`, docType, financialYear, lastNumber: 1 },
+    where:  { organizationId_docType_financialYear: { organizationId, docType, financialYear } },
+    create: { id: `${organizationId}-${docType}-${financialYear}`, organizationId, docType, financialYear, lastNumber: 1 },
     update: { lastNumber: { increment: 1 } },
   });
   return seq.lastNumber;
