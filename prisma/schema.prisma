@@ -61,12 +61,15 @@ model Organization {
   salesQuotes           SalesQuote[]
   salesQuoteItems       SalesQuoteItem[]
 
-  sessions              Session[]
-  jobs                  Job[]
-  documents             Document[]
-  documentLinks         DocumentLink[]
-  customerRelationships CustomerRelationship[]
-  tripTravellers        TripTraveller[]
+  sessions               Session[]
+  jobs                   Job[]
+  documents              Document[]
+  documentLinks          DocumentLink[]
+  customerRelationships  CustomerRelationship[]
+  tripTravellers         TripTraveller[]
+  salesQuoteOptionGroups SalesQuoteOptionGroup[]
+  salesQuoteParties      SalesQuoteParty[]
+  salesQuoteItemRates    SalesQuoteItemRate[]
 
   @@map("organizations")
 }
@@ -1333,6 +1336,7 @@ enum Role {
 enum GstMode {
   INCLUDED
   EXCLUDED
+  NONE
 }
 
 // ============================================================
@@ -1532,12 +1536,104 @@ model SalesQuote {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  // ── v2 unified engine (Phase 2.6) ──────────────────────────
+  title              String?
+  version            Int                     @default(1)
+  parentQuoteId      String?
+  parentQuote        SalesQuote?             @relation("QuoteVersions", fields: [parentQuoteId], references: [id], onDelete: SetNull)
+  versions           SalesQuote[]            @relation("QuoteVersions")
+  isCurrent          Boolean                 @default(true)
+  adults             Int                     @default(1)
+  children           Int                     @default(0)
+  infants            Int                     @default(0)
+  gstMode            GstMode                 @default(EXCLUDED)
+  gstRate            Decimal                 @default(5) @db.Decimal(5, 2)
+  taxableAmount      Decimal                 @default(0) @db.Decimal(12, 2)
+  costAmount         Decimal                 @default(0) @db.Decimal(12, 2)
+  inclusions         String?
+  exclusions         String?
+  paymentPolicy      String?
+  cancellationPolicy String?
+  approvalStatus     String                  @default("NOT_REQUIRED")
+  approvalComment    String?
+  approvedBy         String?
+  approvedAt         DateTime?
+  acceptedAt         DateTime?
+  rejectedAt         DateTime?
+  rejectionReason    String?
+  totalsCache        Json                    @default("{}")
+  createdByUserId    String?
+  deletedAt          DateTime?
+  optionGroups       SalesQuoteOptionGroup[]
+  parties            SalesQuoteParty[]
+
   @@unique([organizationId, quoteNumber])
   @@index([organizationId])
   @@index([enquiryId])
   @@index([customerId])
   @@index([status])
+  @@index([parentQuoteId])
   @@map("sales_quotes")
+}
+
+enum PricingBasis {
+  PER_PERSON
+  PER_UNIT
+  PER_ROOM
+  PER_GROUP
+}
+
+// Alternatives inside one quotation ("Flight options": three items, one selected).
+model SalesQuoteOptionGroup {
+  id             String           @id @default(cuid())
+  organizationId String           @default("org_gktravels")
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  salesQuoteId   String
+  salesQuote     SalesQuote       @relation(fields: [salesQuoteId], references: [id], onDelete: Cascade)
+  name           String
+  sortOrder      Int              @default(0)
+  items          SalesQuoteItem[]
+
+  @@index([organizationId])
+  @@index([salesQuoteId])
+  @@map("sales_quote_option_groups")
+}
+
+// A family or sub-group inside a group quotation; items can be allocated to it.
+model SalesQuoteParty {
+  id             String           @id @default(cuid())
+  organizationId String           @default("org_gktravels")
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  salesQuoteId   String
+  salesQuote     SalesQuote       @relation(fields: [salesQuoteId], references: [id], onDelete: Cascade)
+  name           String
+  adults         Int              @default(1)
+  children       Int              @default(0)
+  infants        Int              @default(0)
+  travellerIds   Json             @default("[]")
+  sortOrder      Int              @default(0)
+  items          SalesQuoteItem[]
+
+  @@index([organizationId])
+  @@index([salesQuoteId])
+  @@map("sales_quote_parties")
+}
+
+// Per-band (adult/child/infant) cost and sell for PER_PERSON items.
+model SalesQuoteItemRate {
+  id             String         @id @default(cuid())
+  organizationId String         @default("org_gktravels")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  itemId         String
+  item           SalesQuoteItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  band           String
+  count          Int            @default(0)
+  costPrice      Decimal        @default(0) @db.Decimal(12, 2)
+  sellPrice      Decimal        @default(0) @db.Decimal(12, 2)
+
+  @@unique([itemId, band])
+  @@index([organizationId])
+  @@map("sales_quote_item_rates")
 }
 
 model SalesQuoteItem {
@@ -1559,9 +1655,25 @@ model SalesQuoteItem {
   sortOrder      Int          @default(0)
   createdAt      DateTime     @default(now())
 
+  // ── v2 (Phase 2.6) ─────────────────────────────────────────
+  pricingBasis     PricingBasis           @default(PER_UNIT)
+  nights           Int?
+  serviceDate      DateTime?
+  taxRate          Decimal?               @db.Decimal(5, 2)
+  optionGroupId    String?
+  optionGroup      SalesQuoteOptionGroup? @relation(fields: [optionGroupId], references: [id], onDelete: SetNull)
+  isSelectedOption Boolean                @default(true)
+  partyId          String?
+  party            SalesQuoteParty?       @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  customerNote     String?
+  internalNote     String?
+  rates            SalesQuoteItemRate[]
+
   @@index([organizationId])
   @@index([salesQuoteId])
   @@index([supplierId])
+  @@index([optionGroupId])
+  @@index([partyId])
   @@map("sales_quote_items")
 }
 

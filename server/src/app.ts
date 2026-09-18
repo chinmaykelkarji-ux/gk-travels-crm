@@ -49,6 +49,7 @@ import documentsV2Router     from './routes/v2/documents.js';
 import customersV2Router     from './routes/v2/customers.js';
 import { travellersRouter, tripTravellersRouter } from './routes/v2/travellers.js';
 import { leadsRouter as leadsV2Router, enquiriesRouter as enquiriesV2Router } from './routes/v2/sales.js';
+import quotationsV2Router    from './routes/v2/quotations.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -142,6 +143,7 @@ app.use('/api/v2/travellers', travellersRouter);
 app.use('/api/v2/trips/:tripId/travellers', tripTravellersRouter);
 app.use('/api/v2/leads',      leadsV2Router);
 app.use('/api/v2/enquiries',  enquiriesV2Router);
+app.use('/api/v2/quotations', quotationsV2Router);
 if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
 app.use('/api/jobs',          jobsRouter);
 

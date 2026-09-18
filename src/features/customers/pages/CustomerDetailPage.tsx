@@ -261,7 +261,7 @@ function SalesTab({ data }: { data: Customer360 }) {
         ]} />
       </Card>
       <Card title="Quotations">
-        <DataTable dense rows={data.quotations} rowKey={q => q.id} emptyTitle="No quotations" onRowClick={q => navigate(q.engine === 'sales' ? `/sales-quotes/${q.id}` : `/quotations/${q.id}`)} columns={[
+        <DataTable dense rows={data.quotations} rowKey={q => q.id} emptyTitle="No quotations" onRowClick={q => navigate(q.engine === 'sales' ? `/quotes/${q.id}` : `/quotations/${q.id}`)} columns={[
           { key: 'number', header: 'Number', render: q => q.number ?? q.id },
           { key: 'status', header: 'Status', render: q => <StatusPill tone={q.status === 'ACCEPTED' || q.status === 'accepted' ? 'success' : 'neutral'}>{q.status}</StatusPill> },
           { key: 'total', header: 'Total', align: 'right', render: q => <Money value={q.total} /> },

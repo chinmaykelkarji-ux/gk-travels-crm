@@ -13,7 +13,7 @@ import { currentOrganizationId } from './requestContext.js';
 
 export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX';
 
-export interface DisplayIdOptions { width?: number; year?: number }
+export interface DisplayIdOptions { width?: number; year?: number; /** Text before the year in the id; defaults to the prefix. */ displayPrefix?: string }
 
 export async function nextDisplayId(db: DbClient, prefix: DisplayPrefix, opts: DisplayIdOptions = {}): Promise<string> {
   const year  = String(opts.year ?? new Date().getFullYear());
@@ -27,7 +27,7 @@ export async function nextDisplayId(db: DbClient, prefix: DisplayPrefix, opts: D
         create: { id: `${organizationId}-${prefix}-${year}`, organizationId, docType: prefix, financialYear: year, lastNumber: 1 },
         update: { lastNumber: { increment: 1 } },
       });
-      return `${prefix}-${year}-${String(seq.lastNumber).padStart(width, '0')}`;
+      return `${opts.displayPrefix ?? prefix}-${year}-${String(seq.lastNumber).padStart(width, '0')}`;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && attempt < 2) continue;
       throw err;

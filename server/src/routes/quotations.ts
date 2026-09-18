@@ -399,7 +399,7 @@ router.post('/:id/convert-trip', requirePermission('sales-quotes:write'), async 
 
     const totalAmount = q.totalSelling > 0 ? q.totalSelling : null;
     const gst = totalAmount !== null
-      ? calcGst(totalAmount, q.gstRate, q.gstMode)
+      ? calcGst(totalAmount, q.gstRate, q.gstMode === 'NONE' ? 'EXCLUDED' : q.gstMode)
       : { taxableAmount: 0, gstAmount: 0, totalPayable: null as number | null };
 
     // Auto-generate operational tasks from the quotation's item categories

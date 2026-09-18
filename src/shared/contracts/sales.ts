@@ -1,5 +1,6 @@
 // Sales pipeline v2 — leads and enquiries. Shared by the SPA forms and the API.
 import { z } from 'zod';
+import { queryBool } from './common';
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable().transform(v => (v ? v : null));
 const optionalDate = z.string().date().optional().nullable().or(z.literal('')).transform(v => (v ? v : null));
@@ -48,7 +49,7 @@ export const LeadListQuery = z.object({
   status:   LeadStatus.optional(),
   assignedToUserId: z.string().max(64).optional(),
   source:   z.string().max(40).optional(),
-  includeClosed: z.coerce.boolean().default(false),
+  includeClosed: queryBool.default(false),
   page:     z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -137,7 +138,7 @@ export const EnquiryListQuery = z.object({
   status:   EnquiryStatus.optional(),
   assignedToUserId: z.string().max(64).optional(),
   customerId: z.string().max(64).optional(),
-  includeClosed: z.coerce.boolean().default(false),
+  includeClosed: queryBool.default(false),
   page:     z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

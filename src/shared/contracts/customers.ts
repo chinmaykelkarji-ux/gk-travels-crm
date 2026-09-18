@@ -1,6 +1,7 @@
 // Customers v2 — request/response contracts shared by the SPA forms and the
 // API (zod on both sides; the server strips unknown keys).
 import { z } from 'zod';
+import { queryBool } from './common';
 
 export const CustomerType = z.enum(['INDIVIDUAL', 'CORPORATE']);
 export const RelationshipKind = z.enum(['FAMILY', 'GROUP', 'COMPANY', 'FRIEND']);
@@ -50,7 +51,7 @@ export const CustomerListQuery = z.object({
   sort:     z.enum(['name', 'recent', 'trips']).default('recent'),
   page:     z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  includeDeleted: z.coerce.boolean().default(false),
+  includeDeleted: queryBool.default(false),
 });
 export type CustomerListQuery = z.infer<typeof CustomerListQuery>;
 

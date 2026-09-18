@@ -53,7 +53,7 @@ export default function EnquiryDetailPage() {
         actions={<>
           {canWrite && !closed && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-1.5" />Edit</Button>}
           {canWrite && !closed && <Button size="sm" variant="outline" onClick={() => setFollowUpOpen(true)}><CalendarPlus className="w-4 h-4 mr-1.5" />Follow-up</Button>}
-          {can('sales-quotes:write') && !closed && <Button size="sm" onClick={() => navigate(`/sales-quotes/new?enquiryId=${e.id}`)}><FileText className="w-4 h-4 mr-1.5" />New quote</Button>}
+          {can('sales-quotes:write') && !closed && <Button size="sm" onClick={() => navigate(`/quotes/new?enquiryId=${e.id}`)}><FileText className="w-4 h-4 mr-1.5" />New quote</Button>}
         </>} />
 
       {e.status === 'LOST' && e.lostReason && <div className="mx-5 mt-4 text-sm bg-slate-100 rounded-md px-3 py-2">Lost on {fmtDate(e.lostAt)}: {e.lostReason}</div>}
@@ -74,7 +74,7 @@ export default function EnquiryDetailPage() {
           </section>
           <section>
             <h2 className="text-sm font-medium text-slate-800 mb-2">Quotations</h2>
-            <DataTable dense columns={quoteCols} rows={e.quotes} rowKey={r => r.id} onRowClick={r => navigate(`/sales-quotes/${r.id}`)} emptyTitle="No quotation yet" emptyHint="Build one from the requirement above." emptyAction={can('sales-quotes:write') && !closed ? <Button size="sm" onClick={() => navigate(`/sales-quotes/new?enquiryId=${e.id}`)}>New quote</Button> : undefined} />
+            <DataTable dense columns={quoteCols} rows={e.quotes} rowKey={r => r.id} onRowClick={r => navigate(`/quotes/${r.id}`)} emptyTitle="No quotation yet" emptyHint="Build one from the requirement above." emptyAction={can('sales-quotes:write') && !closed ? <Button size="sm" onClick={() => navigate(`/quotes/new?enquiryId=${e.id}`)}>New quote</Button> : undefined} />
           </section>
           <section>
             <h2 className="text-sm font-medium text-slate-800 mb-2">Activity</h2>
