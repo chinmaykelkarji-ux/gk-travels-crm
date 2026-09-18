@@ -9,3 +9,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Real customer PDFs used for the AI extraction evaluation harness — never committed
+eval-docs/
