@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: travelos
+          POSTGRES_PASSWORD: travelos
+          POSTGRES_DB: travelos_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U travelos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Never the production database. The integration suite migrates this
+      # throwaway database from scratch on every run.
+      TEST_DATABASE_URL: postgresql://travelos:travelos@localhost:5432/travelos_test
+      DATABASE_URL: postgresql://travelos:travelos@localhost:5432/travelos_test
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Typecheck (SPA + server)
+        run: npm run typecheck && npm run typecheck:server
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build

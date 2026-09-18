@@ -54,7 +54,7 @@ router.get('/customer-ledger', requirePermission('finance:read'), async (_req, r
 router.get('/customer-ledger/:customerId', requirePermission('finance:read'), async (req, res) => {
   try {
     const rows = await prisma.$queryRaw<CustomerLedgerRow[]>`
-      SELECT * FROM "customer_ledger_balances" WHERE "customerId" = ${req.params.customerId}
+      SELECT * FROM "customer_ledger_balances" WHERE "customerId" = ${String(req.params.customerId)}
     `;
     res.json(rows[0] ?? null);
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -84,7 +84,7 @@ router.put('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     const data = strip(req.body as Record<string, unknown>);
     const r = await prisma.receivable.update({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       data:    data as Parameters<typeof prisma.receivable.update>[0]['data'],
       include,
     });
@@ -96,7 +96,7 @@ router.put('/:id', requirePermission('finance:write'), async (req, res) => {
 
 router.delete('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
-    await prisma.receivable.delete({ where: { id: req.params.id } });
+    await prisma.receivable.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
@@ -110,7 +110,7 @@ router.post('/:id/entries', requirePermission('finance:write'), async (req, res)
       data: {
         ...data,
         id: String(id),
-        receivableId: req.params.id,
+        receivableId: String(req.params.id),
       } as Parameters<typeof prisma.receivableEntry.create>[0]['data'],
     });
     res.status(201).json(entry);
@@ -124,7 +124,7 @@ router.put('/:id/entries/:entryId', requirePermission('finance:write'), async (r
   try {
     const { id, receivableId, createdAt, ...data } = req.body as Record<string, unknown>;
     const entry = await prisma.receivableEntry.update({
-      where: { id: req.params.entryId },
+      where: { id: String(req.params.entryId) },
       data:  data as Parameters<typeof prisma.receivableEntry.update>[0]['data'],
     });
     res.json(entry);
@@ -133,7 +133,7 @@ router.put('/:id/entries/:entryId', requirePermission('finance:write'), async (r
 
 router.delete('/:id/entries/:entryId', requirePermission('finance:write'), async (req, res) => {
   try {
-    await prisma.receivableEntry.delete({ where: { id: req.params.entryId } });
+    await prisma.receivableEntry.delete({ where: { id: String(req.params.entryId) } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });

@@ -132,7 +132,7 @@ router.get('/', requirePermission('sales-quotes:read'), async (req, res) => {
 
 router.get('/:id', requirePermission('sales-quotes:read'), async (req, res) => {
   try {
-    const quote = await prisma.salesQuote.findUnique({ where: { id: req.params.id }, include: INCLUDE });
+    const quote = await prisma.salesQuote.findUnique({ where: { id: String(req.params.id) }, include: INCLUDE });
     if (!quote) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(toQuoteDTO(quote));
   } catch (err) {
@@ -204,7 +204,7 @@ router.post('/', requirePermission('sales-quotes:write'), async (req: AuthReques
 
 router.put('/:id', requirePermission('sales-quotes:write'), async (req, res) => {
   try {
-    const existing = await prisma.salesQuote.findUnique({ where: { id: req.params.id }, include: INCLUDE });
+    const existing = await prisma.salesQuote.findUnique({ where: { id: String(req.params.id) }, include: INCLUDE });
     if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
 
     const body = req.body as {
@@ -280,7 +280,7 @@ router.put('/:id', requirePermission('sales-quotes:write'), async (req, res) => 
 
 router.post('/:id/convert', requirePermission('sales-quotes:write'), async (req: AuthRequest, res) => {
   try {
-    const quote = await prisma.salesQuote.findUnique({ where: { id: req.params.id }, include: INCLUDE });
+    const quote = await prisma.salesQuote.findUnique({ where: { id: String(req.params.id) }, include: INCLUDE });
     if (!quote) { res.status(404).json({ error: 'Not found' }); return; }
     if (quote.status !== 'ACCEPTED') {
       res.status(400).json({ error: 'Only ACCEPTED quotes can be converted to a booking' });
@@ -371,7 +371,7 @@ router.post('/:id/convert', requirePermission('sales-quotes:write'), async (req:
 
 router.post('/:id/duplicate', requirePermission('sales-quotes:write'), async (req, res) => {
   try {
-    const quote = await prisma.salesQuote.findUnique({ where: { id: req.params.id }, include: INCLUDE });
+    const quote = await prisma.salesQuote.findUnique({ where: { id: String(req.params.id) }, include: INCLUDE });
     if (!quote) { res.status(404).json({ error: 'Not found' }); return; }
 
     const quoteNumber = await generateQuoteNumber();
@@ -418,7 +418,7 @@ router.post('/:id/duplicate', requirePermission('sales-quotes:write'), async (re
 
 router.get('/:id/pdf-data', requirePermission('sales-quotes:read'), async (req, res) => {
   try {
-    const quote = await prisma.salesQuote.findUnique({ where: { id: req.params.id }, include: INCLUDE });
+    const quote = await prisma.salesQuote.findUnique({ where: { id: String(req.params.id) }, include: INCLUDE });
     if (!quote) { res.status(404).json({ error: 'Not found' }); return; }
 
     res.json({

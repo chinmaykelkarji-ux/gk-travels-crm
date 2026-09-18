@@ -190,7 +190,7 @@ router.put('/:id', requireTripServiceUpdate, async (req: AuthRequest, res) => {
     }
 
     const service = await prisma.tripService.update({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       data:    data as Parameters<typeof prisma.tripService.update>[0]['data'],
       include: { trip: true, supplier: true },
     });
@@ -205,7 +205,7 @@ router.put('/:id', requireTripServiceUpdate, async (req: AuthRequest, res) => {
 
 router.delete('/:id', requirePermission('trip-services:write'), async (req, res) => {
   try {
-    await prisma.tripService.delete({ where: { id: req.params.id } });
+    await prisma.tripService.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[trip-services DELETE]', err);

@@ -24,7 +24,7 @@ router.get('/', requirePermission('debit-notes:read'), async (_req, res) => {
 
 router.get('/:id', requirePermission('debit-notes:read'), async (req, res) => {
   try {
-    const dn = await prisma.debitNote.findUnique({ where: { id: req.params.id }, include });
+    const dn = await prisma.debitNote.findUnique({ where: { id: String(req.params.id) }, include });
     if (!dn) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(dn);
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -48,7 +48,7 @@ router.post('/', requirePermission('debit-notes:write'), async (req: AuthRequest
 router.put('/:id', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as UpdateCreditDebitNoteInput), updatedBy: req.userId };
-    const dn = await updateDebitNote(req.params.id as string, input);
+    const dn = await updateDebitNote(String(req.params.id), input);
     res.json(dn);
   } catch (err) {
     console.error('[debitNotes PUT]', err);
@@ -60,7 +60,7 @@ router.put('/:id', requirePermission('debit-notes:write'), async (req: AuthReque
 
 router.post('/:id/cancel', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
-    const dn = await cancelDebitNote(req.params.id as string, req.userId);
+    const dn = await cancelDebitNote(String(req.params.id), req.userId);
     res.json(dn);
   } catch (err) {
     console.error('[debitNotes cancel]', err);
@@ -72,7 +72,7 @@ router.post('/:id/cancel', requirePermission('debit-notes:write'), async (req: A
 
 router.delete('/:id', requirePermission('debit-notes:write'), async (req: AuthRequest, res) => {
   try {
-    await deleteDebitNote(req.params.id as string, req.userId);
+    await deleteDebitNote(String(req.params.id), req.userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[debitNotes DELETE]', err);

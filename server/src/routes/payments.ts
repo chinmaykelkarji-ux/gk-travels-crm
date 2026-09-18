@@ -66,7 +66,7 @@ router.post('/', requirePermission('finance:write'), async (req: AuthRequest, re
 router.put('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     const p = await prisma.payment.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data:  sanitize(req.body) as Parameters<typeof prisma.payment.update>[0]['data'],
     });
     res.json(p);
@@ -75,7 +75,7 @@ router.put('/:id', requirePermission('finance:write'), async (req, res) => {
 
 router.delete('/:id', requirePermission('finance:write'), async (req, res) => {
   try {
-    await prisma.payment.delete({ where: { id: req.params.id } });
+    await prisma.payment.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });

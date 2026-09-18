@@ -49,7 +49,7 @@ router.post('/', requirePermission('customers:write'), async (req: AuthRequest, 
 router.put('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
     const c = await prisma.customer.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data:  sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
     });
     res.json(c);
@@ -62,7 +62,7 @@ router.delete('/:id', requirePermission('customers:write'), async (req: AuthRequ
     return;
   }
   try {
-    await prisma.customer.delete({ where: { id: req.params.id } });
+    await prisma.customer.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });

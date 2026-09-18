@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 
 // ── emitEvent ─────────────────────────────────────────────────
@@ -18,7 +19,7 @@ export async function emitEvent(
     update: {},
     create: {
       eventType,
-      payload,
+      payload: payload as Prisma.InputJsonValue,
       status:         'PENDING',
       idempotencyKey: key,
       scheduledFor:   options?.scheduledFor ?? new Date(),

@@ -24,7 +24,7 @@ router.get('/', requirePermission('credit-notes:read'), async (_req, res) => {
 
 router.get('/:id', requirePermission('credit-notes:read'), async (req, res) => {
   try {
-    const cn = await prisma.creditNote.findUnique({ where: { id: req.params.id }, include });
+    const cn = await prisma.creditNote.findUnique({ where: { id: String(req.params.id) }, include });
     if (!cn) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(cn);
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -48,7 +48,7 @@ router.post('/', requirePermission('credit-notes:write'), async (req: AuthReques
 router.put('/:id', requirePermission('credit-notes:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as UpdateCreditDebitNoteInput), updatedBy: req.userId };
-    const cn = await updateCreditNote(req.params.id as string, input);
+    const cn = await updateCreditNote(String(req.params.id), input);
     res.json(cn);
   } catch (err) {
     console.error('[creditNotes PUT]', err);
@@ -60,7 +60,7 @@ router.put('/:id', requirePermission('credit-notes:write'), async (req: AuthRequ
 
 router.post('/:id/cancel', requirePermission('credit-notes:write'), async (req: AuthRequest, res) => {
   try {
-    const cn = await cancelCreditNote(req.params.id as string, req.userId);
+    const cn = await cancelCreditNote(String(req.params.id), req.userId);
     res.json(cn);
   } catch (err) {
     console.error('[creditNotes cancel]', err);
@@ -72,7 +72,7 @@ router.post('/:id/cancel', requirePermission('credit-notes:write'), async (req: 
 
 router.delete('/:id', requirePermission('credit-notes:write'), async (req: AuthRequest, res) => {
   try {
-    await deleteCreditNote(req.params.id as string, req.userId);
+    await deleteCreditNote(String(req.params.id), req.userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[creditNotes DELETE]', err);

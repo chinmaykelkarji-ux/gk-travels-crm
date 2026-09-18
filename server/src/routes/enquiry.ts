@@ -56,7 +56,7 @@ router.get('/', requirePermission('enquiries:read'), async (req, res) => {
 router.get('/:id', requirePermission('enquiries:read'), async (req, res) => {
   try {
     const enquiry = await prisma.enquiry.findUnique({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       include: { customer: true, salesQuotes: true },
     });
     if (!enquiry) { res.status(404).json({ error: 'Not found' }); return; }
@@ -141,7 +141,7 @@ router.put('/:id', requirePermission('enquiries:write'), async (req, res) => {
     if (body.budget !== undefined) data.budget = body.budget !== null ? Number(body.budget) : null;
 
     const enquiry = await prisma.enquiry.update({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       data,
       include: { customer: true, salesQuotes: true },
     });
@@ -157,13 +157,13 @@ router.put('/:id', requirePermission('enquiries:write'), async (req, res) => {
 
 router.delete('/:id', requirePermission('enquiries:write'), async (req, res) => {
   try {
-    const enquiry = await prisma.enquiry.findUnique({ where: { id: req.params.id } });
+    const enquiry = await prisma.enquiry.findUnique({ where: { id: String(req.params.id) } });
     if (!enquiry) { res.status(404).json({ error: 'Not found' }); return; }
     if (enquiry.status !== 'NEW' && enquiry.status !== 'IN_PROGRESS') {
       res.status(400).json({ error: 'Only enquiries with status NEW or IN_PROGRESS can be deleted' });
       return;
     }
-    await prisma.enquiry.delete({ where: { id: req.params.id } });
+    await prisma.enquiry.delete({ where: { id: String(req.params.id) } });
     res.json({ success: true });
   } catch (err) {
     console.error('[enquiries DELETE]', err);

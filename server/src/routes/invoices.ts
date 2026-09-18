@@ -28,7 +28,7 @@ router.get('/', requirePermission('finance:read'), async (_req, res) => {
 
 router.get('/eligible/:customerId', requirePermission('finance:read'), async (req, res) => {
   try {
-    const { customerId } = req.params;
+    const customerId = String(req.params.customerId);
 
     const [bookings, trips] = await Promise.all([
       prisma.booking.findMany({
@@ -57,7 +57,7 @@ router.get('/eligible/:customerId', requirePermission('finance:read'), async (re
 
 router.get('/:id', requirePermission('finance:read'), async (req, res) => {
   try {
-    const inv = await prisma.invoice.findUnique({ where: { id: req.params.id }, include });
+    const inv = await prisma.invoice.findUnique({ where: { id: String(req.params.id) }, include });
     if (!inv) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(inv);
   } catch (err) { res.status(500).json({ error: String(err) }); }
@@ -81,7 +81,7 @@ router.post('/', requirePermission('finance:write'), async (req: AuthRequest, re
 router.put('/:id', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const input = { ...(req.body as UpdateInvoiceInput), updatedBy: req.userId };
-    const invoice = await updateInvoice(req.params.id as string, input);
+    const invoice = await updateInvoice(String(req.params.id), input);
     res.json(invoice);
   } catch (err) {
     console.error('[invoices PUT]', err);
@@ -95,7 +95,7 @@ router.post('/:id/cancel', requirePermission('finance:write'), async (req: AuthR
   try {
     const { reason } = req.body as { reason: string };
     if (!reason) { res.status(400).json({ error: 'Cancellation reason is required' }); return; }
-    const invoice = await cancelInvoice(req.params.id as string, reason, req.userId);
+    const invoice = await cancelInvoice(String(req.params.id), reason, req.userId);
     res.json(invoice);
   } catch (err) {
     console.error('[invoices cancel]', err);
@@ -107,7 +107,7 @@ router.post('/:id/cancel', requirePermission('finance:write'), async (req: AuthR
 
 router.delete('/:id', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
-    await deleteInvoice(req.params.id as string, req.userId);
+    await deleteInvoice(String(req.params.id), req.userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[invoices DELETE]', err);
