@@ -90,10 +90,7 @@ const WRITABLE_FIELDS = [
   'name', 'phone', 'altPhone', 'email', 'address', 'city', 'state',
   'preferences', 'notes', 'tripIds', 'documents', 'createdDate', 'sourceLeadId',
   'billingAddress', 'companyName', 'gstNumber', 'gstRegistered',
-  // Identity documents are NOT listed yet — the columns do not exist in the
-  // database. Dropping them here is what stops the whole write failing with
-  // "Unknown argument `passportNo`". Add them only after running migration
-  // 20260917000000_customer_identity_documents. See prisma/schema.prisma.
+  'passportNo', 'passportExpiry', 'passportCountry', 'panNumber',
 ] as const;
 
 function sanitize(body: Record<string, unknown>) {
