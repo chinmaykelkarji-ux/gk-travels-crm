@@ -11,7 +11,7 @@ import { Prisma } from '@prisma/client';
 import type { DbClient } from '../lib/prisma.js';
 import { currentOrganizationId } from './requestContext.js';
 
-export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX';
+export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX' | 'GK';
 
 export interface DisplayIdOptions { width?: number; year?: number; /** Text before the year in the id; defaults to the prefix. */ displayPrefix?: string }
 

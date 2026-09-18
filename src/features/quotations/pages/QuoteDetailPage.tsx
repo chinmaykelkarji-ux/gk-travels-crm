@@ -64,7 +64,7 @@ export default function QuoteDetailPage() {
       )}
       {d.approvalStatus === 'REJECTED' && <div className="mx-5 mt-4 text-sm bg-red-50 border border-red-200 rounded-md px-3 py-2">Approval refused{d.approvalComment ? `: ${d.approvalComment}` : ''}. Revise the pricing and save to re-evaluate.</div>}
       {d.status === 'REJECTED' && d.rejectionReason && <div className="mx-5 mt-4 text-sm bg-slate-100 rounded-md px-3 py-2">Rejected by the customer: {d.rejectionReason}</div>}
-      {d.status === 'ACCEPTED' && <div className="mx-5 mt-4 text-sm bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">Accepted on {fmtDate(d.acceptedAt)}.{d.convertedTripId && <> Trip <Link className="underline" to={`/trips/${d.convertedTripId}`}>{d.convertedTripId}</Link>.</>}</div>}
+      {d.status === 'ACCEPTED' && <div className="mx-5 mt-4 text-sm bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">Accepted on {fmtDate(d.acceptedAt)}. <Link className="underline" to={`/contracts?quoteId=${d.id}`}>View bookings</Link>{d.convertedTripId && <> · Trip <Link className="underline" to={`/trips/${d.convertedTripId}`}>{d.convertedTripId}</Link></>}.</div>}
 
       {preview ? <CustomerPreview view={cv.data} loading={cv.isPending} /> : <InternalView d={d} showMargin={showMargin} canWrite={canWrite && !terminal} onSelect={(g, i) => m.selectOption.mutate({ id: d.id, optionGroupId: g, itemId: i }, { onError: err })} />}
 

@@ -44,6 +44,8 @@ const EnquiryDetailPage   = lazy(() => import('@/features/sales/pages/EnquiryDet
 const QuotesPage          = lazy(() => import('@/features/quotations/pages/QuotesPage'));
 const QuoteEditorPage     = lazy(() => import('@/features/quotations/pages/QuoteEditorPage'));
 const QuoteDetailPage     = lazy(() => import('@/features/quotations/pages/QuoteDetailPage'));
+const ContractsPage       = lazy(() => import('@/features/contracts/pages/ContractsPage'));
+const ContractDetailPage  = lazy(() => import('@/features/contracts/pages/ContractDetailPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -280,6 +282,8 @@ export default function App() {
                 <Route path="/quotes/new"            element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><QuoteEditorPage /></RoleGuard>} />
                 <Route path="/quotes/:id"            element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><QuoteDetailPage /></RoleGuard>} />
                 <Route path="/quotes/:id/edit"       element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><QuoteEditorPage /></RoleGuard>} />
+                <Route path="/contracts"             element={<ContractsPage />} />
+                <Route path="/contracts/:id"         element={<ContractDetailPage />} />
                 <Route path="/sales-quotes"          element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteList /></RoleGuard>} />
                 <Route path="/sales-quotes/new"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />
                 <Route path="/sales-quotes/:id"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />

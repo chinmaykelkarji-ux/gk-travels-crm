@@ -49,8 +49,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'TRIPS',
     items: [
-      { path: '/trips',    label: 'Trips',    icon: FolderOpen, permission: 'trips:read' },
-      { path: '/bookings', label: 'Bookings', icon: Ticket,     permission: 'bookings:read' },
+      { path: '/contracts', label: 'Bookings',         icon: Ticket,     permission: 'bookings:read' },
+      { path: '/trips',     label: 'Trips',            icon: FolderOpen, permission: 'trips:read' },
+      { path: '/bookings',  label: 'Service bookings', icon: Ticket,     permission: 'bookings:read' },
     ],
   },
   {
