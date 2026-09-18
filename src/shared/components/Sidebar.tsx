@@ -31,39 +31,54 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'CRM',
+    label: 'SALES',
     items: [
-      { path: '/enquiries',  label: 'Enquiries',  icon: MessageSquare, permission: 'enquiries:read' },
+      { path: '/enquiries',    label: 'Enquiries',    icon: MessageSquare,   permission: 'enquiries:read' },
       { path: '/sales-quotes', label: 'Sales Quotes', icon: FileSpreadsheet, permission: 'sales-quotes:read' },
-      { path: '/customers',  label: 'Customers',  icon: UserCircle,  permission: 'customers:read' },
-      { path: '/trips',      label: 'Trips',      icon: FolderOpen,  permission: 'trips:read' },
+      { path: '/quotations',   label: 'Quotations',   icon: FileText,        permission: 'sales-quotes:read' },
+      { path: '/itineraries',  label: 'Itineraries',  icon: Map,             permission: 'trips:read' },
+    ],
+  },
+  {
+    label: 'CUSTOMERS',
+    items: [
+      { path: '/customers', label: 'Customers', icon: UserCircle, permission: 'customers:read' },
+    ],
+  },
+  {
+    label: 'TRIPS',
+    items: [
+      { path: '/trips',    label: 'Trips',    icon: FolderOpen, permission: 'trips:read' },
+      { path: '/bookings', label: 'Bookings', icon: Ticket,     permission: 'bookings:read' },
     ],
   },
   {
     label: 'OPERATIONS',
     items: [
-      { path: '/daily-ops',   label: 'Daily Ops',   icon: CalendarClock, permission: 'trip-services:read' },
-      { path: '/bookings',    label: 'Bookings',    icon: Ticket,        permission: 'bookings:read' },
-      { path: '/quotations',  label: 'Quotations',  icon: FileText,      permission: 'sales-quotes:read' },
-      { path: '/itineraries', label: 'Itineraries', icon: Map,           permission: 'trips:read' },
-      { path: '/vouchers',    label: 'Vouchers',    icon: FileCheck,     permission: 'trips:read' },
-      { path: '/operations',  label: 'Operations',  icon: Activity, badge: 'reminders', permission: 'trip-services:read' },
-      { path: '/operations-dashboard', label: 'Ops Dashboard', icon: Gauge, permission: 'dashboard:read' },
+      { path: '/daily-ops',            label: 'Daily Ops',     icon: CalendarClock, permission: 'trip-services:read' },
+      { path: '/operations',           label: 'Tasks & Alerts', icon: Activity, badge: 'reminders', permission: 'trip-services:read' },
+      { path: '/operations-dashboard', label: 'Ops Dashboard', icon: Gauge,         permission: 'dashboard:read' },
+      { path: '/vouchers',             label: 'Vouchers',      icon: FileCheck,     permission: 'trips:read' },
+    ],
+  },
+  {
+    label: 'SUPPLIERS',
+    items: [
+      { path: '/vendors', label: 'Suppliers', icon: Building2, permission: 'suppliers:read' },
     ],
   },
   {
     label: 'FINANCE',
     items: [
-      { path: '/invoices', label: 'Invoices', icon: Receipt, permission: 'invoices:read' },
+      { path: '/invoices',     label: 'Invoices',     icon: Receipt,   permission: 'invoices:read' },
+      { path: '/receivables',  label: 'Receivables',  icon: IndianRupee, permission: 'payments:read' },
       { path: '/credit-notes', label: 'Credit Notes', icon: FileMinus, permission: 'credit-notes:read' },
-      { path: '/debit-notes', label: 'Debit Notes', icon: FilePlus, permission: 'debit-notes:read' },
-      { path: '/gst-reports', label: 'GST Reports', icon: Percent, permission: 'gst:read' },
-      { path: '/receivables', label: 'Receivables', icon: Receipt, permission: 'payments:read' },
-      { path: '/vendors', label: 'Vendors', icon: Building2, permission: 'suppliers:read' },
+      { path: '/debit-notes',  label: 'Debit Notes',  icon: FilePlus,  permission: 'debit-notes:read' },
+      { path: '/gst-reports',  label: 'GST Reports',  icon: Percent,   permission: 'gst:read' },
     ],
   },
   {
-    label: 'INTELLIGENCE',
+    label: 'REPORTS',
     items: [
       { path: '/analytics', label: 'Analytics', icon: BarChart2, permission: 'reports:read' },
     ],
@@ -134,7 +149,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </div>
             <div>
               <div className="text-white font-bold text-sm font-display tracking-tight">GK Travels</div>
-              <div className="text-indigo-300/70 text-[10px] mt-0.5 font-medium">Operations CRM</div>
+              <div className="text-indigo-300/70 text-[10px] mt-0.5 font-medium">TravelOS</div>
             </div>
           </div>
           <button

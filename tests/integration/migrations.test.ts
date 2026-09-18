@@ -36,13 +36,15 @@ describe.skipIf(!hasTestDb)('prisma migration chain', () => {
     await prisma.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${MIGRATE_DB}" WITH (FORCE)`);
   });
 
-  it('migrate deploy applies every folder on an empty database', () => {
+  // Generous timeouts: `prisma migrate deploy` spawns the CLI and can take well
+  // over 30 s on a busy machine or CI runner.
+  it('migrate deploy applies every folder on an empty database', { timeout: 180_000 }, () => {
     const out = run('npx prisma migrate deploy', migrateUrl);
     expect(out).toMatch(/applied|Applying migration/i);
     expect(out).not.toMatch(/\berror\b/i);
   });
 
-  it('the deployed database matches schema.prisma exactly (no drift in either direction)', () => {
+  it('the deployed database matches schema.prisma exactly (no drift in either direction)', { timeout: 120_000 }, () => {
     const diff = run(`npx prisma migrate diff --from-url "${migrateUrl}" --to-schema-datamodel prisma/schema.prisma --script`, migrateUrl);
     expect(diff.trim()).toMatch(/^-- This is an empty migration\.?$|^$/);
   });
@@ -67,7 +69,7 @@ describe.skipIf(!hasTestDb)('prisma migration chain', () => {
     expect(ledger).toEqual([]);
   });
 
-  it('is idempotent: a second deploy is a no-op', () => {
+  it('is idempotent: a second deploy is a no-op', { timeout: 120_000 }, () => {
     const out = run('npx prisma migrate deploy', migrateUrl);
     expect(out).toMatch(/No pending migrations|already in sync/i);
   });

@@ -61,10 +61,11 @@ model Organization {
   salesQuotes           SalesQuote[]
   salesQuoteItems       SalesQuoteItem[]
 
-  sessions      Session[]
-  jobs          Job[]
-  documents     Document[]
-  documentLinks DocumentLink[]
+  sessions              Session[]
+  jobs                  Job[]
+  documents             Document[]
+  documentLinks         DocumentLink[]
+  customerRelationships CustomerRelationship[]
 
   @@map("organizations")
 }
@@ -254,13 +255,59 @@ model Customer {
   passportCountry String?
   panNumber       String?
 
+  // ── v2 (Phase 2.2) ─────────────────────────────────────────
+  phoneNormalized      String?
+  type                 CustomerType           @default(INDIVIDUAL)
+  source               String?
+  tags                 Json                   @default("[]")
+  referredByCustomerId String?
+  referredBy           Customer?              @relation("CustomerReferral", fields: [referredByCustomerId], references: [id], onDelete: SetNull)
+  referrals            Customer[]             @relation("CustomerReferral")
+  mergedIntoId         String?
+  deletedAt            DateTime?
+  relationships        CustomerRelationship[] @relation("RelationshipFrom")
+  relatedTo            CustomerRelationship[] @relation("RelationshipTo")
+
   enquiries   Enquiry[]
   salesQuotes SalesQuote[]
 
   @@index([organizationId])
   @@index([phone])
   @@index([email])
+  @@index([organizationId, phoneNormalized])
+  @@index([organizationId, deletedAt])
   @@map("customers")
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  CORPORATE
+}
+
+enum RelationshipKind {
+  FAMILY
+  GROUP
+  COMPANY
+  FRIEND
+}
+
+// One row per pair of customers (family member, travel group, company contact).
+model CustomerRelationship {
+  id                String           @id @default(cuid())
+  organizationId    String           @default("org_gktravels")
+  organization      Organization     @relation(fields: [organizationId], references: [id])
+  customerId        String
+  customer          Customer         @relation("RelationshipFrom", fields: [customerId], references: [id], onDelete: Cascade)
+  relatedCustomerId String
+  related           Customer         @relation("RelationshipTo", fields: [relatedCustomerId], references: [id], onDelete: Cascade)
+  kind              RelationshipKind
+  note              String?
+  createdAt         DateTime         @default(now())
+
+  @@unique([customerId, relatedCustomerId])
+  @@index([organizationId])
+  @@index([relatedCustomerId])
+  @@map("customer_relationships")
 }
 
 model Lead {

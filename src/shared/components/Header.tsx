@@ -22,6 +22,8 @@ const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
   '/settings':     { title: 'Settings',     subtitle: 'Company · Integrations · Users'            },
 };
 
+const V2_PREFIXES = ['/customers'];
+
 interface HeaderProps {
   onMenuToggle:  () => void;
   onNewTrip:     () => void;
@@ -36,7 +38,9 @@ export function Header({ onMenuToggle, onNewTrip, onSearchOpen }: HeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
 
-  const meta = ROUTE_META[location.pathname] ?? { title: 'GK Travels', subtitle: '' };
+  // v2 screens render their own PageHeader (title, crumbs, actions); the bar stays slim.
+  const isV2  = V2_PREFIXES.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
+  const meta  = isV2 ? null : (ROUTE_META[location.pathname] ?? { title: 'GK Travels', subtitle: '' });
 
   const urgentTrips = trips.filter(t => {
     const days = daysUntil(t.departure);
@@ -61,10 +65,12 @@ export function Header({ onMenuToggle, onNewTrip, onSearchOpen }: HeaderProps) {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <div>
-          <h1 className="font-bold text-[15px] text-gray-900 font-display leading-tight">{meta.title}</h1>
-          <p className="text-[11px] text-gray-400 mt-0.5">{meta.subtitle}</p>
-        </div>
+        {meta && (
+          <div>
+            <h1 className="font-bold text-[15px] text-gray-900 font-display leading-tight">{meta.title}</h1>
+            <p className="text-[11px] text-gray-400 mt-0.5">{meta.subtitle}</p>
+          </div>
+        )}
       </div>
 
       {/* Right: Search · Bell · Quick Add */}

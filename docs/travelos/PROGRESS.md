@@ -36,7 +36,16 @@ New schema change recipe (never `db push`): edit `prisma/schema.prisma` → depl
 | 1.13 | Design system tokens + primitives, new shell navigation | ⇢ 2.1 | | Built as the first Phase 2 module so it serves real screens |
 
 ## Phase 2 — Core CRM + Sales
-☐ Customers v2 · ☐ Travellers · ☐ Leads · ☐ Enquiries v2 · ☐ Unified quotation engine (per-person, options, parties) · ☐ Booking contract + payment schedule · ☐ Quote migration
+| # | Module | Status | Commit | Notes |
+|---|--------|--------|--------|-------|
+| 2.1 | Design system primitives (`src/design-system/`), typed API client (`src/lib/api.ts`), TravelOS navigation groups, v2 pages carry their own PageHeader | ☑ | | Legacy screens untouched; superseded pages move under `/legacy/*` as v2 replaces them |
+| 2.2 | Customers v2: server-side list/search/pagination, `phoneNormalized` dedupe (block + force), duplicate groups + merge, relationships, referrals, tags, soft delete with guards, Customer 360 (trips · sales · finance · travellers · documents · activity) | ☑ | | Migration `20260918140000_customers_v2` backfills normalised phones, corporate flag, and seeds the `CUS` sequence. Legacy page at `/legacy/customers` |
+| 2.3 | Travellers (rename Passenger, per-customer + per-trip, passport expiry alerts) | ☐ | | |
+| 2.4 | Leads v2 (spec lifecycle, real-user assignment, pipeline board) | ☐ | | |
+| 2.5 | Enquiries v2 (adults/children/infants, rooms, preferences) | ☐ | | |
+| 2.6 | Unified quotation engine (per-person rates, option groups, parties; pure calc in `src/shared/calc/quotation.ts`) | ☐ | | |
+| 2.7 | Booking contract + payment schedule | ☐ | | |
+| 2.8 | Migrate existing sales quotes + legacy quotation | ☐ | | |
 
 ## Phase 3 — Travel operations
 ☐ Trip control centre · ☐ Hotels/vehicles/drivers/activities masters · ☐ Hotel bookings, vehicle assignments (overlap check), activity bookings, tickets (segments, boarding points, group pax), extras · ☐ Itinerary v2 · ☐ Tasks · ☐ Ops today · ☐ Driver view · ☐ Legacy booking/voucher migration

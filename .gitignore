@@ -15,3 +15,6 @@ eval-docs/
 
 # Local document storage (development only; production uses R2/S3)
 .storage/
+
+# Claude desktop app session config (per machine)
+.claude/

@@ -76,7 +76,8 @@ export async function enqueueJob(input: EnqueueInput): Promise<EnqueueResult> {
         if (existing.status === 'FAILED' || existing.status === 'CANCELLED') {
           await prisma.job.update({
             where: { id: existing.id },
-            data:  { status: 'PENDING', attempts: 0, payload, runAfter: input.runAfter ?? new Date(), lastError: null, lockedUntil: null, lockedBy: null, finishedAt: null },
+            // runAfter is left alone when not given: the old value is in the past, so the job is claimable now.
+            data:  { status: 'PENDING', attempts: 0, payload, runAfter: input.runAfter, lastError: null, lockedUntil: null, lockedBy: null, finishedAt: null },
           });
         }
         return { id: existing.id, created: false };
@@ -87,7 +88,8 @@ export async function enqueueJob(input: EnqueueInput): Promise<EnqueueResult> {
         organizationId,
         type:           input.type,
         payload,
-        runAfter:       input.runAfter ?? new Date(),
+        // Omitted = database NOW() (schema default), so host/DB clock skew cannot delay a job.
+        runAfter:       input.runAfter,
         idempotencyKey: input.idempotencyKey ?? null,
         priority:       input.priority ?? 0,
         maxAttempts:    input.maxAttempts ?? 3,
@@ -147,19 +149,24 @@ export interface TickSummary {
 async function executeJob(job: Job, deadline: number, summary: TickSummary): Promise<void> {
   const handler = handlers.get(job.type);
   const finishFail = async (message: string, exhausted: boolean) => {
-    const status: JobStatus = exhausted ? 'FAILED' : 'PENDING';
-    await prismaUnscoped.job.update({
-      where: { id: job.id },
-      data: {
-        status,
-        lastError:   message.slice(0, 2000),
-        lockedUntil: null,
-        lockedBy:    null,
-        runAfter:    exhausted ? job.runAfter : new Date(Date.now() + backoffMs(job.attempts)),
-        finishedAt:  exhausted ? new Date() : null,
-      },
-    });
-    if (exhausted) summary.failed++; else summary.retried++;
+    const lastError = message.slice(0, 2000);
+    if (exhausted) {
+      await prismaUnscoped.job.update({
+        where: { id: job.id },
+        data:  { status: 'FAILED' satisfies JobStatus, lastError, lockedUntil: null, lockedBy: null, finishedAt: new Date() },
+      });
+      summary.failed++;
+      return;
+    }
+    // Backoff is computed on the database clock, like the claim query, so a
+    // skewed function clock can neither delay nor rush the retry.
+    await prismaUnscoped.$executeRaw`
+      UPDATE "jobs"
+      SET "status" = 'PENDING', "lastError" = ${lastError}, "lockedUntil" = NULL, "lockedBy" = NULL,
+          "runAfter" = NOW() + (${backoffMs(job.attempts)} || ' milliseconds')::interval,
+          "finishedAt" = NULL, "updatedAt" = NOW()
+      WHERE "id" = ${job.id}`;
+    summary.retried++;
   };
 
   if (!handler) {
