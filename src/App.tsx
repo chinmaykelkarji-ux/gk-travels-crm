@@ -38,6 +38,9 @@ const CustomersPage      = lazy(() => import('@/features/customers/pages/Custome
 const CustomerDetailPage = lazy(() => import('@/features/customers/pages/CustomerDetailPage'));
 const TravellersPage      = lazy(() => import('@/features/travellers/pages/TravellersPage'));
 const TravellerDetailPage = lazy(() => import('@/features/travellers/pages/TravellerDetailPage'));
+const LeadsPage           = lazy(() => import('@/features/sales/pages/LeadsPage'));
+const EnquiriesPage       = lazy(() => import('@/features/sales/pages/EnquiriesPage'));
+const EnquiryDetailPage   = lazy(() => import('@/features/sales/pages/EnquiryDetailPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -266,7 +269,10 @@ export default function App() {
                 <Route path="/quotations/new"        element={<QuotationBuilder />} />
                 <Route path="/quotations/:id"        element={<QuotationDetail />} />
                 <Route path="/quotations/:id/edit"   element={<QuotationBuilder />} />
-                <Route path="/enquiries"             element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><EnquiryPipeline /></RoleGuard>} />
+                <Route path="/leads"                 element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><LeadsPage /></RoleGuard>} />
+                <Route path="/enquiries"             element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><EnquiriesPage /></RoleGuard>} />
+                <Route path="/enquiries/:id"         element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><EnquiryDetailPage /></RoleGuard>} />
+                <Route path="/legacy/enquiries"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><EnquiryPipeline /></RoleGuard>} />
                 <Route path="/sales-quotes"          element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteList /></RoleGuard>} />
                 <Route path="/sales-quotes/new"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />
                 <Route path="/sales-quotes/:id"      element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><SalesQuoteBuilder /></RoleGuard>} />

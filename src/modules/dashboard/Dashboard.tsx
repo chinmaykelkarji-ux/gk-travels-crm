@@ -825,10 +825,9 @@ export default function Dashboard() {
             {[
               { label: 'New',           status: 'new',            color: 'bg-gray-400'    },
               { label: 'Contacted',     status: 'contacted',      color: 'bg-blue-400'    },
-              { label: 'Follow-up',     status: 'follow_up',      color: 'bg-yellow-400'  },
-              { label: 'Quotation',     status: 'quotation_sent', color: 'bg-orange-400'  },
-              { label: 'Confirmed',     status: 'confirmed',      color: 'bg-emerald-400' },
-              { label: 'Converted',     status: 'converted',      color: 'bg-blue-600'    },
+              { label: 'Qualified',     status: 'qualified',      color: 'bg-orange-400'  },
+              { label: 'Converted',     status: 'converted',      color: 'bg-emerald-400' },
+              { label: 'Lost',          status: 'lost',           color: 'bg-gray-300'    },
             ].map(row => {
               const count = leads.filter(l => l.status === row.status).length;
               return (

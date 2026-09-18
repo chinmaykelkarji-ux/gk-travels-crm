@@ -72,18 +72,20 @@ model Organization {
 }
 
 model User {
-  organizationId String       @default("org_gktravels")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  id             String       @id @default(cuid())
-  email          String       @unique
-  passwordHash   String
-  name           String
-  role           Role         @default(ADMIN)
-  isActive       Boolean      @default(true)
-  lastLoginAt    DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  sessions       Session[]
+  organizationId    String       @default("org_gktravels")
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  id                String       @id @default(cuid())
+  email             String       @unique
+  passwordHash      String
+  name              String
+  role              Role         @default(ADMIN)
+  isActive          Boolean      @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  sessions          Session[]
+  assignedLeads     Lead[]       @relation("LeadAssignee")
+  assignedEnquiries Enquiry[]    @relation("EnquiryAssignee")
 
   @@index([organizationId])
   @@map("users")
@@ -339,10 +341,22 @@ model Lead {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
+  // ── v2 (Phase 2.4) ─────────────────────────────────────────
+  phoneNormalized    String?
+  assignedToUserId   String?
+  assignee           User?     @relation("LeadAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  lostReason         String?
+  convertedEnquiryId String?
+  lastContactedAt    DateTime?
+  deletedAt          DateTime?
+  enquiries          Enquiry[]
+
   @@index([organizationId])
   @@index([status])
   @@index([assignedTo])
+  @@index([assignedToUserId])
   @@index([followUpDate])
+  @@index([organizationId, phoneNormalized])
   @@map("leads")
 }
 
@@ -1461,9 +1475,35 @@ model Enquiry {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  // ── v2 (Phase 2.5) ─────────────────────────────────────────
+  enquiryNumber    String?
+  leadId           String?
+  lead             Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  adults           Int       @default(1)
+  children         Int       @default(0)
+  infants          Int       @default(0)
+  rooms            Int?
+  origin           String?
+  tripType         String?
+  hotelCategory    String?
+  mealPlan         String?
+  flexibleDates    Boolean   @default(false)
+  budgetMax        Decimal?  @db.Decimal(10, 2)
+  preferences      Json      @default("{}")
+  priority         String    @default("medium")
+  assignedToUserId String?
+  assignee         User?     @relation("EnquiryAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  lostReason       String?
+  wonAt            DateTime?
+  lostAt           DateTime?
+  deletedAt        DateTime?
+
+  @@unique([organizationId, enquiryNumber])
   @@index([organizationId])
   @@index([customerId])
   @@index([status])
+  @@index([assignedToUserId])
+  @@index([leadId])
   @@map("enquiries")
 }
 

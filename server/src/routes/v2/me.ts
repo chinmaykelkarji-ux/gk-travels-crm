@@ -36,4 +36,11 @@ router.get('/', async (req: AuthRequest, res) => {
   });
 });
 
+// GET /api/v2/me/team — active colleagues for assignment pickers. Any signed-in
+// user may see names and roles; nothing else about an account is exposed.
+router.get('/team', async (_req, res) => {
+  const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } });
+  res.json(users);
+});
+
 export default router;
