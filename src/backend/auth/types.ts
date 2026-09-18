@@ -6,7 +6,7 @@ export type UserRole = 'ADMIN' | 'BOOKING' | 'OPERATIONS' | 'ACCOUNTS';
 
 export interface AuthUser {
   id:       string;
-  orgId:    string;   // always 'gktravel' for this single-org CRM
+  orgId:    string;   // organisation the session belongs to (from /api/auth/me)
   email:    string;
   name:     string;
   role:     UserRole;

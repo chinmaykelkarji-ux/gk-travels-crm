@@ -32,8 +32,8 @@ New schema change recipe (never `db push`): edit `prisma/schema.prisma` → depl
 | 1.9 | Server-side sessions with instant revocation (logout, deactivation, role change, password reset), 30-day idle expiry, login rate limit per (IP, email), API ceiling, helmet, CORS by environment | ☑ | (this commit) | Sessions cached 60 s in-process; revocation clears the cache |
 | 1.10 | Job runner: `jobs` table, claim with `FOR UPDATE SKIP LOCKED` + lease, retries with backoff, per-organisation handler context, recurring system jobs (scheduler rules every 15 min, outbox dispatch every minute), `POST /api/jobs/tick` behind `CRON_SECRET`, daily safety-net Vercel cron, local dev loop | ☑ | (this commit) | Minute-level scheduling: Pro cron or an external scheduler (decision 6) |
 | 1.11 | Storage + documents: S3/R2 provider with presigned PUT/GET, local-disk provider for dev/tests behind HMAC-signed URLs, `documents` + `document_links`, `/api/v2/documents` (register → upload → complete → list/link/download → guarded delete), 503 NOT_CONFIGURED in production without a bucket | ☑ | (this commit) | Phase 5 adds classification/extraction on top |
-| 1.12 | Repo hygiene: Gen 0 removal, junk files, README | ☐ | | |
-| 1.13 | Design system tokens + primitives, new shell navigation | ☐ | | starts with Phase 2 UI |
+| 1.12 | Repo hygiene: Supabase-era code, unrouted auth pages, third permission vocabulary, legacy vanilla-JS app, junk files removed; `@supabase/supabase-js` dropped; README rewritten | ☑ | (this commit) | Production Vite build verified |
+| 1.13 | Design system tokens + primitives, new shell navigation | ⇢ 2.1 | | Built as the first Phase 2 module so it serves real screens |
 
 ## Phase 2 — Core CRM + Sales
 ☐ Customers v2 · ☐ Travellers · ☐ Leads · ☐ Enquiries v2 · ☐ Unified quotation engine (per-person, options, parties) · ☐ Booking contract + payment schedule · ☐ Quote migration

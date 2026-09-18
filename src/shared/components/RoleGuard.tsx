@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/backend/auth/AuthContext';
 import type { UserRole } from '@/backend/auth/types';
-import { ROLE_LABELS } from '@/backend/auth/permissions';
+import { ROLE_LABELS } from '@/shared/hooks/usePermissions';
 
 interface RoleGuardProps {
   allowed:  UserRole[];

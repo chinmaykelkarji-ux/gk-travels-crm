@@ -15,10 +15,8 @@ import {
   useState, useEffect, type ReactNode,
 } from 'react';
 import apiClient                  from '@/lib/apiClient';
-import { hasPermission, isAtLeast } from './permissions';
 import type { AuthUser }           from './types';
 import type { UserRole }           from './types';
-import type { Permission }         from './permissions';
 
 // ─── Context shape ─────────────────────────────────────────────
 
@@ -129,12 +127,3 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-export function usePermission(permission: Permission): boolean {
-  const { user } = useAuth();
-  return hasPermission(user?.role ?? null, permission);
-}
-
-export function useIsAtLeast(minRole: UserRole): boolean {
-  const { user } = useAuth();
-  return isAtLeast(user?.role ?? null, minRole);
-}

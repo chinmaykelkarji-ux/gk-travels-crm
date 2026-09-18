@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import ImportExportTab from './ImportExport';
 import { useStore } from '@/store';
-import { useAuth, usePermission } from '@/backend/auth/AuthContext';
-import { PERMISSIONS } from '@/backend/auth/permissions';
+import { useAuth } from '@/backend/auth/AuthContext';
+import { usePermissions } from '@/shared/hooks/usePermissions';
 import apiClient from '@/lib/apiClient';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -652,8 +652,9 @@ export default function Settings() {
   const trips     = useStore(s => s.trips);
   const leads     = useStore(s => s.leads);
   const customers = useStore(s => s.customers);
-  const canEditOrg      = usePermission(PERMISSIONS.SETTINGS_ORG);
-  const canManageUsers  = usePermission(PERMISSIONS.SETTINGS_USERS);
+  const { isAdmin }     = usePermissions();
+  const canEditOrg      = isAdmin;   // PUT /api/company-settings is admin-only
+  const canManageUsers  = isAdmin;   // /api/users is admin-only
 
   async function handleClearAll() {
     const ok = await confirm({

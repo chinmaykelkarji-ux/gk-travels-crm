@@ -64,7 +64,6 @@ export default defineConfig({
             '@radix-ui/react-tooltip',
             '@radix-ui/react-scroll-area',
           ],
-          'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-forms':    ['react-hook-form', '@hookform/resolvers', 'zod'],
           'vendor-charts':   ['recharts'],
         },

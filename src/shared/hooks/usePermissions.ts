@@ -59,6 +59,20 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ],
 };
 
+export const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN:      'Admin',
+  BOOKING:    'Booking',
+  OPERATIONS: 'Operations',
+  ACCOUNTS:   'Accounts',
+};
+
+export const ROLE_COLORS: Record<UserRole, string> = {
+  ADMIN:      'bg-indigo-100 text-indigo-700',
+  BOOKING:    'bg-emerald-100 text-emerald-700',
+  OPERATIONS: 'bg-blue-100 text-blue-700',
+  ACCOUNTS:   'bg-amber-100 text-amber-700',
+};
+
 export function hasPermission(role: UserRole | null | undefined, permission: string): boolean {
   if (!role) return false;
   if (role === 'ADMIN') return true;
