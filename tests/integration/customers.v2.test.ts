@@ -96,7 +96,7 @@ describe.skipIf(!hasTestDb)('customers v2', () => {
     const a = (await create({})).body;
     const b = (await create({ name: 'Bee', phone: '9333333333', email: 'b@example.com' })).body;
     await seedTrip('GK-2026-0001', { customerId: a.id, totalPayable: 105_000, paidAmount: 30_000, balanceDue: 75_000 });
-    await prisma.passenger.create({ data: { id: 'PAX-1', customerId: a.id, firstName: 'Asha', lastName: 'Rao', createdDate: '2026-09-01' } });
+    await prisma.traveller.create({ data: { id: 'PAX-1', customerId: a.id, firstName: 'Asha', lastName: 'Rao', createdDate: '2026-09-01' } });
     await prisma.receivable.create({ data: { id: 'RCV-1', customerId: a.id, customerName: 'Asha', invoiceAmount: 105_000, totalReceived: 30_000, balanceDue: 75_000, createdDate: '2026-09-01' } });
     const rel = await as('BOOKING').post(`/api/v2/customers/${a.id}/relationships`, { relatedCustomerId: b.id, kind: 'FAMILY', note: 'sister' });
     expect(rel.status).toBe(201);
@@ -138,7 +138,7 @@ describe.skipIf(!hasTestDb)('customers v2', () => {
     await seedTrip('GK-2026-0001', { customerId: source.id, customer: 'Asha R.' });
     await prisma.enquiry.create({ data: { customerId: source.id, destination: 'Goa' } });
     await prisma.receivable.create({ data: { id: 'RCV-2', customerId: source.id, customerName: 'Asha R.', invoiceAmount: 10, balanceDue: 10, createdDate: '2026-09-01' } });
-    await prisma.passenger.create({ data: { id: 'PAX-2', customerId: source.id, firstName: 'Kid', lastName: 'Rao', createdDate: '2026-09-01' } });
+    await prisma.traveller.create({ data: { id: 'PAX-2', customerId: source.id, firstName: 'Kid', lastName: 'Rao', createdDate: '2026-09-01' } });
     const third = (await create({ name: 'Cee', phone: '9444444444', email: 'c@example.com' })).body;
     await as('BOOKING').post(`/api/v2/customers/${source.id}/relationships`, { relatedCustomerId: third.id, kind: 'FRIEND' });
 
