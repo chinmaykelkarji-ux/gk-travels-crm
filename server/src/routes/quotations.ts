@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { calcGst }                        from '../../../src/shared/utils/finance.js';
 import { generateTasksFromCategories }    from '../../../src/shared/utils/taskEngine.js';
 import { nextTaskId }                      from '../../../src/shared/utils/id.js';
@@ -37,7 +38,7 @@ function calcTotals(items: Record<string, unknown>[]) {
 
 // ── List ──────────────────────────────────────────────────────
 
-router.get('/', async (_req, res) => {
+router.get('/', requirePermission('sales-quotes:read'), async (_req, res) => {
   try {
     const qs = await prisma.quotation.findMany({
       orderBy: { createdAt: 'desc' },
@@ -49,10 +50,10 @@ router.get('/', async (_req, res) => {
 
 // ── Single ────────────────────────────────────────────────────
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('sales-quotes:read'), async (req, res) => {
   try {
     const q = await prisma.quotation.findUnique({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
@@ -62,7 +63,7 @@ router.get('/:id', async (req, res) => {
 
 // ── Create ────────────────────────────────────────────────────
 
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('sales-quotes:write'), async (req: AuthRequest, res) => {
   try {
     const { items = [], ...body } = req.body as { items?: Record<string, unknown>[]; [k: string]: unknown };
 
@@ -102,7 +103,7 @@ router.post('/', async (req: AuthRequest, res) => {
 
 // ── Update (replaces items) ───────────────────────────────────
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('sales-quotes:write'), async (req, res) => {
   try {
     const { items = [], ...body } = req.body as { items?: Record<string, unknown>[]; [k: string]: unknown };
     const calcedItems = (items as Record<string, unknown>[]).map((it, idx) => calcItem({ ...it, sortOrder: idx }));
@@ -111,9 +112,9 @@ router.put('/:id', async (req, res) => {
     const { updatedAt, createdAt, id, ...qData } = body;
 
     const q = await prisma.$transaction(async (tx) => {
-      await tx.quotationItem.deleteMany({ where: { quotationId: req.params.id } });
+      await tx.quotationItem.deleteMany({ where: { quotationId: String(req.params.id) } });
       return tx.quotation.update({
-        where: { id: req.params.id },
+        where: { id: String(req.params.id) },
         data:  {
           ...(qData as Parameters<typeof prisma.quotation.update>[0]['data']),
           ...totals,
@@ -136,10 +137,10 @@ router.put('/:id', async (req, res) => {
 
 // ── Delete ────────────────────────────────────────────────────
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('sales-quotes:write'), async (req, res) => {
   try {
-    await prisma.quotationItem.deleteMany({ where: { quotationId: req.params.id } });
-    await prisma.quotation.delete({ where: { id: req.params.id } });
+    await prisma.quotationItem.deleteMany({ where: { quotationId: String(req.params.id) } });
+    await prisma.quotation.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[quotations DELETE]', err);
@@ -149,7 +150,7 @@ router.delete('/:id', async (req, res) => {
 
 // ── Status update ─────────────────────────────────────────────
 
-router.put('/:id/status', async (req: AuthRequest, res) => {
+router.put('/:id/status', requirePermission('sales-quotes:write'), async (req: AuthRequest, res) => {
   try {
     const { status } = req.body as { status: string };
     const now = new Date().toISOString().split('T')[0];
@@ -160,7 +161,7 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
     if (status === 'rejected') data.rejectedAt = now;
 
     const q = await prisma.quotation.update({
-      where:   { id: req.params.id as string },
+      where:   { id: String(req.params.id) },
       data:    data as Parameters<typeof prisma.quotation.update>[0]['data'],
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
@@ -187,9 +188,9 @@ router.put('/:id/status', async (req: AuthRequest, res) => {
 // for review, an admin approves or rejects it with an optional comment.
 // States: DRAFT → PENDING_APPROVAL → APPROVED | REJECTED | EXPIRED
 
-router.post('/:id/submit', async (req: AuthRequest, res) => {
+router.post('/:id/submit', requirePermission('sales-quotes:write'), async (req: AuthRequest, res) => {
   try {
-    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    const q = await prisma.quotation.findUnique({ where: { id: String(req.params.id) } });
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
     if (q.approvalStatus !== 'DRAFT' && q.approvalStatus !== 'REJECTED') {
       res.status(400).json({ error: `Cannot submit a quotation in "${q.approvalStatus}" state` });
@@ -233,7 +234,7 @@ router.post('/:id/submit', async (req: AuthRequest, res) => {
 router.post('/:id/approve', requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
     const { comment } = req.body as { comment?: string };
-    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    const q = await prisma.quotation.findUnique({ where: { id: String(req.params.id) } });
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
     if (q.approvalStatus !== 'PENDING_APPROVAL') {
       res.status(400).json({ error: `Cannot approve a quotation in "${q.approvalStatus}" state` });
@@ -281,7 +282,7 @@ router.post('/:id/reject', requireRole('ADMIN'), async (req: AuthRequest, res) =
       res.status(400).json({ error: 'A reason is required to reject a quotation' });
       return;
     }
-    const q = await prisma.quotation.findUnique({ where: { id: req.params.id } });
+    const q = await prisma.quotation.findUnique({ where: { id: String(req.params.id) } });
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
     if (q.approvalStatus !== 'PENDING_APPROVAL') {
       res.status(400).json({ error: `Cannot reject a quotation in "${q.approvalStatus}" state` });
@@ -324,10 +325,10 @@ router.post('/:id/reject', requireRole('ADMIN'), async (req: AuthRequest, res) =
 
 // ── Duplicate ─────────────────────────────────────────────────
 
-router.post('/:id/duplicate', async (req, res) => {
+router.post('/:id/duplicate', requirePermission('sales-quotes:write'), async (req, res) => {
   try {
     const src = await prisma.quotation.findUnique({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!src) { res.status(404).json({ error: 'Not found' }); return; }
@@ -369,10 +370,10 @@ router.post('/:id/duplicate', async (req, res) => {
 
 // ── Convert to Trip ───────────────────────────────────────────
 
-router.post('/:id/convert-trip', async (req, res) => {
+router.post('/:id/convert-trip', requirePermission('sales-quotes:write'), async (req: AuthRequest, res) => {
   try {
     const q = await prisma.quotation.findUnique({
-      where:   { id: req.params.id },
+      where:   { id: String(req.params.id) },
       include: { items: true },
     });
     if (!q) { res.status(404).json({ error: 'Not found' }); return; }
@@ -513,7 +514,7 @@ router.post('/:id/convert-trip', async (req, res) => {
 
 // ── Dashboard stats ───────────────────────────────────────────
 
-router.get('/meta/stats', async (_req, res) => {
+router.get('/meta/stats', requirePermission('sales-quotes:read'), async (_req, res) => {
   try {
     const all = await prisma.quotation.findMany({ select: {
       status: true, totalSelling: true, grossProfit: true, createdAt: true,

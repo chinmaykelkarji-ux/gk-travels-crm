@@ -1,59 +1,70 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', async (_req, res) => {
+// Passengers carry passport and visa data — same access as customers.
+
+router.get('/', requirePermission('customers:read'), async (_req, res) => {
   try {
     res.json(await prisma.passenger.findMany({ orderBy: { createdAt: 'desc' } }));
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch passengers', details: String(err) });
+    console.error('[passengers GET]', err);
+    res.status(500).json({ error: 'Failed to fetch passengers' });
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('customers:read'), async (req, res) => {
   try {
-    const p = await prisma.passenger.findUnique({ where: { id: req.params.id } });
-    if (!p) return res.status(404).json({ error: 'Passenger not found' });
+    const p = await prisma.passenger.findUnique({ where: { id: String(req.params.id) } });
+    if (!p) { res.status(404).json({ error: 'Passenger not found' }); return; }
     res.json(p);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch passenger', details: String(err) });
+    console.error('[passengers GET /:id]', err);
+    res.status(500).json({ error: 'Failed to fetch passenger' });
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('customers:write'), async (req, res) => {
   try {
+    const data = sanitize(req.body as Record<string, unknown>);
+    if (!data.id) { res.status(400).json({ error: 'id is required' }); return; }
     const p = await prisma.passenger.upsert({
-      where:  { id: req.body.id },
-      update: sanitize(req.body),
-      create: sanitize(req.body),
+      where:  { id: data.id },
+      update: data,
+      create: data,
     });
     res.json(p);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to save passenger', details: String(err) });
+    console.error('[passengers POST]', err);
+    res.status(500).json({ error: 'Failed to save passenger' });
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
+    const { id: _ignored, ...data } = sanitize(req.body as Record<string, unknown>);
     const p = await prisma.passenger.update({
-      where: { id: req.params.id },
-      data:  sanitize(req.body),
+      where: { id: String(req.params.id) },
+      data,
     });
     res.json(p);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update passenger', details: String(err) });
+    console.error('[passengers PUT]', err);
+    res.status(500).json({ error: 'Failed to update passenger' });
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
-    await prisma.passenger.delete({ where: { id: req.params.id } });
+    await prisma.passenger.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete passenger', details: String(err) });
+    console.error('[passengers DELETE]', err);
+    res.status(500).json({ error: 'Failed to delete passenger' });
   }
 });
 

@@ -49,8 +49,17 @@ function onMutationError(label: string) {
   return (err: unknown) => {
     console.error(`[api] ${label}`, err);
     const status = (err as { response?: { status?: number } })?.response?.status;
-    // 401/403 — apiClient interceptor already redirects to /login, no toast needed
-    if (status === 401 || status === 403) return;
+    // 401 — apiClient interceptor already redirects to /login, no toast needed
+    if (status === 401) return;
+    // 403 — the server refused the write for this role. The optimistic state
+    // already shows the change, so say plainly that it was NOT saved.
+    if (status === 403) {
+      toast.error(
+        `Not permitted: ${label}`,
+        'Your role cannot make this change, so it was not saved. It will disappear on refresh.',
+      );
+      return;
+    }
     toast.error(
       `Could not save ${label}`,
       'The change is showing on screen but was NOT written to the database. ' +

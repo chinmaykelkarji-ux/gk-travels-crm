@@ -188,3 +188,55 @@ Definition of done for any feature: unit + API tests for its service, permission
 6. Background jobs: Vercel Cron → tick endpoint now; a resident worker only if extraction volume demands it.
 7. Drift reconciliation: adopt the 21 voucher columns into the schema temporarily (no data loss), then remove unused ones in Phase 3 with the voucher refactor.
 8. Confirm that the seeded credentials in `prisma/seed.ts`, `server/src/scripts/seedUsers.ts` and `ai_check.mjs` may be rotated/removed, and that the five ADMIN accounts should be reviewed.
+
+---
+
+## Decision log
+
+### 2026-09-18 — Owner approvals on the Phase 0 plan
+
+| # | Decision | Outcome | Conditions attached |
+|---|---|---|---|
+| 1 | Evolve-not-rewrite direction and phase order | **Approved** | Phase 1 must put the server typecheck into the build, fix the 73 errors, and add tests around the finance, GST and invoice services **before** those services are refactored |
+| 2 | Unify quotations on the Enquiry → Quotation line | **Approved** | The engine must support group per-person costing, multi-option (alternative) flight quotes, and family-wise splits; existing quotes (4 sales quotes + 1 legacy quotation) are migrated |
+| 3 | "Booking" becomes the commercial contract; legacy 8-type rows become tickets/stays/transport/activities/extras | **Approved** | Tickets must cover flight, train and bus with group passengers and boarding/dropping points |
+| 4 | AI provider | **Deferred to evidence** | Build the `AiProvider` interface first; run Claude vs Gemini on 5–10 real ticket/invoice PDFs (accuracy + cost) before choosing the extraction default |
+| 5 | File storage | **Decided: S3-compatible private bucket (Cloudflare R2)** | Short-lived signed URLs only; no public URL for any document, ever |
+| 6 | Background jobs | **Vercel Cron if plan limits allow; otherwise an external scheduler** hitting a secret-protected, idempotent tick endpoint | See "Job execution on Vercel" below |
+| 7 | Drift reconciliation by adopting the 21 voucher columns first | **Approved** | Take a Neon branch/snapshot **and** run `prisma db pull` to a scratch schema before any schema change |
+| 8 | Rotate committed credentials, review admins | **Approved and executed** (see below) | — |
+
+Pre-Phase-1 gate (owner's instruction): hotfix the bootstrap data leak and add authorization to the eleven unprotected routers. Done in commit `hotfix: authorization + bootstrap redaction` on 2026-09-18.
+
+### Credential rotation — executed 2026-09-18
+
+Verified by bcrypt comparison that six of ten accounts still used passwords committed to the repository. All six had their hash replaced with a random value; the five seeded accounts were also deactivated. Files that carried credentials (`ai_check.mjs`, `prisma/create-admin.ts`, `prisma/reset-admin.ts`) were deleted; `prisma/seed.ts` and `server/src/scripts/seedUsers.ts` now read credentials from the environment and refuse to run in production without an explicit override. Every change has an `activity_logs` row.
+
+### Refined requirements from the approvals
+
+**Quotation engine (decision 2).** `QuotationItem` gains `pricingBasis` (PER_PERSON, PER_UNIT, PER_ROOM, PER_GROUP), per-category rates via `QuotationItemRate` (ADULT, CHILD, INFANT with cost and sell), `optionGroupId` + `isSelectedOption` so alternatives (three flight options, two hotel tiers) live in one quotation and the customer picks one, and `partyId` so items can be allocated to a `QuotationParty` (a family or sub-group of travellers). Totals are computed per party and rolled up; accepting a quotation creates one `Booking` per party when splits are requested, each with its own payment schedule and invoice. The customer document shows selected options and per-party totals, never cost.
+
+**Tickets (decision 3).** `Ticket` (kind FLIGHT | TRAIN | BUS, carrier, PNR, status, cost, sell, documentId) → `TicketSegment` (sequence, from, to, boardingPoint, droppingPoint, departAt, arriveAt, carrierNumber, terminal/platform, coach/class) → `TicketPassenger` (ticket × traveller, seat/berth, ticketNumber, status). One PNR carries the whole group; boarding and dropping points are per segment so a bus with multiple pickups and a multi-leg flight are both first-class.
+
+**AI provider comparison (decision 4).** Phase 5 starts with an evaluation harness: the owner supplies 5–10 real ticket and supplier-invoice PDFs; each runs through both adapters with the same zod schema; the report shows per-field accuracy against hand-labelled truth, latency, and cost per document. The default provider is set from that report, per document type if the results differ.
+
+**Storage (decision 5).** `core/storage` uses the S3 API against R2 (`@aws-sdk/client-s3` + presigned URLs). Uploads go browser → R2 via a presigned PUT issued by the API after a permission check (the API never proxies file bytes, so Vercel body-size limits do not apply). Downloads use presigned GET URLs valid for 60 seconds, minted per request after the same check. Bucket is private; object keys are random, never derived from entity ids.
+
+### Job execution on Vercel (decision 6)
+
+Published limits (checked 2026-09-18 on vercel.com/docs):
+
+| | Hobby | Pro |
+|---|---|---|
+| Cron jobs per project | 100 | 100 |
+| Minimum cron interval | once per day | once per minute |
+| Cron timing precision | per hour (±59 min) | per minute |
+| Function max duration, Fluid compute (default on new projects) | 300 s default and max | 300 s default, 800 s max, 1800 s beta |
+| Function max duration, legacy non-Fluid | 10 s default, 60 s max | 15 s default, 300 s max |
+
+Consequence: on Hobby, Vercel Cron cannot drive a minute-level tick. Design therefore:
+
+- The tick endpoint `POST /api/jobs/tick` is **idempotent and safe to call from anywhere**: it requires `Authorization: Bearer $CRON_SECRET`, claims jobs with `SELECT … FOR UPDATE SKIP LOCKED` and a `lockedUntil` lease, runs within a time budget (default 240 s under Fluid, configurable), and returns what it did. Calling it twice, or from two schedulers at once, cannot double-run a job.
+- Scheduler: Vercel Cron on Pro (`* * * * *`); on Hobby an external scheduler (cron-job.org, GitHub Actions `schedule`, or Upstash QStash) calls the same endpoint every minute. Switching is a config change, not a code change.
+- Long document processing never runs inside one request. The pipeline is a state machine (`UPLOADED → CLASSIFYING → EXTRACTING(page 3/12) → MATCHING → NEEDS_REVIEW`); each tick advances one step and persists a cursor, so a 40-page invoice bundle is many short executions, and a timeout only loses the current step, which is retried with backoff (max 3 attempts, then FAILED with the error shown in the UI). Extraction calls are page-chunked (≤ 5 pages per call), and the per-step budget is set below the platform maximum with a margin.
+- Fallback for heavier volume: the same `Job` table can be drained by a resident worker (Fly.io/Railway) running the identical tick loop; no schema or handler changes.

@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { logActivity, buildActivityDescription } from '../lib/activity.js';
 import type { Prisma } from '@prisma/client';
 
@@ -22,7 +23,11 @@ const COMM_ACTION_BY_ENTITY: Record<string, string> = {
   voucher:   'voucher_sent',
 };
 
+const COMM_TYPES = new Set(['whatsapp', 'email']);
+
 // GET /api/communications?entityType=quotation&entityId=q123
+// Any signed-in user may read the log: it holds recipient + subject only, and
+// the entity timelines (bookings, quotations) render it for every role.
 router.get('/', async (req, res) => {
   try {
     const { entityType, entityId } = req.query as { entityType?: string; entityId?: string };
@@ -38,12 +43,12 @@ router.get('/', async (req, res) => {
     res.json(comms);
   } catch (err) {
     console.error('[communications GET]', err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: 'Failed to load communications' });
   }
 });
 
 // POST /api/communications
-router.post('/', async (req: AuthRequest, res) => {
+router.post('/', requirePermission('messaging:write'), async (req: AuthRequest, res) => {
   try {
     const { type, recipient, subject, entityType, entityId } = req.body as {
       type?: string; recipient?: string; subject?: string;
@@ -52,6 +57,10 @@ router.post('/', async (req: AuthRequest, res) => {
 
     if (!type || !recipient || !entityType || !entityId) {
       res.status(400).json({ error: 'type, recipient, entityType and entityId are required' });
+      return;
+    }
+    if (!COMM_TYPES.has(type)) {
+      res.status(400).json({ error: 'type must be whatsapp or email' });
       return;
     }
 
@@ -79,7 +88,7 @@ router.post('/', async (req: AuthRequest, res) => {
     res.status(201).json(result);
   } catch (err) {
     console.error('[communications POST]', err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: 'Failed to log communication' });
   }
 });
 

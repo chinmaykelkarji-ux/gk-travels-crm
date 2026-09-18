@@ -1,66 +1,54 @@
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
+import { redactActivity } from '../lib/redact.js';
 
 const router = Router();
 router.use(requireAuth);
 
 // GET /api/activity?limit=100
-router.get('/', async (req, res) => {
+//
+// Financial before/after snapshots are stripped for roles without
+// finance:read (see lib/redact.ts).
+router.get('/', async (req: AuthRequest, res) => {
   try {
-    const limit = Number(req.query.limit) || 100;
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
     const logs  = await prisma.activityLog.findMany({
       orderBy: { createdAt: 'desc' },
       take:    limit,
     });
-    res.json(logs);
-  } catch (err) { res.status(500).json({ error: String(err) }); }
-});
-
-// POST /api/activity
-router.post('/', async (req, res) => {
-  try {
-    const log = await prisma.activityLog.create({ data: req.body });
-    res.status(201).json(log);
+    res.json(logs.map(l => redactActivity(l, req.userRole)));
   } catch (err) {
-    console.error('[activity POST]', err);
-    res.status(500).json({ error: String(err) });
+    console.error('[activity GET]', err);
+    res.status(500).json({ error: 'Failed to load activity' });
   }
 });
+
+// NOTE: the former `POST /api/activity` (create an arbitrary activity row from
+// the request body) and `POST /api/activity/reminders/bulk` (delete every
+// reminder, then recreate from the body) were removed. Neither was called by
+// the client, and both let any signed-in user forge the audit trail or wipe
+// reminders. Activity rows are written only by server services through
+// lib/activity.ts.
 
 // ── Reminders ──────────────────────────────────────────────────
 
 // GET /api/activity/reminders
 router.get('/reminders', async (_req, res) => {
   try { res.json(await prisma.reminder.findMany({ orderBy: { createdAt: 'desc' } })); }
-  catch (err) { res.status(500).json({ error: String(err) }); }
-});
-
-// POST /api/activity/reminders/bulk  — replace all reminders
-router.post('/reminders/bulk', async (req, res) => {
-  try {
-    const reminders = req.body as Array<Record<string, unknown>>;
-    await prisma.reminder.deleteMany({});
-    if (reminders.length) {
-      await prisma.reminder.createMany({
-        data:            reminders.map(({ id, ...r }) => r as Prisma.ReminderCreateManyInput),
-        skipDuplicates: true,
-      });
-    }
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[reminders bulk]', err);
-    res.status(500).json({ error: String(err) });
+  catch (err) {
+    console.error('[reminders GET]', err);
+    res.status(500).json({ error: 'Failed to load reminders' });
   }
 });
 
 // PUT /api/activity/reminders/:id/sent
-router.put('/reminders/:id/sent', async (req: AuthRequest, res) => {
+router.put('/reminders/:id/sent', requirePermission('tasks:write'), async (req: AuthRequest, res) => {
   try {
     const r = await prisma.reminder.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data:  { sent: true, sentAt: new Date().toISOString() },
     });
 
@@ -75,7 +63,10 @@ router.put('/reminders/:id/sent', async (req: AuthRequest, res) => {
     });
 
     res.json(r);
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('[reminders sent]', err);
+    res.status(500).json({ error: 'Failed to update reminder' });
+  }
 });
 
 export default router;

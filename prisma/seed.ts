@@ -1,6 +1,10 @@
 // ============================================================
-// GK TRAVELS CRM — Database Seed
-// Run: npm run db:seed
+// GK TRAVELS CRM — Demo seed for a LOCAL / STAGING database
+// Run: SEED_ADMIN_EMAIL=you@example.com SEED_ADMIN_PASS='<strong>' npm run db:seed
+//
+// Credentials come from the environment only. A previous version of this
+// file committed a real email and password; that account was rotated on
+// 2026-09-18. Refuses to run against production unless explicitly allowed.
 // ============================================================
 
 import { PrismaClient } from '@prisma/client';
@@ -9,27 +13,35 @@ import bcrypt          from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED_IN_PRODUCTION !== 'yes') {
+    throw new Error('Refusing to seed demo data in production without ALLOW_SEED_IN_PRODUCTION=yes');
+  }
+
   console.log('🌱 Seeding database...');
 
-  // ── Admin user ─────────────────────────────────────────────
-  const ADMIN_EMAIL = 'chinmaykelkara@gmail.com';
-  const ADMIN_PASS  = 'Chinmay#1015';
+  // ── Admin user (optional, env-driven) ─────────────────────
+  const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const ADMIN_PASS  = process.env.SEED_ADMIN_PASS;
 
-  const existing = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
-  if (!existing) {
-    const passwordHash = await bcrypt.hash(ADMIN_PASS, 12);
-    const admin = await prisma.user.create({
-      data: {
-        email: ADMIN_EMAIL,
-        passwordHash,
-        name:     'Chinmay',
-        role:     'ADMIN',
-        isActive: true,
-      },
-    });
-    console.log('✅ Admin created:', admin.email);
+  if (!ADMIN_EMAIL || !ADMIN_PASS || ADMIN_PASS.length < 12) {
+    console.log('ℹ️  Admin seed skipped — set SEED_ADMIN_EMAIL and SEED_ADMIN_PASS (min 12 chars) to create one.');
   } else {
-    console.log('✅ Admin already exists:', existing.email);
+    const existing = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
+    if (!existing) {
+      const passwordHash = await bcrypt.hash(ADMIN_PASS, 12);
+      const admin = await prisma.user.create({
+        data: {
+          email:    ADMIN_EMAIL,
+          passwordHash,
+          name:     process.env.SEED_ADMIN_NAME ?? 'Admin',
+          role:     'ADMIN',
+          isActive: true,
+        },
+      });
+      console.log('✅ Admin created:', admin.email);
+    } else {
+      console.log('✅ Admin already exists:', existing.email);
+    }
   }
 
   // ── Demo customer ──────────────────────────────────────────

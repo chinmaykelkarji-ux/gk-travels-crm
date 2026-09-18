@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requireAuth, requireRole, type AuthRequest } from '../middleware/auth.js';
+import { requirePermission, requireAnyPermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
+import { redactVendor, canSeeBankDetails } from '../lib/redact.js';
 import { today } from '../../../src/shared/utils/date.js';
 
 const router = Router();
@@ -9,9 +12,13 @@ router.use(requireAuth);
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function stripMeta(body: Record<string, unknown>) {
-  const { createdAt, updatedAt, payments, ...rest } = body;
-  return rest;
+// Timestamps and relations are server-owned. Bank details are accepted only
+// from roles that may see them; otherwise the stored value is kept, so an
+// OPERATIONS user editing a phone number cannot wipe (or set) the account
+// the accounts team pays into.
+function stripMeta(body: Record<string, unknown>, role: string | undefined) {
+  const { createdAt, updatedAt, payments, tripServices, salesQuoteItems, bankDetails, ...rest } = body;
+  return canSeeBankDetails(role) && bankDetails !== undefined ? { ...rest, bankDetails } : rest;
 }
 
 function calcOutstanding(totalCost: number, advancePaid: number, isPaid: boolean): number {
@@ -19,96 +26,41 @@ function calcOutstanding(totalCost: number, advancePaid: number, isPaid: boolean
   return Math.max(0, totalCost - advancePaid);
 }
 
-// ══ VENDORS ════════════════════════════════════════════════════
-
-// GET /api/vendors
-router.get('/', async (_req, res) => {
-  try {
-    res.json(await prisma.vendor.findMany({ orderBy: { createdAt: 'desc' } }));
-  } catch (err) { res.status(500).json({ error: String(err) }); }
-});
-
-// GET /api/vendors/:id  (with payments)
-router.get('/:id', async (req, res) => {
-  try {
-    const vendor = await prisma.vendor.findUnique({
-      where:   { id: req.params.id },
-      include: { payments: { orderBy: { createdAt: 'desc' } } },
-    });
-    if (!vendor) { res.status(404).json({ error: 'Vendor not found' }); return; }
-    res.json(vendor);
-  } catch (err) { res.status(500).json({ error: String(err) }); }
-});
-
-// POST /api/vendors
-router.post('/', async (req, res) => {
-  try {
-    const vendor = await prisma.vendor.upsert({
-      where:  { id: req.body.id },
-      update: stripMeta(req.body) as Parameters<typeof prisma.vendor.update>[0]['data'],
-      create: stripMeta(req.body) as Parameters<typeof prisma.vendor.create>[0]['data'],
-    });
-    res.status(201).json(vendor);
-  } catch (err) {
-    console.error('[vendors POST]', err);
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// PUT /api/vendors/:id
-router.put('/:id', async (req, res) => {
-  try {
-    const vendor = await prisma.vendor.update({
-      where: { id: req.params.id },
-      data:  stripMeta(req.body) as Parameters<typeof prisma.vendor.update>[0]['data'],
-    });
-    res.json(vendor);
-  } catch (err) {
-    console.error('[vendors PUT]', err);
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// DELETE /api/vendors/:id  (cascade deletes payments via Prisma relation)
-router.delete('/:id', async (req, res) => {
-  try {
-    await prisma.vendorPayment.deleteMany({ where: { vendorId: req.params.id } });
-    await prisma.vendor.delete({ where: { id: req.params.id } });
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[vendors DELETE]', err);
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// ══ VENDOR PAYMENTS ════════════════════════════════════════════
+// ══ VENDOR PAYMENTS (payables — accounts only) ══════════════════
+// Declared before `/:id` so `/payments/...` is not captured as a vendor id.
 
 // GET /api/vendors/payments/all
-router.get('/payments/all', async (_req, res) => {
+router.get('/payments/all', requirePermission('finance:read'), async (_req, res) => {
   try {
     res.json(await prisma.vendorPayment.findMany({ orderBy: { createdAt: 'desc' } }));
-  } catch (err) { res.status(500).json({ error: String(err) }); }
+  } catch (err) {
+    console.error('[vendor-payments GET]', err);
+    res.status(500).json({ error: 'Failed to load vendor payments' });
+  }
 });
 
 // POST /api/vendors/payments
-router.post('/payments', async (req: AuthRequest, res) => {
+router.post('/payments', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const body = req.body as Record<string, unknown>;
+    if (typeof body.id !== 'string' || !body.id) {
+      res.status(400).json({ error: 'id is required' });
+      return;
+    }
     const totalCost   = Number(body.totalCost   ?? 0);
     const advancePaid = Number(body.advancePaid ?? 0);
     const isPaid      = Boolean(body.isPaid);
 
-    const data = {
+    const { createdAt, updatedAt, vendor, ...clean } = {
       ...body,
       totalCost,
       advancePaid,
       outstanding: calcOutstanding(totalCost, advancePaid, isPaid),
-    };
+    } as Record<string, unknown>;
 
-    const { createdAt, updatedAt, vendor, ...clean } = data as Record<string, unknown>;
-    const existed = await prisma.vendorPayment.findUnique({ where: { id: String(clean.id) } });
+    const existed = await prisma.vendorPayment.findUnique({ where: { id: body.id } });
     const payment = await prisma.vendorPayment.upsert({
-      where:  { id: String(clean.id) },
+      where:  { id: body.id },
       update: clean as Parameters<typeof prisma.vendorPayment.update>[0]['data'],
       create: clean as Parameters<typeof prisma.vendorPayment.create>[0]['data'],
     });
@@ -122,7 +74,7 @@ router.post('/payments', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          payment.totalCost,
-          description: payment.description ?? `Payable to ${payment.vendorName}`,
+          description:     payment.description ?? `Payable to ${payment.vendorName}`,
           transactionDate: today(),
           createdBy:       req.userId,
         },
@@ -145,7 +97,7 @@ router.post('/payments', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          delta,
-          description: `Payment of ₹${delta.toLocaleString('en-IN')} recorded toward ${payment.vendorName}`,
+          description:     `Payment of ₹${delta.toLocaleString('en-IN')} recorded toward ${payment.vendorName}`,
           transactionDate: today(),
           createdBy:       req.userId,
         },
@@ -163,12 +115,12 @@ router.post('/payments', async (req: AuthRequest, res) => {
     res.status(201).json(payment);
   } catch (err) {
     console.error('[vendor-payments POST]', err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: 'Failed to save vendor payment' });
   }
 });
 
 // PUT /api/vendors/payments/:id
-router.put('/payments/:id', async (req, res) => {
+router.put('/payments/:id', requirePermission('finance:write'), async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     const totalCost   = Number(body.totalCost   ?? 0);
@@ -177,37 +129,37 @@ router.put('/payments/:id', async (req, res) => {
     const { createdAt, updatedAt, vendor, id, ...clean } = body;
 
     const payment = await prisma.vendorPayment.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data:  { ...clean, totalCost, advancePaid, outstanding: calcOutstanding(totalCost, advancePaid, isPaid) },
     });
     res.json(payment);
   } catch (err) {
     console.error('[vendor-payments PUT]', err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: 'Failed to update vendor payment' });
   }
 });
 
 // DELETE /api/vendors/payments/:id
-router.delete('/payments/:id', async (req, res) => {
+router.delete('/payments/:id', requirePermission('finance:write'), async (req, res) => {
   try {
-    await prisma.vendorPayment.delete({ where: { id: req.params.id } });
+    await prisma.vendorPayment.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[vendor-payments DELETE]', err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: 'Failed to delete vendor payment' });
   }
 });
 
 // PUT /api/vendors/payments/:id/mark-paid
-router.put('/payments/:id/mark-paid', async (req: AuthRequest, res) => {
+router.put('/payments/:id/mark-paid', requirePermission('finance:write'), async (req: AuthRequest, res) => {
   try {
     const { paidDate } = req.body as { paidDate?: string };
     const date = paidDate ?? today();
-    const existing = await prisma.vendorPayment.findUniqueOrThrow({ where: { id: req.params.id } });
+    const existing = await prisma.vendorPayment.findUniqueOrThrow({ where: { id: String(req.params.id) } });
     const remaining = Math.max(0, existing.totalCost - existing.advancePaid);
 
     const payment = await prisma.vendorPayment.update({
-      where: { id: req.params.id },
+      where: { id: existing.id },
       data:  { isPaid: true, outstanding: 0, advancePaid: existing.totalCost, paidDate: date },
     });
 
@@ -220,7 +172,7 @@ router.put('/payments/:id/mark-paid', async (req: AuthRequest, res) => {
           vendorId:        payment.vendorId,
           tripId:          payment.tripId ?? undefined,
           amount:          remaining,
-          description: `Final payment of ₹${remaining.toLocaleString('en-IN')} settled to ${payment.vendorName}`,
+          description:     `Final payment of ₹${remaining.toLocaleString('en-IN')} settled to ${payment.vendorName}`,
           transactionDate: date,
           createdBy:       req.userId,
         },
@@ -237,7 +189,110 @@ router.put('/payments/:id/mark-paid', async (req: AuthRequest, res) => {
 
     res.json(payment);
   } catch (err) {
-    res.status(500).json({ error: String(err) });
+    console.error('[vendor-payments mark-paid]', err);
+    res.status(500).json({ error: 'Failed to settle vendor payment' });
+  }
+});
+
+// ══ VENDORS ════════════════════════════════════════════════════
+
+// GET /api/vendors
+router.get('/', requireAnyPermission('suppliers:read', 'finance:read'), async (req: AuthRequest, res) => {
+  try {
+    const rows = await prisma.vendor.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(rows.map(v => redactVendor(v, req.userRole)));
+  } catch (err) {
+    console.error('[vendors GET]', err);
+    res.status(500).json({ error: 'Failed to load vendors' });
+  }
+});
+
+// GET /api/vendors/:id  (payments included only for finance roles)
+router.get('/:id', requireAnyPermission('suppliers:read', 'finance:read'), async (req: AuthRequest, res) => {
+  try {
+    const includePayments = canSeeBankDetails(req.userRole);
+    const vendor = await prisma.vendor.findUnique({
+      where:   { id: String(req.params.id) },
+      include: includePayments ? { payments: { orderBy: { createdAt: 'desc' } } } : undefined,
+    });
+    if (!vendor) { res.status(404).json({ error: 'Vendor not found' }); return; }
+    res.json(redactVendor(vendor, req.userRole));
+  } catch (err) {
+    console.error('[vendors GET /:id]', err);
+    res.status(500).json({ error: 'Failed to load vendor' });
+  }
+});
+
+// POST /api/vendors
+router.post('/', requirePermission('suppliers:write'), async (req: AuthRequest, res) => {
+  try {
+    const body = req.body as Record<string, unknown>;
+    if (typeof body.id !== 'string' || !body.id) {
+      res.status(400).json({ error: 'id is required' });
+      return;
+    }
+    const data = stripMeta(body, req.userRole);
+    const vendor = await prisma.vendor.upsert({
+      where:  { id: body.id },
+      update: data as Parameters<typeof prisma.vendor.update>[0]['data'],
+      create: data as Parameters<typeof prisma.vendor.create>[0]['data'],
+    });
+    res.status(201).json(redactVendor(vendor, req.userRole));
+  } catch (err) {
+    console.error('[vendors POST]', err);
+    res.status(500).json({ error: 'Failed to save vendor' });
+  }
+});
+
+// PUT /api/vendors/:id
+router.put('/:id', requirePermission('suppliers:write'), async (req: AuthRequest, res) => {
+  try {
+    const { id: _ignored, ...data } = stripMeta(req.body as Record<string, unknown>, req.userRole);
+    const vendor = await prisma.vendor.update({
+      where: { id: String(req.params.id) },
+      data:  data as Parameters<typeof prisma.vendor.update>[0]['data'],
+    });
+    res.json(redactVendor(vendor, req.userRole));
+  } catch (err) {
+    console.error('[vendors PUT]', err);
+    res.status(500).json({ error: 'Failed to update vendor' });
+  }
+});
+
+// DELETE /api/vendors/:id — ADMIN only. Refused while payables or trip
+// services reference the vendor: financial history is never cascaded away.
+router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id);
+    const [paymentCount, serviceCount, quoteItemCount] = await Promise.all([
+      prisma.vendorPayment.count({ where: { vendorId: id } }),
+      prisma.tripService.count({ where: { supplierId: id } }),
+      prisma.salesQuoteItem.count({ where: { supplierId: id } }),
+    ]);
+    if (paymentCount > 0 || serviceCount > 0 || quoteItemCount > 0) {
+      res.status(409).json({
+        error: `Cannot delete vendor — ${paymentCount} payment(s), ${serviceCount} trip service(s) and ${quoteItemCount} quote item(s) reference it. Mark it inactive instead.`,
+      });
+      return;
+    }
+
+    const vendor = await prisma.vendor.delete({ where: { id } });
+    await logActivity(prisma, {
+      action:      'vendor_deleted',
+      description: `Vendor ${vendor.name} deleted`,
+      entityType:  'vendor',
+      entityId:    id,
+      userId:      req.userId,
+      before:      { id, name: vendor.name, type: vendor.type },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[vendors DELETE]', err);
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      res.status(404).json({ error: 'Vendor not found' });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to delete vendor' });
   }
 });
 
