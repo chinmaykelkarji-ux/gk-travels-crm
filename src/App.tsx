@@ -36,6 +36,8 @@ const BookingDetail  = lazy(() => import('@/modules/bookings/BookingDetail'));
 const LegacyCustomers = lazy(() => import('@/modules/customers/Customers'));
 const CustomersPage      = lazy(() => import('@/features/customers/pages/CustomersPage'));
 const CustomerDetailPage = lazy(() => import('@/features/customers/pages/CustomerDetailPage'));
+const TravellersPage      = lazy(() => import('@/features/travellers/pages/TravellersPage'));
+const TravellerDetailPage = lazy(() => import('@/features/travellers/pages/TravellerDetailPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -253,6 +255,8 @@ export default function App() {
                 <Route path="/customers"             element={<CustomersPage />} />
                 <Route path="/customers/:id"         element={<CustomerDetailPage />} />
                 <Route path="/legacy/customers"      element={<LegacyCustomers />} />
+                <Route path="/travellers"            element={<TravellersPage />} />
+                <Route path="/travellers/:id"        element={<TravellerDetailPage />} />
                 <Route path="/operations"            element={<Operations />} />
                 <Route path="/operations-dashboard"  element={<RoleGuard allowed={['ADMIN', 'BOOKING', 'OPERATIONS']}><OperationsDashboard /></RoleGuard>} />
                 <Route path="/trips/:id/timeline"    element={<TripTimeline />} />

@@ -207,7 +207,7 @@ export async function getCustomer360(id: string) {
     prisma.invoice.findMany({ where: { customerId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, invoiceNumber: true, invoiceDate: true, status: true, totalAmount: true, receivableId: true } }),
     prisma.receivable.aggregate({ where: { customerId: id }, _sum: { invoiceAmount: true, totalReceived: true, balanceDue: true } }),
     prisma.payment.findMany({ where: { customerId: id, type: 'customer' }, orderBy: { date: 'desc' }, take: 20, select: { id: true, amount: true, method: true, date: true, status: true, tripId: true, reference: true } }),
-    prisma.passenger.findMany({ where: { customerId: id }, orderBy: { firstName: 'asc' }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, passportNumber: true, passportExpiry: true, nationality: true } }),
+    prisma.traveller.findMany({ where: { customerId: id }, orderBy: { firstName: 'asc' }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, passportNumber: true, passportExpiry: true, nationality: true } }),
     prisma.documentLink.findMany({ where: { entityType: 'customer', entityId: id }, include: { document: { select: { id: true, title: true, type: true, status: true, fileName: true, expiresAt: true, createdAt: true } } } }),
     prisma.activityLog.findMany({ where: { OR: [{ entityType: 'customer', entityId: id }, { entityType: 'trip', entityId: { in: [] } }] }, orderBy: { createdAt: 'desc' }, take: 50, select: { id: true, action: true, title: true, description: true, timestamp: true, userId: true, source: true } }),
     prisma.task.findMany({ where: { customerId: id, status: { not: 'completed' } }, orderBy: { dueDate: 'asc' }, select: { id: true, title: true, dueDate: true, priority: true, status: true, assignedTo: true } }),
@@ -335,7 +335,7 @@ export async function mergeCustomers(targetId: string, sourceId: string, actorId
     await repoint('receivables',  () => tx.receivable.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId, customerName: target.name } }));
     await repoint('payments',     () => tx.payment.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
     await repoint('ledger',       () => tx.financialTransaction.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
-    await repoint('passengers',   () => tx.passenger.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
+    await repoint('passengers',   () => tx.traveller.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
     await repoint('tasks',        () => tx.task.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
     await repoint('messages',     () => tx.messageLog.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));
     await repoint('vouchers',     () => tx.voucher.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }));

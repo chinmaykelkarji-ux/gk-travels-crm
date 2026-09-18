@@ -45,7 +45,7 @@ model Organization {
   itinerarys            Itinerary[]
   itineraryDays         ItineraryDay[]
   vouchers              Voucher[]
-  passengers            Passenger[]
+  passengers            Traveller[]
   companySettingss      CompanySettings[]
   numberingSequences    NumberingSequence[]
   invoices              Invoice[]
@@ -66,6 +66,7 @@ model Organization {
   documents             Document[]
   documentLinks         DocumentLink[]
   customerRelationships CustomerRelationship[]
+  tripTravellers        TripTraveller[]
 
   @@map("organizations")
 }
@@ -270,6 +271,7 @@ model Customer {
 
   enquiries   Enquiry[]
   salesQuotes SalesQuote[]
+  travellers  Traveller[]
 
   @@index([organizationId])
   @@index([phone])
@@ -345,36 +347,36 @@ model Lead {
 }
 
 model Trip {
-  organizationId      String        @default("org_gktravels")
-  organization        Organization  @relation(fields: [organizationId], references: [id])
-  id                  String        @id
-  tripNumber          Int           @unique @default(autoincrement())
+  organizationId      String          @default("org_gktravels")
+  organization        Organization    @relation(fields: [organizationId], references: [id])
+  id                  String          @id
+  tripNumber          Int             @unique @default(autoincrement())
   invoiceId           String?
   customer            String
-  phone               String        @default("")
+  phone               String          @default("")
   email               String?
   customerId          String?
   destination         String
-  type                String        @default("Leisure")
-  pax                 Int           @default(1)
+  type                String          @default("Leisure")
+  pax                 Int             @default(1)
   departure           String?
   returnDate          String?
-  status              String        @default("draft")
+  status              String          @default("draft")
   totalAmount         Float?
-  gstRate             Float         @default(5)
-  discount            Float         @default(0)
-  gstAmount           Float         @default(0)
+  gstRate             Float           @default(5)
+  discount            Float           @default(0)
+  gstAmount           Float           @default(0)
   totalPayable        Float?
-  paidAmount          Float         @default(0)
-  balanceDue          Float         @default(0)
-  supplierCost        Float         @default(0)
-  grossMargin         Float         @default(0)
-  marginPct           Float         @default(0)
-  visaStatus          String        @default("pending")
-  hotelStatus         String        @default("pending")
-  flightStatus        String        @default("pending")
-  checkInStatus       String        @default("not_due")
-  notes               String        @default("")
+  paidAmount          Float           @default(0)
+  balanceDue          Float           @default(0)
+  supplierCost        Float           @default(0)
+  grossMargin         Float           @default(0)
+  marginPct           Float           @default(0)
+  visaStatus          String          @default("pending")
+  hotelStatus         String          @default("pending")
+  flightStatus        String          @default("pending")
+  checkInStatus       String          @default("not_due")
+  notes               String          @default("")
   assignedTo          String?
   createdDate         String
   createdBy           String?
@@ -382,17 +384,18 @@ model Trip {
   convertedFromLeadId String?
   convertedAt         String?
   convertedBy         String?
-  timeline            Json          @default("[]")
-  itinerary           Json          @default("[]")
-  documents           Json          @default("[]")
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  gstMode             GstMode       @default(EXCLUDED)
-  taxableAmount       Float         @default(0)
-  passengerIds        Json          @default("[]")
+  timeline            Json            @default("[]")
+  itinerary           Json            @default("[]")
+  documents           Json            @default("[]")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  gstMode             GstMode         @default(EXCLUDED)
+  taxableAmount       Float           @default(0)
+  passengerIds        Json            @default("[]")
   payments            Payment[]
   tasks               Task[]
   services            TripService[]
+  travellers          TripTraveller[]
 
   @@index([organizationId])
   @@index([status])
@@ -942,14 +945,25 @@ model Voucher {
   @@map("vouchers")
 }
 
-model Passenger {
-  organizationId        String       @default("org_gktravels")
-  organization          Organization @relation(fields: [organizationId], references: [id])
-  id                    String       @id
+// Travellers (table "passengers" kept from v1). A traveller is a person who
+// travels; a customer is who we sell to. One customer usually has several.
+model Traveller {
+  organizationId        String          @default("org_gktravels")
+  organization          Organization    @relation(fields: [organizationId], references: [id])
+  id                    String          @id
   customerId            String?
+  customer              Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   firstName             String
   lastName              String
   displayName           String?
+  title                 String?
+  relationToCustomer    String?
+  phone                 String?
+  email                 String?
+  govtIdType            String?
+  govtIdNumber          String?
+  deletedAt             DateTime?
+  trips                 TripTraveller[]
   dateOfBirth           String?
   nationality           String?
   gender                String?
@@ -969,13 +983,40 @@ model Passenger {
   emergencyRelation     String?
   notes                 String?
   createdDate           String
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   @@index([organizationId])
   @@index([customerId])
   @@index([passportNumber])
   @@map("passengers")
+}
+
+enum TravellerRole {
+  LEAD
+  ADULT
+  CHILD
+  INFANT
+}
+
+// Who is on which trip. trips.passengerIds (JSON) is kept in step for the
+// legacy screens until Phase 3 replaces them.
+model TripTraveller {
+  id             String        @id @default(cuid())
+  organizationId String        @default("org_gktravels")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  tripId         String
+  trip           Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  travellerId    String
+  traveller      Traveller     @relation(fields: [travellerId], references: [id], onDelete: Cascade)
+  role           TravellerRole @default(ADULT)
+  position       Int           @default(0)
+  createdAt      DateTime      @default(now())
+
+  @@unique([tripId, travellerId])
+  @@index([organizationId])
+  @@index([travellerId])
+  @@map("trip_travellers")
 }
 
 // ============================================================

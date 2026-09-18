@@ -40,7 +40,7 @@ router.get('/all', requireAuth, async (req: AuthRequest, res) => {
       trips     ? prisma.trip.findMany({ orderBy: { createdAt: 'desc' } })      : EMPTY,
       can('enquiries:read') ? prisma.lead.findMany({ orderBy: { createdAt: 'desc' } }) : EMPTY,
       customers ? prisma.customer.findMany({ orderBy: { createdAt: 'desc' } })  : EMPTY,
-      customers ? prisma.passenger.findMany({ orderBy: { createdAt: 'desc' } }) : EMPTY,
+      customers ? prisma.traveller.findMany({ orderBy: { createdAt: 'desc' } }) : EMPTY,
       can('bookings:read') ? prisma.booking.findMany({ orderBy: { createdAt: 'desc' } }) : EMPTY,
       finance   ? prisma.payment.findMany({ orderBy: { createdAt: 'desc' } })   : EMPTY,
       can('tasks:read') ? prisma.task.findMany({ orderBy: { createdAt: 'desc' } }) : EMPTY,

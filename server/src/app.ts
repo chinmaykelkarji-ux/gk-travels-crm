@@ -47,6 +47,7 @@ import aiRouter              from './routes/ai.js';
 import meV2Router            from './routes/v2/me.js';
 import documentsV2Router     from './routes/v2/documents.js';
 import customersV2Router     from './routes/v2/customers.js';
+import { travellersRouter, tripTravellersRouter } from './routes/v2/travellers.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -136,6 +137,8 @@ app.use('/api/ai',            aiRouter);
 app.use('/api/v2/me',         meV2Router);
 app.use('/api/v2/documents',  documentsV2Router);
 app.use('/api/v2/customers',  customersV2Router);
+app.use('/api/v2/travellers', travellersRouter);
+app.use('/api/v2/trips/:tripId/travellers', tripTravellersRouter);
 if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
 app.use('/api/jobs',          jobsRouter);
 

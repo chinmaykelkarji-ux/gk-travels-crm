@@ -10,7 +10,7 @@ router.use(requireAuth);
 
 router.get('/', requirePermission('customers:read'), async (_req, res) => {
   try {
-    res.json(await prisma.passenger.findMany({ orderBy: { createdAt: 'desc' } }));
+    res.json(await prisma.traveller.findMany({ orderBy: { createdAt: 'desc' } }));
   } catch (err) {
     console.error('[passengers GET]', err);
     res.status(500).json({ error: 'Failed to fetch passengers' });
@@ -19,7 +19,7 @@ router.get('/', requirePermission('customers:read'), async (_req, res) => {
 
 router.get('/:id', requirePermission('customers:read'), async (req, res) => {
   try {
-    const p = await prisma.passenger.findUnique({ where: { id: String(req.params.id) } });
+    const p = await prisma.traveller.findUnique({ where: { id: String(req.params.id) } });
     if (!p) { res.status(404).json({ error: 'Passenger not found' }); return; }
     res.json(p);
   } catch (err) {
@@ -32,7 +32,7 @@ router.post('/', requirePermission('customers:write'), async (req, res) => {
   try {
     const data = sanitize(req.body as Record<string, unknown>);
     if (!data.id) { res.status(400).json({ error: 'id is required' }); return; }
-    const p = await prisma.passenger.upsert({
+    const p = await prisma.traveller.upsert({
       where:  { id: data.id },
       update: data,
       create: data,
@@ -47,7 +47,7 @@ router.post('/', requirePermission('customers:write'), async (req, res) => {
 router.put('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
     const { id: _ignored, ...data } = sanitize(req.body as Record<string, unknown>);
-    const p = await prisma.passenger.update({
+    const p = await prisma.traveller.update({
       where: { id: String(req.params.id) },
       data,
     });
@@ -60,7 +60,7 @@ router.put('/:id', requirePermission('customers:write'), async (req, res) => {
 
 router.delete('/:id', requirePermission('customers:write'), async (req, res) => {
   try {
-    await prisma.passenger.delete({ where: { id: String(req.params.id) } });
+    await prisma.traveller.delete({ where: { id: String(req.params.id) } });
     res.json({ ok: true });
   } catch (err) {
     console.error('[passengers DELETE]', err);

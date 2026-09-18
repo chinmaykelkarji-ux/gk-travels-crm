@@ -10,16 +10,18 @@
 import { addHours, differenceInCalendarDays, parseISO, isValid } from 'date-fns';
 import { prisma } from '../lib/prisma.js';
 import { emitEvent } from '../services/outbox.js';
+import { passportProblemsForUpcomingTrips } from '../modules/travellers/service.js';
 
 const PAYMENT_REMINDER_DAYS = [7, 3, 1];
 
-export interface SchedulerSummary { paymentReminders: number; supplierAlerts: number; departureReminders: number }
+export interface SchedulerSummary { paymentReminders: number; supplierAlerts: number; departureReminders: number; passportAlerts: number }
 
 export async function runSchedulerRules(): Promise<SchedulerSummary> {
-  const summary: SchedulerSummary = { paymentReminders: 0, supplierAlerts: 0, departureReminders: 0 };
+  const summary: SchedulerSummary = { paymentReminders: 0, supplierAlerts: 0, departureReminders: 0, passportAlerts: 0 };
   summary.paymentReminders   = await rulePaymentReminders();
   summary.supplierAlerts     = await ruleSupplierAlerts();
   summary.departureReminders = await ruleDepartureReminders();
+  summary.passportAlerts     = await rulePassportValidity();
   return summary;
 }
 
@@ -93,4 +95,19 @@ async function ruleDepartureReminders(): Promise<number> {
     n++;
   }
   return n;
+}
+
+// Rule 4 — a traveller on a trip departing within 90 days whose passport is
+// expired, or short of six months' validity at departure, gets a task for the
+// team. One event per (trip, traveller, expiry): editing the passport re-arms it.
+async function rulePassportValidity(): Promise<number> {
+  const problems = await passportProblemsForUpcomingTrips(90);
+  for (const p of problems) {
+    await emitEvent(
+      'PASSPORT_VALIDITY_ALERT',
+      { tripId: p.trip.id, travellerId: p.traveller.id, status: p.status, passportExpiry: p.traveller.passportExpiry },
+      { idempotencyKey: `${p.trip.id}:${p.traveller.id}:${p.traveller.passportExpiry}` },
+    );
+  }
+  return problems.length;
 }

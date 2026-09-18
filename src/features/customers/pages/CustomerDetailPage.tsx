@@ -13,6 +13,9 @@ import { useCustomer, useUpdateCustomer, useDeleteCustomer, useMergeCustomers, u
 import { CustomerForm } from '../components/CustomerForm';
 import { CustomerPicker } from '../components/CustomerPicker';
 import type { Customer360 } from '../api';
+import { TravellerForm } from '@/features/travellers/components/TravellerForm';
+import { PassportPill } from '@/features/travellers/components/PassportPill';
+import { useCreateTraveller } from '@/features/travellers/hooks';
 
 const TRIP_TONE: Record<string, Tone> = { draft: 'neutral', quotation: 'info', confirmed: 'accent', in_progress: 'warning', completed: 'success', cancelled: 'danger' };
 const TABS = ['Overview', 'Trips', 'Sales', 'Finance', 'Travellers', 'Documents', 'Activity'] as const;
@@ -101,7 +104,7 @@ export default function CustomerDetailPage() {
         {tab === 'Trips' && <TripsTab data={data} showMoney={canSeeFinance} />}
         {tab === 'Sales' && <SalesTab data={data} />}
         {tab === 'Finance' && canSeeFinance && <FinanceTab data={data} />}
-        {tab === 'Travellers' && <TravellersTab data={data} />}
+        {tab === 'Travellers' && <TravellersTab data={data} canWrite={canWrite} />}
         {tab === 'Documents' && <DocumentsTab data={data} />}
         {tab === 'Activity' && <ActivityTab data={data} />}
       </div>
@@ -297,14 +300,27 @@ function FinanceTab({ data }: { data: Customer360 }) {
   );
 }
 
-function TravellersTab({ data }: { data: Customer360 }) {
-  return <DataTable dense rows={data.travellers} rowKey={t => t.id} emptyTitle="No travellers on file" emptyHint="Travellers are added from trips and bookings." columns={[
-    { key: 'name', header: 'Name', render: t => `${t.firstName} ${t.lastName}`.trim() },
-    { key: 'dateOfBirth', header: 'Date of birth', render: t => fmtDate(t.dateOfBirth) },
-    { key: 'passportNumber', header: 'Passport', render: t => t.passportNumber ?? '—' },
-    { key: 'passportExpiry', header: 'Expiry', render: t => t.passportExpiry ? <PassportExpiry date={t.passportExpiry} /> : '—' },
-    { key: 'nationality', header: 'Nationality', render: t => t.nationality ?? '—' },
-  ]} />;
+function TravellersTab({ data, canWrite }: { data: Customer360; canWrite: boolean }) {
+  const navigate = useNavigate();
+  const create = useCreateTraveller();
+  const [open, setOpen] = useState(false);
+  const addButton = canWrite ? <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Add traveller</Button> : undefined;
+  return (
+    <div className="space-y-3">
+      {data.travellers.length > 0 && addButton && <div className="flex justify-end">{addButton}</div>}
+      <DataTable dense rows={data.travellers} rowKey={t => t.id} onRowClick={t => navigate(`/travellers/${t.id}`)} emptyTitle="No travellers on file" emptyHint="Add the people who travel under this customer: family, colleagues, group members." emptyAction={addButton} columns={[
+        { key: 'name', header: 'Name', render: t => `${t.firstName} ${t.lastName}`.trim() },
+        { key: 'dateOfBirth', header: 'Date of birth', render: t => fmtDate(t.dateOfBirth) },
+        { key: 'passportNumber', header: 'Passport', render: t => t.passportNumber ?? '—' },
+        { key: 'passportExpiry', header: 'Expiry', render: t => <PassportPill expiry={t.passportExpiry} /> },
+        { key: 'nationality', header: 'Nationality', render: t => t.nationality ?? '—' },
+      ]} />
+      <Drawer open={open} onOpenChange={o => { setOpen(o); if (!o) create.reset(); }} title={`New traveller for ${data.customer.name}`} width="xl">
+        <TravellerForm customerId={data.customer.id} submitting={create.isPending} error={create.error as ApiError | null} onCancel={() => setOpen(false)}
+          onSubmit={v => create.mutate(v, { onSuccess: t => { toast.success('Traveller added', `${t.firstName} ${t.lastName}`); setOpen(false); }, onError: e => { if (!(e instanceof ApiError) || (!e.fields && e.code !== 'CONFLICT')) toast.error('Could not add traveller', (e as Error).message); } })} submitLabel="Add traveller" />
+      </Drawer>
+    </div>
+  );
 }
 
 function DocumentsTab({ data }: { data: Customer360 }) {

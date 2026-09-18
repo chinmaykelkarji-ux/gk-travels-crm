@@ -42,7 +42,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CUSTOMERS',
     items: [
-      { path: '/customers', label: 'Customers', icon: UserCircle, permission: 'customers:read' },
+      { path: '/customers',  label: 'Customers',  icon: UserCircle, permission: 'customers:read' },
+      { path: '/travellers', label: 'Travellers', icon: Users,      permission: 'customers:read' },
     ],
   },
   {

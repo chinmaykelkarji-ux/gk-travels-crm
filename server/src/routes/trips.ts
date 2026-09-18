@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
+import { syncTripTravellersFromIds } from '../modules/travellers/service.js';
 import { logActivity } from '../lib/activity.js';
 import { redactTrip } from '../lib/redact.js';
 
@@ -67,10 +68,14 @@ router.post('/', requirePermission('trips:write'), async (req: AuthRequest, res)
     };
 
     const existed = await prisma.trip.findUnique({ where: { id }, select: { id: true } });
-    const trip = await prisma.trip.upsert({
-      where:  { id },
-      update: data as Parameters<typeof prisma.trip.update>[0]['data'],
-      create: data as Parameters<typeof prisma.trip.create>[0]['data'],
+    const trip = await prisma.$transaction(async tx => {
+      const saved = await tx.trip.upsert({
+        where:  { id },
+        update: data as Parameters<typeof prisma.trip.update>[0]['data'],
+        create: data as Parameters<typeof prisma.trip.create>[0]['data'],
+      });
+      if (Array.isArray(rest.passengerIds)) await syncTripTravellersFromIds(tx, saved.id, rest.passengerIds);
+      return saved;
     });
 
     // Brand-new trip → post to the activity feed. Receivables are now raised
@@ -98,9 +103,14 @@ router.post('/', requirePermission('trips:write'), async (req: AuthRequest, res)
 router.put('/:id', requirePermission('trips:write'), async (req, res) => {
   try {
     const { id: _ignored, ...data } = sanitize(req.body as Record<string, unknown>);
-    const trip = await prisma.trip.update({
-      where: { id: String(req.params.id) },
-      data:  data as Parameters<typeof prisma.trip.update>[0]['data'],
+    const trip = await prisma.$transaction(async tx => {
+      const updated = await tx.trip.update({
+        where: { id: String(req.params.id) },
+        data:  data as Parameters<typeof prisma.trip.update>[0]['data'],
+      });
+      // Legacy screens edit passengerIds; keep trip_travellers (v2) in step.
+      if (Array.isArray(data.passengerIds)) await syncTripTravellersFromIds(tx, updated.id, data.passengerIds);
+      return updated;
     });
     res.json(trip);
   } catch (err) {

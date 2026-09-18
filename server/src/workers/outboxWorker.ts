@@ -12,6 +12,8 @@ import { startOfDay, endOfDay, parseISO, isValid } from 'date-fns';
 import { prisma } from '../lib/prisma.js';
 import { sendWhatsAppTemplate, sendWhatsAppText } from '../services/whatsapp.js';
 import { paymentReminder, travelReminder, bookingConfirmation } from '../services/messageTemplates.js';
+import { travellerDisplayName } from '../../../src/shared/calc/travellers.js';
+import { randomUUID } from 'node:crypto';
 
 const BATCH_SIZE   = 10;
 const MAX_ATTEMPTS = 3;
@@ -74,6 +76,9 @@ async function dispatchEvent(eventType: string, payload: Record<string, unknown>
       break;
     case 'BOOKING_CONFIRMED':
       await handleBookingConfirmed(payload);
+      break;
+    case 'PASSPORT_VALIDITY_ALERT':
+      await handlePassportValidityAlert(payload);
       break;
     default:
       console.warn('[outbox] Unknown event type:', eventType);
@@ -223,6 +228,39 @@ async function handleBookingConfirmed(payload: Record<string, unknown>): Promise
       content:      template.fallbackText,
       status:       result.success ? 'SENT' : 'FAILED',
       error:        result.error,
+    },
+  });
+}
+
+// PASSPORT_VALIDITY_ALERT — raises an internal task so the team chases a
+// renewal before departure. Server-created task ids use the SYS-TSK- prefix,
+// which the legacy client's TSK-YYYY-NNNN counter ignores.
+async function handlePassportValidityAlert(payload: Record<string, unknown>): Promise<void> {
+  const tripId      = payload.tripId as string;
+  const travellerId = payload.travellerId as string;
+  const status      = payload.status as string;
+  const [trip, traveller] = await Promise.all([
+    prisma.trip.findUnique({ where: { id: tripId }, select: { id: true, destination: true, departure: true, customerId: true } }),
+    prisma.traveller.findUnique({ where: { id: travellerId }, select: { id: true, title: true, firstName: true, lastName: true, displayName: true, passportExpiry: true } }),
+  ]);
+  if (!trip || !traveller) return;
+
+  const name  = travellerDisplayName(traveller);
+  const title = `Passport ${status === 'EXPIRED' ? 'expired' : 'validity short'}: ${name} — ${trip.destination} (${trip.id})`;
+  const existing = await prisma.task.findFirst({ where: { tripId, title, status: { not: 'completed' } }, select: { id: true } });
+  if (existing) return;
+
+  await prisma.task.create({
+    data: {
+      id:          `SYS-TSK-${randomUUID().slice(0, 12)}`,
+      title,
+      description: `${name}'s passport expires ${traveller.passportExpiry ?? 'unknown'}; trip departs ${trip.departure ?? 'TBD'}. Most destinations need six months' validity beyond travel. Arrange renewal or confirm the destination's rule.`,
+      priority:    'high',
+      status:      'pending',
+      tripId,
+      customerId:  trip.customerId,
+      dueDate:     new Date().toISOString().slice(0, 10),
+      createdDate: new Date().toISOString().slice(0, 10),
     },
   });
 }
