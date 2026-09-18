@@ -1,5 +1,5 @@
 // ============================================================
-// GK TRAVELS CRM — Local Development Server
+// GK TRAVELS CRM / TravelOS — Local Development Server
 //
 // This file is only used when running locally with:
 //   npm run server  (tsx watch server/src/index.ts)
@@ -12,8 +12,8 @@
 import app         from './app.js';
 import { prisma }  from './lib/prisma.js';
 import bcrypt      from 'bcryptjs';
-import { startOutboxWorker }    from './workers/outboxWorker.js';
-import { startSchedulerWorker } from './workers/schedulerWorker.js';
+import { runTick } from './core/jobs.js';
+import './jobs/handlers.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -55,7 +55,7 @@ async function ensureDefaultAdmin() {
   console.log(`✅ Default admin created: ${admin.email}`);
 }
 
-// ── Start ───────────────────────────────────���──────────────────
+// ── Start ─────────────────────────────────────────────────────
 
 async function start() {
   await prisma.$connect();
@@ -64,13 +64,17 @@ async function start() {
   await ensureDefaultAdmin();
 
   app.listen(PORT, () => {
-    console.log(`🚀 GK Travels CRM API  →  http://localhost:${PORT}`);
-    console.log(`   Health check        →  http://localhost:${PORT}/api/health`);
+    console.log(`🚀 TravelOS API           →  http://localhost:${PORT}`);
+    console.log(`   Health check           →  http://localhost:${PORT}/api/health`);
 
-    // Background workers — started after the server is listening so
-    // they never block startup.
-    startOutboxWorker();
-    startSchedulerWorker();
+    // Local job loop — production uses a scheduler hitting POST /api/jobs/tick.
+    const every = Number(process.env.LOCAL_TICK_INTERVAL_MS) || 60_000;
+    setInterval(() => {
+      runTick({ budgetMs: Math.max(5_000, every - 5_000), workerId: 'local-loop' })
+        .then(s => { if (s.claimed) console.log(`[jobs] tick: ${s.claimed} claimed, ${s.succeeded} ok, ${s.retried} retried, ${s.failed} failed`); })
+        .catch(err => console.error('[jobs] tick failed', err));
+    }, every).unref();
+    console.log(`   Job loop               →  every ${every / 1000}s (POST /api/jobs/tick in production)`);
   }).on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use. Run: npx kill-port ${PORT}`);

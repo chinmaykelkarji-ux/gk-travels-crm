@@ -1,38 +1,37 @@
+// ============================================================
+// Scheduler rules — evaluated by the `scheduler.rules` job (core/jobs.ts)
+// every 15 minutes per organisation. Each rule writes idempotent outbox
+// events, so a rule fires at most once per trip/service/day.
+//
+// No setInterval here any more: on Vercel nothing keeps a process alive.
+// server/src/index.ts runs a local tick loop for development.
+// ============================================================
+
 import { addHours, differenceInCalendarDays, parseISO, isValid } from 'date-fns';
 import { prisma } from '../lib/prisma.js';
 import { emitEvent } from '../services/outbox.js';
 
-const POLL_INTERVAL_MS = 15 * 60_000;
 const PAYMENT_REMINDER_DAYS = [7, 3, 1];
 
-// ── startSchedulerWorker ──────────────────────────────────────────
-// Every 15 minutes, evaluates business rules and writes events to the
-// outbox. Idempotency keys ensure each rule fires at most once per
-// trip/service/day combination.
+export interface SchedulerSummary { paymentReminders: number; supplierAlerts: number; departureReminders: number }
 
-export function startSchedulerWorker(): void {
-  console.log('[SchedulerWorker] Started');
-  setInterval(() => {
-    runSchedulerRules().catch(err => {
-      console.error('[SchedulerWorker] Error:', err);
-    });
-  }, POLL_INTERVAL_MS);
-}
-
-async function runSchedulerRules(): Promise<void> {
-  await rulePaymentReminders();
-  await ruleSupplierAlerts();
-  await ruleDepartureReminders();
+export async function runSchedulerRules(): Promise<SchedulerSummary> {
+  const summary: SchedulerSummary = { paymentReminders: 0, supplierAlerts: 0, departureReminders: 0 };
+  summary.paymentReminders   = await rulePaymentReminders();
+  summary.supplierAlerts     = await ruleSupplierAlerts();
+  summary.departureReminders = await ruleDepartureReminders();
+  return summary;
 }
 
 // Rule 1 — payment reminder at 7/3/1 days before departure for confirmed
 // trips with an outstanding balance.
-async function rulePaymentReminders(): Promise<void> {
+async function rulePaymentReminders(): Promise<number> {
   const trips = await prisma.trip.findMany({
-    where: { status: 'confirmed', balanceDue: { gt: 0 } },
+    where: { status: { in: ['confirmed', 'in_progress'] }, balanceDue: { gt: 0 } },
     select: { id: true, departure: true, balanceDue: true },
   });
 
+  let n = 0;
   for (const trip of trips) {
     if (!trip.departure) continue;
     const departureDate = parseISO(trip.departure);
@@ -46,12 +45,14 @@ async function rulePaymentReminders(): Promise<void> {
       { tripId: trip.id, daysAhead },
       { idempotencyKey: `${trip.id}:${daysAhead}d` },
     );
+    n++;
   }
+  return n;
 }
 
 // Rule 2 — alert the agency when a supplier confirmation is still
 // outstanding within 48 hours of the service date.
-async function ruleSupplierAlerts(): Promise<void> {
+async function ruleSupplierAlerts(): Promise<number> {
   const cutoff = addHours(new Date(), 48);
   const services = await prisma.tripService.findMany({
     where: { status: 'REQUESTED', serviceDate: { lte: cutoff } },
@@ -65,16 +66,18 @@ async function ruleSupplierAlerts(): Promise<void> {
       { idempotencyKey: service.id },
     );
   }
+  return services.length;
 }
 
 // Rule 3 — departure reminder to the customer, sent the day before
 // a confirmed trip departs.
-async function ruleDepartureReminders(): Promise<void> {
+async function ruleDepartureReminders(): Promise<number> {
   const trips = await prisma.trip.findMany({
-    where: { status: 'confirmed' },
+    where: { status: { in: ['confirmed', 'in_progress'] } },
     select: { id: true, departure: true },
   });
 
+  let n = 0;
   for (const trip of trips) {
     if (!trip.departure) continue;
     const departureDate = parseISO(trip.departure);
@@ -87,5 +90,7 @@ async function ruleDepartureReminders(): Promise<void> {
       { tripId: trip.id },
       { idempotencyKey: `${trip.id}:departure` },
     );
+    n++;
   }
+  return n;
 }

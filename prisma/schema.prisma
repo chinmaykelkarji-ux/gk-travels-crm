@@ -61,7 +61,10 @@ model Organization {
   salesQuotes           SalesQuote[]
   salesQuoteItems       SalesQuoteItem[]
 
-  sessions Session[]
+  sessions      Session[]
+  jobs          Job[]
+  documents     Document[]
+  documentLinks DocumentLink[]
 
   @@map("organizations")
 }
@@ -106,6 +109,116 @@ model Session {
   @@index([organizationId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+// ── Background jobs (core/jobs.ts) ───────────────────────────
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Job {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  type           String
+  payload        Json         @default("{}")
+  status         JobStatus    @default(PENDING)
+  priority       Int          @default(0)
+  attempts       Int          @default(0)
+  maxAttempts    Int          @default(3)
+  runAfter       DateTime     @default(now())
+  lockedUntil    DateTime?
+  lockedBy       String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  lastError      String?
+  result         Json?
+  idempotencyKey String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([status, runAfter])
+  @@index([organizationId, status])
+  @@index([type])
+  @@map("jobs")
+}
+
+// ── Documents (core/storage.ts, routes/v2/documents.ts) ──────
+enum DocumentType {
+  FLIGHT_TICKET
+  TRAIN_TICKET
+  BUS_TICKET
+  HOTEL_CONFIRMATION
+  ACTIVITY_VOUCHER
+  VEHICLE_VOUCHER
+  SUPPLIER_INVOICE
+  CUSTOMER_INVOICE
+  PAYMENT_RECEIPT
+  INSURANCE
+  PASSPORT
+  VISA
+  ID_PROOF
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  EXTRACTED
+  NEEDS_REVIEW
+  LINKED
+  FAILED
+}
+
+model Document {
+  id                String         @id @default(cuid())
+  organizationId    String         @default("org_gktravels")
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  type              DocumentType   @default(OTHER)
+  status            DocumentStatus @default(PENDING_UPLOAD)
+  title             String
+  fileName          String
+  mimeType          String
+  sizeBytes         Int
+  sha256            String?
+  storageKey        String         @unique
+  uploadedById      String?
+  uploadedAt        DateTime?
+  expiresAt         DateTime?
+  version           Int            @default(1)
+  previousVersionId String?
+  customerVisible   Boolean        @default(false)
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  links             DocumentLink[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, type])
+  @@index([uploadedById])
+  @@map("documents")
+}
+
+model DocumentLink {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  documentId     String
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  entityType     String
+  entityId       String
+  role           String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([documentId, entityType, entityId])
+  @@index([organizationId, entityType, entityId])
+  @@map("document_links")
 }
 
 model Customer {

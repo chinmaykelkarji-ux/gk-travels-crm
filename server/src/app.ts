@@ -45,6 +45,10 @@ import enquiryRouter        from './routes/enquiry.js';
 import salesQuoteRouter     from './routes/salesQuote.js';
 import aiRouter              from './routes/ai.js';
 import meV2Router            from './routes/v2/me.js';
+import documentsV2Router     from './routes/v2/documents.js';
+import storageLocalRouter    from './routes/v2/storageLocal.js';
+import jobsRouter            from './routes/jobs.js';
+import { getStorage }        from './core/storage.js';
 
 const app = express();
 
@@ -129,6 +133,9 @@ app.use('/api/ai',            aiRouter);
 
 // ── v2 (server-authoritative modules; see docs/travelos/02-target-architecture.md) ──
 app.use('/api/v2/me',         meV2Router);
+app.use('/api/v2/documents',  documentsV2Router);
+if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
+app.use('/api/jobs',          jobsRouter);
 
 // ── 404 + error envelope ───────────────────────────────────────
 

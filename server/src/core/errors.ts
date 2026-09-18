@@ -92,9 +92,9 @@ export function toErrorResponse(err: unknown): { status: number; body: ErrorBody
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   const { status, body } = toErrorResponse(err);
-  if (status >= 500) {
+  if (status >= 500 && !isAppError(err)) {
     console.error(`[${body.error.requestId ?? '-'}] UNHANDLED`, err);
-  } else if (status !== 404 && status !== 401 && status !== 403) {
+  } else if (status >= 500 || (status !== 404 && status !== 401 && status !== 403)) {
     console.warn(`[${body.error.requestId ?? '-'}] ${status} ${body.error.code}: ${body.error.message}`);
   }
   if (res.headersSent) return;

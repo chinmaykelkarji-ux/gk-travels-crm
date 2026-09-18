@@ -22,6 +22,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'vouchers:write',
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',
+    'documents:read', 'documents:write',
     'dashboard:read',
     'suppliers:read',
     'ai:use',
@@ -40,6 +41,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'credit-notes:read', 'credit-notes:write',
     'debit-notes:read', 'debit-notes:write',
     'commissions:read', 'commissions:write',
+    'documents:read', 'documents:write',
     'reports:read',
   ],
 
@@ -53,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'vouchers:write',
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',
+    'documents:read', 'documents:write',
   ],
 };
 

@@ -1,33 +1,33 @@
+// ============================================================
+// Outbox dispatch — run by the `outbox.dispatch` job (core/jobs.ts) every
+// minute per organisation. Delivers PENDING outbox events through the
+// WhatsApp/email adapters and records every attempt in message_logs. Errors
+// are caught per event so one bad event never stalls the queue.
+//
+// No setInterval here any more: on Vercel nothing keeps a process alive.
+// server/src/index.ts runs a local tick loop for development.
+// ============================================================
+
 import { startOfDay, endOfDay, parseISO, isValid } from 'date-fns';
 import { prisma } from '../lib/prisma.js';
 import { sendWhatsAppTemplate, sendWhatsAppText } from '../services/whatsapp.js';
 import { paymentReminder, travelReminder, bookingConfirmation } from '../services/messageTemplates.js';
 
-const POLL_INTERVAL_MS = 60_000;
-const BATCH_SIZE = 10;
+const BATCH_SIZE   = 10;
 const MAX_ATTEMPTS = 3;
 
-// ── startOutboxWorker ────────────────────────────────────────────
-// Polls for PENDING events every 60s and dispatches them. Errors are
-// caught per-event so one bad event never stalls the queue.
+export interface OutboxSummary { processed: number; sent: number; failed: number }
 
-export function startOutboxWorker(): void {
-  console.log('[OutboxWorker] Started');
-  setInterval(() => {
-    processOutboxBatch().catch(err => {
-      console.error('[OutboxWorker] Batch error:', err);
-    });
-  }, POLL_INTERVAL_MS);
-}
-
-async function processOutboxBatch(): Promise<void> {
+export async function processOutboxBatch(): Promise<OutboxSummary> {
   const events = await prisma.outboxEvent.findMany({
     where:   { status: 'PENDING', scheduledFor: { lte: new Date() } },
     orderBy: { scheduledFor: 'asc' },
     take:    BATCH_SIZE,
   });
+  const summary: OutboxSummary = { processed: 0, sent: 0, failed: 0 };
 
   for (const event of events) {
+    summary.processed++;
     await prisma.outboxEvent.update({
       where: { id: event.id },
       data:  { status: 'PROCESSING' },
@@ -39,8 +39,9 @@ async function processOutboxBatch(): Promise<void> {
         where: { id: event.id },
         data:  { status: 'SENT', processedAt: new Date() },
       });
+      summary.sent++;
     } catch (err) {
-      const attempts = event.attempts + 1;
+      const attempts  = event.attempts + 1;
       const lastError = err instanceof Error ? err.message : String(err);
       await prisma.outboxEvent.update({
         where: { id: event.id },
@@ -50,9 +51,11 @@ async function processOutboxBatch(): Promise<void> {
           status: attempts >= MAX_ATTEMPTS ? 'FAILED' : 'PENDING',
         },
       });
-      console.error(`[OutboxWorker] Event ${event.id} (${event.eventType}) failed (attempt ${attempts}):`, lastError);
+      console.error(`[outbox] Event ${event.id} (${event.eventType}) failed (attempt ${attempts}):`, lastError);
+      summary.failed++;
     }
   }
+  return summary;
 }
 
 async function dispatchEvent(eventType: string, payload: Record<string, unknown>): Promise<void> {
@@ -67,13 +70,13 @@ async function dispatchEvent(eventType: string, payload: Record<string, unknown>
       await handleDepartureReminder(payload);
       break;
     case 'SERVICE_STATUS_CHANGED':
-      console.log('[OutboxWorker] SERVICE_STATUS_CHANGED:', payload);
+      console.log('[outbox] SERVICE_STATUS_CHANGED:', payload);
       break;
     case 'BOOKING_CONFIRMED':
       await handleBookingConfirmed(payload);
       break;
     default:
-      console.warn('[OutboxWorker] Unknown event type:', eventType);
+      console.warn('[outbox] Unknown event type:', eventType);
   }
 }
 

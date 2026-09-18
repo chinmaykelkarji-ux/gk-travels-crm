@@ -21,3 +21,7 @@ delete process.env.WHATSAPP_BSP_URL;
 delete process.env.SMTP_HOST;
 delete process.env.GEMINI_API_KEY;
 delete process.env.PORT;
+// Documents: local disk provider in a per-run temp directory; never a bucket.
+delete process.env.STORAGE_BUCKET;
+process.env.STORAGE_LOCAL_DIR ??= require('node:path').join(require('node:os').tmpdir(), 'travelos-test-storage-' + process.pid);
+process.env.CRON_SECRET ??= 'vitest-cron-secret-0123456789abcdef';

@@ -30,6 +30,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   'Passenger', 'CompanySettings', 'NumberingSequence', 'Invoice', 'InvoiceLineItem',
   'CreditNote', 'CreditNoteLineItem', 'DebitNote', 'DebitNoteLineItem', 'TripService',
   'OutboxEvent', 'MessageLog', 'Enquiry', 'SalesQuote', 'SalesQuoteItem', 'Session',
+  'Job', 'Document', 'DocumentLink',
 ]);
 
 const WHERE_OPS = new Set([
