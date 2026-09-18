@@ -61,3 +61,8 @@ Merge the branch to `main`. Vercel builds with the server typecheck now included
 ## 7. Rollback
 
 Neon → Branches → restore `main` from `pre-travelos-<date>`; redeploy the previous `main` commit in Vercel. The pre-branch code does not reference any column this branch adds, so restoring only the code (without the database) is also safe.
+
+## Appendix A — settings added in Phase 3 (set before the first deploy of the branch)
+
+- `DATA_ENCRYPTION_KEY` (Vercel → Settings → Environment Variables, Production): 64 hex characters, generated once and stored in your password manager. Without it the API refuses to save passport / Aadhaar / ID numbers. Losing it makes the stored numbers unreadable. Generate in PowerShell: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+- After deploy, the `identity.encrypt-legacy` job (runs every 15 minutes through `/api/jobs/tick`) seals passport numbers that production stored in clear and blanks the clear-text column. Check it finished: Settings → activity shows "Encrypted identity numbers held in clear". The `pre-travelos-<date>` Neon snapshot still contains those numbers in clear; delete it once you are happy with the cutover.

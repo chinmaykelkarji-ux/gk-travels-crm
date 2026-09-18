@@ -1,11 +1,12 @@
 // Travellers v2 — contracts shared by the SPA and the API.
 import { z } from 'zod';
+import { isMaskedValue, validateGovtId, isPlausiblePassport } from '../calc/identity';
 
 export const TravellerRole = z.enum(['LEAD', 'ADULT', 'CHILD', 'INFANT']);
 export type TravellerRole = z.infer<typeof TravellerRole>;
 
-/** Aadhaar is deliberately not accepted: UIDAI rules restrict its retention. */
-export const GovtIdType = z.enum(['PAN', 'VOTER_ID', 'DRIVING_LICENCE', 'PASSPORT', 'OTHER']);
+/** Identity numbers are sealed at rest and masked on display (server/src/core/identity.ts). */
+export const GovtIdType = z.enum(['AADHAAR', 'PAN', 'VOTER_ID', 'DRIVING_LICENCE', 'PASSPORT', 'OTHER']);
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable().transform(v => (v ? v : null));
 const optionalDate = z.string().date().optional().nullable().or(z.literal('')).transform(v => (v ? v : null));
@@ -51,6 +52,14 @@ export const TravellerCreate = z.object({
   if (v.govtIdType && !v.govtIdNumber) {
     ctx.addIssue({ code: 'custom', path: ['govtIdNumber'], message: 'Enter the ID number' });
   }
+  // A masked value (XXXX-XXXX-1234) echoed back means "unchanged" and is not re-validated.
+  if (v.govtIdType && v.govtIdNumber && !isMaskedValue(v.govtIdNumber)) {
+    const err = validateGovtId(v.govtIdType, v.govtIdNumber);
+    if (err) ctx.addIssue({ code: 'custom', path: ['govtIdNumber'], message: err });
+  }
+  if (v.passportNumber && !isMaskedValue(v.passportNumber) && !isPlausiblePassport(v.passportNumber)) {
+    ctx.addIssue({ code: 'custom', path: ['passportNumber'], message: 'Passport number looks wrong' });
+  }
 });
 export type TravellerCreate = z.infer<typeof TravellerCreate>;
 
@@ -72,6 +81,12 @@ export const TripTravellersPut = z.object({
   syncPax: z.boolean().default(true),
 });
 export type TripTravellersPut = z.infer<typeof TripTravellersPut>;
+
+export const RevealInput = z.object({
+  field:  z.enum(['passportNumber', 'govtIdNumber']),
+  reason: z.string().trim().max(200).optional().nullable(),
+});
+export type RevealInput = z.infer<typeof RevealInput>;
 
 export const PassportAlertsQuery = z.object({
   days: z.coerce.number().int().min(1).max(730).default(180),

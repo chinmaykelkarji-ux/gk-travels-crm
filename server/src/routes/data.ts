@@ -18,6 +18,7 @@ import {
   redactTrip, redactBooking, redactVendor, redactCompanySettings, redactActivity,
 } from '../lib/redact.js';
 import { getOrCreateCompanySettings } from '../services/invoiceService.js';
+import { presentCustomer, presentTraveller } from '../core/identity.js';
 
 const router = Router();
 
@@ -66,8 +67,8 @@ router.get('/all', requireAuth, async (req: AuthRequest, res) => {
     res.json({
       trips:           tripRows.map(t => redactTrip(t, role)),
       leads,
-      customers:       customerRows,
-      passengers,
+      customers:       customerRows.map(c => presentCustomer(c)),
+      passengers:      passengers.map(p => presentTraveller(p)),
       bookings:        bookingRows.map(b => redactBooking(b, role)),
       tasks,
       reminders,

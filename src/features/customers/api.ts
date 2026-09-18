@@ -37,6 +37,7 @@ export const customersApi = {
   create:          (body: CustomerCreate) => api.post<CustomerRecord>('/v2/customers', body),
   update:          (id: string, body: CustomerUpdate) => api.put<CustomerRecord>(`/v2/customers/${id}`, body),
   remove:          (id: string) => api.delete<{ ok: true }>(`/v2/customers/${id}`),
+  revealPassport:  (id: string) => api.post<{ field: string; value: string }>(`/v2/customers/${id}/reveal`, {}),
   merge:           (targetId: string, sourceId: string) => api.post<{ target: CustomerRecord; moved: Record<string, number> }>(`/v2/customers/${targetId}/merge`, { sourceId }),
   checkDuplicates: (q: { phone?: string; email?: string; excludeId?: string }) => api.get<DuplicateCandidate[]>('/v2/customers/check-duplicates', q),
   duplicateGroups: () => api.get<DuplicateGroup[]>('/v2/customers/duplicates'),

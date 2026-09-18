@@ -3,12 +3,13 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
+import { customerIdentityData, presentCustomer } from '../core/identity.js';
 
 const router = Router();
 router.use(requireAuth);
 
 router.get('/', requirePermission('customers:read'), async (_req, res) => {
-  try { res.json(await prisma.customer.findMany({ orderBy: { createdAt: 'desc' } })); }
+  try { res.json((await prisma.customer.findMany({ orderBy: { createdAt: 'desc' } })).map(c => presentCustomer(c))); }
   catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
@@ -39,7 +40,7 @@ router.post('/', requirePermission('customers:write'), async (req: AuthRequest, 
       });
     }
 
-    res.status(201).json(c);
+    res.status(201).json(presentCustomer(c));
   } catch (err) {
     console.error('[customers POST]', err);
     res.status(500).json({ error: String(err) });
@@ -52,7 +53,7 @@ router.put('/:id', requirePermission('customers:write'), async (req, res) => {
       where: { id: String(req.params.id) },
       data:  sanitize(req.body) as Parameters<typeof prisma.customer.update>[0]['data'],
     });
-    res.json(c);
+    res.json(presentCustomer(c));
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
@@ -98,7 +99,9 @@ function sanitize(body: Record<string, unknown>) {
   for (const key of WRITABLE_FIELDS) {
     if (body[key] !== undefined) clean[key] = body[key];
   }
-  return clean;
+  // Passport numbers are sealed, never stored in clear (core/identity.ts).
+  const { passportNo, ...rest } = clean;
+  return { ...rest, ...customerIdentityData({ passportNo }) };
 }
 
 export default router;

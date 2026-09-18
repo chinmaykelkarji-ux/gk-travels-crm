@@ -11,6 +11,7 @@ import { audit } from '../../core/audit.js';
 import { nextDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { normalizePhone } from '../../../../src/shared/calc/phone.js';
+import { customerIdentityData, presentCustomer, presentTraveller } from '../../core/identity.js';
 import type { CustomerCreate, CustomerUpdate, CustomerListQuery, RelationshipCreate, CustomerSummary } from '../../../../src/shared/contracts/customers.js';
 
 const TODAY = () => new Date().toISOString().slice(0, 10);
@@ -128,24 +129,25 @@ export async function createCustomer(input: CustomerCreate, actorId?: string | n
 
   return prisma.$transaction(async tx => {
     const id = await nextDisplayId(tx, 'CUS');
-    const { force: _force, preferences, tags, ...rest } = input;
+    const { force: _force, preferences, tags, passportNo, ...rest } = input;
     const customer = await tx.customer.create({
       data: {
         id,
         ...rest,
+        ...customerIdentityData({ passportNo }),
         email:       input.email ?? null,
         phoneNormalized,
         preferences: preferences as Prisma.InputJsonValue,
         tags:        tags as Prisma.InputJsonValue,
         createdDate: TODAY(),
-      },
+      } as Prisma.CustomerUncheckedCreateInput,
     });
     await audit(tx, {
       action: 'customer_created', entityType: 'customer', entityId: id, userId: actorId,
       description: `Customer ${customer.name} added${customer.phone ? ` (${customer.phone})` : ''}`,
       after: { name: customer.name, phone: customer.phone, email: customer.email, type: customer.type },
     });
-    return customer;
+    return presentCustomer(customer);
   });
 }
 
@@ -153,7 +155,8 @@ export async function updateCustomer(id: string, input: CustomerUpdate, actorId?
   const before = await prisma.customer.findUnique({ where: { id } });
   if (!before || before.deletedAt) throw notFound('Customer');
 
-  const data: Prisma.CustomerUncheckedUpdateInput = { ...input, email: input.email === undefined ? undefined : input.email };
+  const { passportNo, ...plain } = input;
+  const data: Prisma.CustomerUncheckedUpdateInput = { ...plain, ...customerIdentityData({ passportNo }), email: input.email === undefined ? undefined : input.email };
   if (input.phone !== undefined) {
     data.phoneNormalized = normalizePhone(input.phone);
     const dupes = await findDuplicateCandidates({ phone: input.phone, excludeId: id });
@@ -166,17 +169,20 @@ export async function updateCustomer(id: string, input: CustomerUpdate, actorId?
 
   return prisma.$transaction(async tx => {
     const after = await tx.customer.update({ where: { id }, data });
-    const changed = Object.keys(input).filter(k => JSON.stringify((before as Record<string, unknown>)[k]) !== JSON.stringify((after as Record<string, unknown>)[k]));
+    const [b, a] = [presentCustomer(before), presentCustomer(after)] as Record<string, unknown>[];
+    const changed = Object.keys(input).filter(k => k === 'passportNo'
+      ? before.passportNoEnc !== after.passportNoEnc
+      : JSON.stringify(b[k]) !== JSON.stringify(a[k]));
     await audit(tx, {
       action: 'customer_updated', entityType: 'customer', entityId: id, userId: actorId,
       description: `Customer ${after.name} updated (${changed.join(', ') || 'no changes'})`,
-      before: pick(before, changed), after: pick(after, changed),
+      before: pick(b, changed), after: pick(a, changed),
     });
     // Denormalised names on trips follow the customer.
     if (input.name && input.name !== before.name) {
       await tx.trip.updateMany({ where: { customerId: id }, data: { customer: input.name } });
     }
-    return after;
+    return presentCustomer(after);
   });
 }
 
@@ -207,7 +213,7 @@ export async function getCustomer360(id: string) {
     prisma.invoice.findMany({ where: { customerId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, invoiceNumber: true, invoiceDate: true, status: true, totalAmount: true, receivableId: true } }),
     prisma.receivable.aggregate({ where: { customerId: id }, _sum: { invoiceAmount: true, totalReceived: true, balanceDue: true } }),
     prisma.payment.findMany({ where: { customerId: id, type: 'customer' }, orderBy: { date: 'desc' }, take: 20, select: { id: true, amount: true, method: true, date: true, status: true, tripId: true, reference: true } }),
-    prisma.traveller.findMany({ where: { customerId: id }, orderBy: { firstName: 'asc' }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, passportNumber: true, passportExpiry: true, nationality: true } }),
+    prisma.traveller.findMany({ where: { customerId: id }, orderBy: { firstName: 'asc' }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, passportNumber: true, passportLast4: true, passportExpiry: true, nationality: true } }),
     prisma.documentLink.findMany({ where: { entityType: 'customer', entityId: id }, include: { document: { select: { id: true, title: true, type: true, status: true, fileName: true, expiresAt: true, createdAt: true } } } }),
     prisma.activityLog.findMany({ where: { OR: [{ entityType: 'customer', entityId: id }, { entityType: 'trip', entityId: { in: [] } }] }, orderBy: { createdAt: 'desc' }, take: 50, select: { id: true, action: true, title: true, description: true, timestamp: true, userId: true, source: true } }),
     prisma.task.findMany({ where: { customerId: id, status: { not: 'completed' } }, orderBy: { dueDate: 'asc' }, select: { id: true, title: true, dueDate: true, priority: true, status: true, assignedTo: true } }),
@@ -219,7 +225,7 @@ export async function getCustomer360(id: string) {
 
   return {
     customer: {
-      ...customer,
+      ...presentCustomer(customer),
       tags: Array.isArray(customer.tags) ? customer.tags : [],
       relationships: [
         ...customer.relationships.map(r => ({ id: r.id, kind: r.kind, note: r.note, customer: r.related })),
@@ -244,7 +250,7 @@ export async function getCustomer360(id: string) {
     ],
     invoices,
     payments,
-    travellers: passengers,
+    travellers: passengers.map(p => presentTraveller(p)),
     documents: documents.map(d => ({ ...d.document, linkId: d.id, role: d.role })),
     tasks,
     referrals,
@@ -364,8 +370,14 @@ export async function mergeCustomers(targetId: string, sourceId: string, actorId
 
     // Fill gaps on the target from the source (never overwrite).
     const fill: Prisma.CustomerUncheckedUpdateInput = {};
-    for (const k of ['email', 'altPhone', 'address', 'city', 'state', 'companyName', 'gstNumber', 'passportNo', 'passportExpiry', 'passportCountry', 'panNumber', 'billingAddress'] as const) {
+    for (const k of ['email', 'altPhone', 'address', 'city', 'state', 'companyName', 'gstNumber', 'passportExpiry', 'passportCountry', 'panNumber', 'billingAddress'] as const) {
       if (!target[k] && source[k]) (fill as Record<string, unknown>)[k] = source[k];
+    }
+    // Sealed passport columns travel together; plaintext is never copied.
+    if (!target.passportNoEnc && !target.passportNo && source.passportNoEnc) {
+      Object.assign(fill, { passportNoEnc: source.passportNoEnc, passportNoHash: source.passportNoHash, passportNoLast4: source.passportNoLast4 });
+    } else if (!target.passportNoEnc && !target.passportNo && source.passportNo) {
+      Object.assign(fill, customerIdentityData({ passportNo: source.passportNo }));
     }
     const mergedTags = Array.from(new Set([...(target.tags as string[] ?? []), ...(source.tags as string[] ?? [])]));
     const notes = [target.notes, source.notes ? `[merged from ${source.id}] ${source.notes}` : null].filter(Boolean).join('\n');
@@ -381,7 +393,7 @@ export async function mergeCustomers(targetId: string, sourceId: string, actorId
       action: 'customer_merged', entityType: 'customer', entityId: sourceId, userId: actorId,
       description: `Merged into ${target.name} (${target.id})`, metadata: { targetId },
     });
-    return { target: updatedTarget, moved };
+    return { target: presentCustomer(updatedTarget), moved };
   });
 }
 

@@ -9,6 +9,8 @@ import { audit } from '../../core/audit.js';
 import { nextDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { passportStatus, travellerDisplayName } from '../../../../src/shared/calc/travellers.js';
+import { travellerIdentityData, presentTraveller, passportHash } from '../../core/identity.js';
+import { isMaskedValue, maskFromLast4, maskIdNumber, normalizeIdNumber } from '../../../../src/shared/calc/identity.js';
 import type { TravellerCreate, TravellerUpdate, TravellerListQuery, TripTravellersPut, TravellerSummary } from '../../../../src/shared/contracts/travellers.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -23,10 +25,14 @@ function toSummary(t: TravellerRow): TravellerSummary {
     id: t.id, customerId: t.customerId, customerName: t.customer?.name ?? null,
     title: t.title, firstName: t.firstName, lastName: t.lastName, displayName: t.displayName,
     dateOfBirth: t.dateOfBirth, gender: t.gender, nationality: t.nationality,
-    passportNumber: t.passportNumber, passportExpiry: t.passportExpiry,
+    passportNumber: maskedPassport(t), passportExpiry: t.passportExpiry,
     passportStatus: passportStatus(t.passportExpiry),
     tripCount: t._count.trips, createdAt: t.createdAt.toISOString(),
   };
+}
+
+function maskedPassport(t: { passportLast4?: string | null; passportNumber?: string | null }): string | null {
+  return maskFromLast4(t.passportLast4) ?? maskIdNumber(t.passportNumber);
 }
 
 // ── List ──────────────────────────────────────────────────────
@@ -36,7 +42,7 @@ export async function listTravellers(q: TravellerListQuery) {
   const where: Prisma.TravellerWhereInput = {
     deletedAt: null,
     ...(q.customerId ? { customerId: q.customerId } : {}),
-    ...(q.passport === 'MISSING'  ? { OR: [{ passportNumber: null }, { passportExpiry: null }] } : {}),
+    ...(q.passport === 'MISSING'  ? { OR: [{ passportLast4: null, passportNumber: null }, { passportExpiry: null }] } : {}),
     ...(q.passport === 'EXPIRED'  ? { passportExpiry: { lt: today() } } : {}),
     ...(q.passport === 'EXPIRING' ? { passportExpiry: { gte: today(), lte: isoPlusDays(180) } } : {}),
     ...(term ? {
@@ -44,7 +50,8 @@ export async function listTravellers(q: TravellerListQuery) {
         { firstName:      { contains: term, mode: 'insensitive' } },
         { lastName:       { contains: term, mode: 'insensitive' } },
         { displayName:    { contains: term, mode: 'insensitive' } },
-        { passportNumber: { contains: term, mode: 'insensitive' } },
+        // Identity numbers are sealed: exact match on the blind index only.
+        ...(normalizeIdNumber(term).length >= 6 ? [{ passportNumberHash: passportHash(term) }] : []),
         { id:             { contains: term, mode: 'insensitive' } },
         { customer:       { name: { contains: term, mode: 'insensitive' } } },
       ] }],
@@ -73,7 +80,7 @@ export async function getTraveller(id: string) {
   });
   if (!t) throw notFound('Traveller');
   return {
-    ...t,
+    ...presentTraveller(t),
     displayName: travellerDisplayName(t),
     passportStatus: passportStatus(t.passportExpiry),
     trips: t.trips.map(tt => ({ linkId: tt.id, role: tt.role, position: tt.position, ...tt.trip, passportStatus: passportStatus(t.passportExpiry, { travelDate: tt.trip.departure }) })),
@@ -89,9 +96,9 @@ async function assertCustomer(customerId: string | null | undefined) {
 }
 
 async function findPassportClash(passportNumber: string | null | undefined, excludeId?: string) {
-  if (!passportNumber) return null;
+  if (!passportNumber || isMaskedValue(passportNumber)) return null;
   return prisma.traveller.findFirst({
-    where: { deletedAt: null, passportNumber: { equals: passportNumber, mode: 'insensitive' }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    where: { deletedAt: null, passportNumberHash: passportHash(passportNumber), ...(excludeId ? { id: { not: excludeId } } : {}) },
     select: { id: true, firstName: true, lastName: true, customerId: true },
   });
 }
@@ -101,21 +108,22 @@ export async function createTraveller(input: TravellerCreate, actorId?: string |
   if (!input.force) {
     const clash = await findPassportClash(input.passportNumber);
     if (clash) {
-      throw new AppError('CONFLICT', 409, `Passport ${input.passportNumber} already belongs to ${clash.firstName} ${clash.lastName} (${clash.id})`, { existingTravellerId: clash.id });
+      throw new AppError('CONFLICT', 409, `Passport ${maskIdNumber(input.passportNumber)} already belongs to ${clash.firstName} ${clash.lastName} (${clash.id})`, { existingTravellerId: clash.id });
     }
   }
   return prisma.$transaction(async tx => {
     const id = await nextDisplayId(tx, 'PAX');
-    const { force: _force, ...rest } = input;
+    const { force: _force, passportNumber, govtIdNumber, ...rest } = input;
     const t = await tx.traveller.create({
-      data: { id, ...rest, passportNumber: rest.passportNumber?.toUpperCase() ?? null, createdDate: today() },
+      data: { id, ...rest, ...travellerIdentityData({ passportNumber, govtIdNumber }), createdDate: today() } as Prisma.TravellerUncheckedCreateInput,
     });
+    const shown = presentTraveller(t);
     await audit(tx, {
       action: 'traveller_created', entityType: 'traveller', entityId: id, userId: actorId,
       description: `Traveller ${travellerDisplayName(t)} added${t.customerId ? ` for ${t.customerId}` : ''}`,
-      after: { firstName: t.firstName, lastName: t.lastName, customerId: t.customerId, passportNumber: t.passportNumber },
+      after: { firstName: t.firstName, lastName: t.lastName, customerId: t.customerId, passportNumber: shown.passportNumber, govtIdNumber: shown.govtIdNumber },
     });
-    return t;
+    return shown;
   });
 }
 
@@ -125,18 +133,23 @@ export async function updateTraveller(id: string, input: TravellerUpdate, actorI
   if (input.customerId !== undefined) await assertCustomer(input.customerId);
   if (input.passportNumber) {
     const clash = await findPassportClash(input.passportNumber, id);
-    if (clash) throw new AppError('CONFLICT', 409, `Passport ${input.passportNumber} already belongs to ${clash.firstName} ${clash.lastName} (${clash.id})`, { existingTravellerId: clash.id });
+    if (clash) throw new AppError('CONFLICT', 409, `Passport ${maskIdNumber(input.passportNumber)} already belongs to ${clash.firstName} ${clash.lastName} (${clash.id})`, { existingTravellerId: clash.id });
   }
-  const data: Prisma.TravellerUncheckedUpdateInput = { ...input, ...(input.passportNumber ? { passportNumber: input.passportNumber.toUpperCase() } : {}) };
+  const { passportNumber, govtIdNumber, ...rest } = input;
+  const data: Prisma.TravellerUncheckedUpdateInput = { ...rest, ...travellerIdentityData({ passportNumber, govtIdNumber }) };
   return prisma.$transaction(async tx => {
     const after = await tx.traveller.update({ where: { id }, data });
-    const changed = Object.keys(input).filter(k => (before as Record<string, unknown>)[k] !== (after as Record<string, unknown>)[k]);
+    // Compare identity numbers by their sealed value; audit rows only ever hold the mask.
+    const sealedKey: Record<string, string> = { passportNumber: 'passportNumberEnc', govtIdNumber: 'govtIdNumberEnc' };
+    const raw = [before, after] as unknown as Record<string, unknown>[];
+    const [b, a] = [presentTraveller(before), presentTraveller(after)] as Record<string, unknown>[];
+    const changed = Object.keys(input).filter(k => sealedKey[k] ? raw[0][sealedKey[k]] !== raw[1][sealedKey[k]] : b[k] !== a[k]);
     await audit(tx, {
       action: 'traveller_updated', entityType: 'traveller', entityId: id, userId: actorId,
       description: `Traveller ${travellerDisplayName(after)} updated (${changed.join(', ') || 'no changes'})`,
-      before: pick(before, changed), after: pick(after, changed),
+      before: pick(b, changed), after: pick(a, changed),
     });
-    return after;
+    return presentTraveller(after);
   });
 }
 
@@ -239,7 +252,7 @@ export async function passportAlerts(days: number) {
     orderBy: { passportExpiry: 'asc' },
   });
   return travellers.map(t => ({
-    id: t.id, name: travellerDisplayName(t), customer: t.customer, passportNumber: t.passportNumber, passportExpiry: t.passportExpiry,
+    id: t.id, name: travellerDisplayName(t), customer: t.customer, passportNumber: maskedPassport(t), passportExpiry: t.passportExpiry,
     status: passportStatus(t.passportExpiry),
     upcomingTrips: t.trips.map(tt => ({ ...tt.trip, status: passportStatus(t.passportExpiry, { travelDate: tt.trip.departure }) })),
   }));
@@ -249,7 +262,7 @@ export async function passportAlerts(days: number) {
 export async function passportProblemsForUpcomingTrips(windowDays = 90) {
   const links = await prisma.tripTraveller.findMany({
     where: { trip: { status: { in: ACTIVE_TRIP_STATUSES }, departure: { gte: today(), lte: isoPlusDays(windowDays) } }, traveller: { deletedAt: null, passportExpiry: { not: null } } },
-    include: { trip: { select: { id: true, destination: true, departure: true, customerId: true, customer: true } }, traveller: { select: { id: true, firstName: true, lastName: true, title: true, displayName: true, passportExpiry: true, passportNumber: true } } },
+    include: { trip: { select: { id: true, destination: true, departure: true, customerId: true, customer: true } }, traveller: { select: { id: true, firstName: true, lastName: true, title: true, displayName: true, passportExpiry: true } } },
   });
   return links
     .map(l => ({ trip: l.trip, traveller: l.traveller, status: passportStatus(l.traveller.passportExpiry, { travelDate: l.trip.departure }) }))

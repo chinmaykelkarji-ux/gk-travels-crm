@@ -262,6 +262,11 @@ model Customer {
   passportExpiry  String?
   passportCountry String?
   panNumber       String?
+  // Sealed passport number (core/identity.ts). passportNo above is legacy
+  // plaintext: never written, cleared by the identity.encrypt-legacy job.
+  passportNoEnc   String?
+  passportNoHash  String?
+  passportNoLast4 String?
 
   // ── v2 (Phase 2.2) ─────────────────────────────────────────
   phoneNormalized      String?
@@ -286,6 +291,7 @@ model Customer {
   @@index([email])
   @@index([organizationId, phoneNormalized])
   @@index([organizationId, deletedAt])
+  @@index([organizationId, passportNoHash])
   @@map("customers")
 }
 
@@ -984,6 +990,15 @@ model Traveller {
   govtIdType            String?
   govtIdNumber          String?
   deletedAt             DateTime?
+  // Sealed identity numbers (core/identity.ts, hard rule 7). The plaintext
+  // passportNumber / govtIdNumber columns are legacy: never written, cleared
+  // by the identity.encrypt-legacy job, dropped in the platform phase.
+  passportNumberEnc     String?
+  passportNumberHash    String?
+  passportLast4         String?
+  govtIdNumberEnc       String?
+  govtIdNumberHash      String?
+  govtIdLast4           String?
   trips                 TripTraveller[]
   dateOfBirth           String?
   nationality           String?
@@ -1010,6 +1025,7 @@ model Traveller {
   @@index([organizationId])
   @@index([customerId])
   @@index([passportNumber])
+  @@index([organizationId, passportNumberHash])
   @@map("passengers")
 }
 

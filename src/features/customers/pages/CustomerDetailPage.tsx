@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2, Merge, Phone, Mail, MapPin, Link2, X } from 'lucide-react';
-import { PageHeader, KeyValue, Money, StatusPill, Drawer, DataTable, EmptyState, Field, Select, TextInput, type Column, type Tone } from '@/design-system';
+import { PageHeader, KeyValue, Money, StatusPill, Drawer, DataTable, EmptyState, Field, Select, TextInput, RevealableId, type Column, type Tone } from '@/design-system';
 import { Button } from '@/shared/components/ui/button';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -12,7 +12,7 @@ import { ApiError } from '@/lib/api';
 import { useCustomer, useUpdateCustomer, useDeleteCustomer, useMergeCustomers, useRelationships } from '../hooks';
 import { CustomerForm } from '../components/CustomerForm';
 import { CustomerPicker } from '../components/CustomerPicker';
-import type { Customer360 } from '../api';
+import { customersApi, type Customer360 } from '../api';
 import { TravellerForm } from '@/features/travellers/components/TravellerForm';
 import { PassportPill } from '@/features/travellers/components/PassportPill';
 import { useCreateTraveller } from '@/features/travellers/hooks';
@@ -178,7 +178,7 @@ function Overview({ data, canWrite, onAddRelationship, onRemoveRelationship }: {
         </Card>
         <Card title="Identity & preferences">
           <KeyValue items={[
-            { label: 'Passport', value: c.passportNo ? `${c.passportNo}${c.passportCountry ? ` (${c.passportCountry})` : ''}` : null },
+            { label: 'Passport', value: c.passportNo ? <span><RevealableId masked={c.passportNo} reveal={() => customersApi.revealPassport(c.id)} />{c.passportCountry ? ` (${c.passportCountry})` : ''}</span> : null },
             { label: 'Passport expiry', value: c.passportExpiry ? <PassportExpiry date={c.passportExpiry} /> : null },
             { label: 'PAN', value: c.panNumber },
             { label: 'Seat', value: prefs.seatPreference }, { label: 'Meal', value: prefs.mealPreference }, { label: 'Hotel', value: prefs.hotelPreference },

@@ -48,7 +48,18 @@ New schema change recipe (never `db push`): edit `prisma/schema.prisma` → depl
 | 2.8 | Data migration `20260918190000_migrate_legacy_quotations`: every legacy `quotations` row becomes an enquiry (`enq_legacy_<id>`) + v2 quotation (`sq_legacy_<id>`) with PER_UNIT items, status/approval/GST mapped, customer matched by phone or created; idempotent. The four existing sales quotes carried over in 2.6 (additive columns) | ☑ | | Verified by `tests/integration/legacy-quotation-migration.test.ts`, which seeds legacy rows and applies the SQL twice. Legacy screens stay under `/quotations` until the owner retires them |
 
 ## Phase 3 — Travel operations
-☐ Trip control centre · ☐ Hotels/vehicles/drivers/activities masters · ☐ Hotel bookings, vehicle assignments (overlap check), activity bookings, tickets (segments, boarding points, group pax), extras · ☐ Itinerary v2 · ☐ Tasks · ☐ Ops today · ☐ Driver view · ☐ Legacy booking/voucher migration
+Branch `claude/travelos-phase-3-41f57b` (fast-forward of the Phase 0–2 branch).
+
+| # | Module | Status | Commit | Notes |
+|---|--------|--------|--------|-------|
+| 3.0 | Identity data protection (hard rule 7, gap left by Phase 2): AES-256-GCM field encryption (`core/crypto.ts`, `DATA_ENCRYPTION_KEY`), blind index for duplicate checks and exact search, masked `XXXX-XXXX-1234` in every API response (v2, legacy `/api/passengers`, `/api/customers`, `/api/data/all`), echoed masks mean "unchanged", audited reveal endpoints + "Show" control, Aadhaar accepted with Verhoeff validation, `identity.encrypt-legacy` job seals plaintext written before this change | ☑ | (this commit) | Migration `20260918200000_identity_encryption` is additive; plaintext columns stay until the platform phase drops them. Passport search is now an exact match (no substring) |
+| 3.1 | Masters: vendors v2 (kinds), hotels + room types + rates, vehicles (compliance expiries), drivers, activities; CSV/Excel import with row-by-row preview | ☐ | | |
+| 3.2 | Operational records: hotel bookings, vehicle assignments (conflict detection), activity bookings | ☐ | | |
+| 3.3 | Tickets: ticket → segment → passenger rows (flight/train/bus, PNR, WL/RAC, boarding/dropping, fare breakup) + legacy booking migration | ☐ | | |
+| 3.4 | Trip control centre: one trip, many party contracts; PLANNING → CONFIRMING → READY → ONGOING → COMPLETED / CANCELLED with blocking checks; pickup points | ☐ | | |
+| 3.5 | Itinerary v2: day-by-day builder, customer vs internal notes, customer-safe output | ☐ | | |
+| 3.6 | Task engine: data-driven rules with editable timings, recalculation on change, Today view | ☐ | | |
+| 3.7 | Driver view: DRIVER role, assigned trips only, minimum passenger info, status updates | ☐ | | |
 
 ## Phase 4 — Finance
 ☐ Ledger with reversals · ☐ Customer payments vs schedules · ☐ Vendor invoices/payments · ☐ Expenses · ☐ Tax rules · ☐ Profitability view · ☐ Dashboard/analytics from ledger

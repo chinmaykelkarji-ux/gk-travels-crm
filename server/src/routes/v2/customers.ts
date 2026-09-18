@@ -8,6 +8,7 @@ import {
   CustomerCreate, CustomerUpdate, CustomerListQuery, RelationshipCreate, MergeInput,
 } from '../../../../src/shared/contracts/customers.js';
 import * as svc from '../../modules/customers/service.js';
+import { revealCustomerPassport } from '../../core/identity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -38,6 +39,13 @@ router.get('/:id', requirePermission('customers:read'), async (req, res) => {
 
 router.put('/:id', requirePermission('customers:write'), validate({ body: CustomerUpdate }), async (req: AuthRequest, res) => {
   res.json(await svc.updateCustomer(String(req.params.id), valid<z.infer<typeof CustomerUpdate>>(res).body, req.userId));
+});
+
+// Full passport number; every call is audited.
+router.post('/:id/reveal', requirePermission('customers:read'), async (req: AuthRequest, res) => {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 200) : null;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await revealCustomerPassport(String(req.params.id), req.userId, reason));
 });
 
 router.delete('/:id', requireRole('ADMIN'), async (req: AuthRequest, res) => {

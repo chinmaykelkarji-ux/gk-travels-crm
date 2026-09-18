@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
-import { PageHeader, KeyValue, StatusPill, Drawer, DataTable, EmptyState, type Column } from '@/design-system';
+import { PageHeader, KeyValue, StatusPill, Drawer, DataTable, EmptyState, RevealableId, type Column } from '@/design-system';
 import { Button } from '@/shared/components/ui/button';
 import { toast } from '@/shared/hooks/useToast';
 import { confirm } from '@/shared/hooks/useConfirm';
@@ -13,7 +13,7 @@ import { ApiError } from '@/lib/api';
 import { useTraveller, useUpdateTraveller, useDeleteTraveller } from '../hooks';
 import { TravellerForm } from '../components/TravellerForm';
 import { PassportPill } from '../components/PassportPill';
-import type { TravellerDetail } from '../api';
+import { travellersApi, type TravellerDetail } from '../api';
 
 export default function TravellerDetailPage() {
   const { id = '' } = useParams();
@@ -61,10 +61,10 @@ export default function TravellerDetailPage() {
         <section className="bg-white border border-slate-200 rounded-md p-4">
           <h2 className="text-sm font-medium text-slate-800 mb-3">Passport &amp; identity</h2>
           <KeyValue items={[
-            { label: 'Passport number', value: t.passportNumber }, { label: 'Expiry', value: t.passportExpiry ? <PassportPill expiry={t.passportExpiry} status={t.passportStatus} /> : null },
+            { label: 'Passport number', value: t.passportNumber ? <RevealableId masked={t.passportNumber} reveal={() => travellersApi.reveal(t.id, 'passportNumber')} /> : null }, { label: 'Expiry', value: t.passportExpiry ? <PassportPill expiry={t.passportExpiry} status={t.passportStatus} /> : null },
             { label: 'Issued', value: fmtDate(t.passportIssueDate) || null }, { label: 'Place of issue', value: t.placeOfIssue },
             { label: 'Nationality', value: t.nationality }, { label: 'Gender', value: t.gender },
-            { label: 'Domestic ID', value: t.govtIdType ? `${t.govtIdType.replace('_', ' ')} · ${t.govtIdNumber}` : null },
+            { label: 'Domestic ID', value: t.govtIdType ? <span>{t.govtIdType.replace('_', ' ')} · <RevealableId masked={t.govtIdNumber} reveal={() => travellersApi.reveal(t.id, 'govtIdNumber')} /></span> : null },
             { label: 'Visa', value: t.visaStatus ? `${t.visaStatus.replace('_', ' ')}${t.visaCountry ? ` · ${t.visaCountry}` : ''}${t.visaType ? ` · ${t.visaType}` : ''}${t.visaExpiry ? ` · expires ${fmtDate(t.visaExpiry)}` : ''}` : null, span: 2 },
           ]} />
         </section>

@@ -31,6 +31,7 @@ export const travellersApi = {
   create: (body: TravellerCreate) => api.post<TravellerRecord>('/v2/travellers', body),
   update: (id: string, body: TravellerUpdate) => api.put<TravellerRecord>(`/v2/travellers/${id}`, body),
   remove: (id: string) => api.delete<{ ok: true }>(`/v2/travellers/${id}`),
+  reveal: (id: string, field: 'passportNumber' | 'govtIdNumber') => api.post<{ field: string; value: string }>(`/v2/travellers/${id}/reveal`, { field }),
   alerts: (days = 180) => api.get<PassportAlert[]>('/v2/travellers/passport-alerts', { days }),
   tripTravellers:    (tripId: string) => api.get<{ tripId: string; pax: number; departure: string | null; travellers: (TripTravellerRow & { passportStatus: PassportStatus })[] }>(`/v2/trips/${tripId}/travellers`),
   setTripTravellers: (tripId: string, body: TripTravellersPut) => api.put<{ tripId: string; travellers: TripTravellerRow[] }>(`/v2/trips/${tripId}/travellers`, body),

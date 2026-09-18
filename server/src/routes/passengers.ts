@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
+import { travellerIdentityData, presentTraveller } from '../core/identity.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -10,7 +11,7 @@ router.use(requireAuth);
 
 router.get('/', requirePermission('customers:read'), async (_req, res) => {
   try {
-    res.json(await prisma.traveller.findMany({ orderBy: { createdAt: 'desc' } }));
+    res.json((await prisma.traveller.findMany({ orderBy: { createdAt: 'desc' } })).map(p => presentTraveller(p)));
   } catch (err) {
     console.error('[passengers GET]', err);
     res.status(500).json({ error: 'Failed to fetch passengers' });
@@ -21,7 +22,7 @@ router.get('/:id', requirePermission('customers:read'), async (req, res) => {
   try {
     const p = await prisma.traveller.findUnique({ where: { id: String(req.params.id) } });
     if (!p) { res.status(404).json({ error: 'Passenger not found' }); return; }
-    res.json(p);
+    res.json(presentTraveller(p));
   } catch (err) {
     console.error('[passengers GET /:id]', err);
     res.status(500).json({ error: 'Failed to fetch passenger' });
@@ -37,7 +38,7 @@ router.post('/', requirePermission('customers:write'), async (req, res) => {
       update: data,
       create: data,
     });
-    res.json(p);
+    res.json(presentTraveller(p));
   } catch (err) {
     console.error('[passengers POST]', err);
     res.status(500).json({ error: 'Failed to save passenger' });
@@ -51,7 +52,7 @@ router.put('/:id', requirePermission('customers:write'), async (req, res) => {
       where: { id: String(req.params.id) },
       data,
     });
-    res.json(p);
+    res.json(presentTraveller(p));
   } catch (err) {
     console.error('[passengers PUT]', err);
     res.status(500).json({ error: 'Failed to update passenger' });
@@ -87,7 +88,7 @@ function sanitize(body: Record<string, unknown>) {
     dateOfBirth:           dateOfBirth           as string | undefined ?? null,
     nationality:           nationality           as string | undefined ?? null,
     gender:                gender                as string | undefined ?? null,
-    passportNumber:        passportNumber        as string | undefined ?? null,
+    ...travellerIdentityData({ passportNumber }),
     passportIssueDate:     passportIssueDate     as string | undefined ?? null,
     passportExpiry:        passportExpiry        as string | undefined ?? null,
     placeOfIssue:          placeOfIssue          as string | undefined ?? null,

@@ -82,8 +82,8 @@ export function TravellerForm({ initial, customerId, submitting, error, onSubmit
       <fieldset className="border border-slate-200 rounded-md p-3">
         <legend className="text-xs font-medium text-slate-600 px-1">Domestic ID &amp; visa</legend>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Field label="ID type" htmlFor="govtIdType" hint="Aadhaar is not stored">
-            <Select id="govtIdType" {...register('govtIdType')}><option value="">—</option><option value="PAN">PAN</option><option value="VOTER_ID">Voter ID</option><option value="DRIVING_LICENCE">Driving licence</option><option value="PASSPORT">Passport</option><option value="OTHER">Other</option></Select>
+          <Field label="ID type" htmlFor="govtIdType" hint="Stored encrypted; shown masked">
+            <Select id="govtIdType" {...register('govtIdType')}><option value="">—</option><option value="AADHAAR">Aadhaar</option><option value="PAN">PAN</option><option value="VOTER_ID">Voter ID</option><option value="DRIVING_LICENCE">Driving licence</option><option value="PASSPORT">Passport</option><option value="OTHER">Other</option></Select>
           </Field>
           <Field label="ID number" htmlFor="govtIdNumber" error={errors.govtIdNumber?.message}><TextInput id="govtIdNumber" className="uppercase" {...register('govtIdNumber')} /></Field>
           <Field label="Visa status" htmlFor="visaStatus"><Select id="visaStatus" {...register('visaStatus')}><option value="">—</option>{['not_required', 'pending', 'applied', 'approved', 'rejected'].map(v => <option key={v} value={v}>{v.replace('_', ' ')}</option>)}</Select></Field>

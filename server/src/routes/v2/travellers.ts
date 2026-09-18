@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.js';
 import { requirePermission } from '../../lib/permissions.js';
 import { validate, valid } from '../../core/validate.js';
-import { TravellerCreate, TravellerUpdate, TravellerListQuery, TripTravellersPut, PassportAlertsQuery } from '../../../../src/shared/contracts/travellers.js';
+import { TravellerCreate, TravellerUpdate, TravellerListQuery, TripTravellersPut, PassportAlertsQuery, RevealInput } from '../../../../src/shared/contracts/travellers.js';
+import { revealTravellerId } from '../../core/identity.js';
 import * as svc from '../../modules/travellers/service.js';
 
 export const travellersRouter = Router();
@@ -28,6 +29,13 @@ travellersRouter.get('/:id', requirePermission('customers:read'), async (req, re
 
 travellersRouter.put('/:id', requirePermission('customers:write'), validate({ body: TravellerUpdate }), async (req: AuthRequest, res) => {
   res.json(await svc.updateTraveller(String(req.params.id), valid<z.infer<typeof TravellerUpdate>>(res).body, req.userId));
+});
+
+// Full identity number, for filling an airline or visa form. Every call is audited.
+travellersRouter.post('/:id/reveal', requirePermission('customers:read'), validate({ body: RevealInput }), async (req: AuthRequest, res) => {
+  const b = valid<z.infer<typeof RevealInput>>(res).body;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await revealTravellerId(String(req.params.id), b.field, req.userId, b.reason));
 });
 
 travellersRouter.delete('/:id', requirePermission('customers:write'), async (req: AuthRequest, res) => {

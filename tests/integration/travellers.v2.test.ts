@@ -26,18 +26,18 @@ describe.skipIf(!hasTestDb)('travellers v2', () => {
     for (const role of ['ADMIN', 'BOOKING', 'ACCOUNTS', 'OPERATIONS'] as const) await seedUser(USER_IDS[role], role);
   });
 
-  it('creates with a PAX display id, upper-cases the passport, links to a customer and audits', async () => {
+  it('creates with a PAX display id, seals and masks the passport, links to a customer and audits', async () => {
     const c = await customer();
     const r = await traveller({ customerId: c.id, title: 'Mrs', dateOfBirth: '1990-04-12', passportNumber: 'z1234567', passportExpiry: iso(400), govtIdType: 'PAN', govtIdNumber: 'ABCDE1234F' });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body.id).toBe(`PAX-${YEAR}-0001`);
-    expect(r.body).toMatchObject({ customerId: c.id, passportNumber: 'Z1234567', organizationId: 'org_gktravels' });
+    expect(r.body).toMatchObject({ customerId: c.id, passportNumber: 'XXXX-XXXX-4567', govtIdNumber: 'XXXX-XXXX-234F', organizationId: 'org_gktravels' });
     expect(await prisma.activityLog.count({ where: { action: 'traveller_created', entityId: r.body.id } })).toBe(1);
     const view = await as('ACCOUNTS').get(`/api/v2/customers/${c.id}`);
     expect(view.body.travellers).toHaveLength(1);
   });
 
-  it('validates: unknown customer, future DOB, expiry before issue, Aadhaar rejected, ID number required', async () => {
+  it('validates: unknown customer, future DOB, expiry before issue, invalid Aadhaar rejected, ID number required', async () => {
     const bad = await traveller({ customerId: 'CUS-0000-0000' });
     expect(bad.status).toBe(400);
     expect(bad.body.error.fields.customerId).toBeDefined();
@@ -72,7 +72,9 @@ describe.skipIf(!hasTestDb)('travellers v2', () => {
     expect(all.body.total).toBe(4);
     expect(all.body.items[0]).toMatchObject({ firstName: 'Aarav', customerName: 'Kelkar Family', passportStatus: 'UNKNOWN' });
     expect((await as('BOOKING').get('/api/v2/travellers?q=kelkar')).body.total).toBe(3);
-    expect((await as('BOOKING').get('/api/v2/travellers?q=K222')).body.items[0].firstName).toBe('Neha');
+    // Passport numbers are sealed: search is an exact blind-index match, never a substring.
+    expect((await as('BOOKING').get('/api/v2/travellers?q=k2222222')).body.items[0].firstName).toBe('Neha');
+    expect((await as('BOOKING').get('/api/v2/travellers?q=K222')).body.total).toBe(0);
     expect((await as('BOOKING').get(`/api/v2/travellers?customerId=${c.id}`)).body.total).toBe(3);
     expect((await as('BOOKING').get('/api/v2/travellers?passport=EXPIRED')).body.items.map((t: { firstName: string }) => t.firstName)).toEqual(['Chinmay']);
     expect((await as('BOOKING').get('/api/v2/travellers?passport=EXPIRING')).body.items.map((t: { firstName: string }) => t.firstName)).toEqual(['Neha']);

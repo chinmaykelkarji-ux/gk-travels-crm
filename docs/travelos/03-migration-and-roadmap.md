@@ -240,3 +240,11 @@ Consequence: on Hobby, Vercel Cron cannot drive a minute-level tick. Design ther
 - Scheduler: Vercel Cron on Pro (`* * * * *`); on Hobby an external scheduler (cron-job.org, GitHub Actions `schedule`, or Upstash QStash) calls the same endpoint every minute. Switching is a config change, not a code change.
 - Long document processing never runs inside one request. The pipeline is a state machine (`UPLOADED → CLASSIFYING → EXTRACTING(page 3/12) → MATCHING → NEEDS_REVIEW`); each tick advances one step and persists a cursor, so a 40-page invoice bundle is many short executions, and a timeout only loses the current step, which is retried with backoff (max 3 attempts, then FAILED with the error shown in the UI). Extraction calls are page-chunked (≤ 5 pages per call), and the per-step budget is set below the platform maximum with a margin.
 - Fallback for heavier volume: the same `Job` table can be drained by a resident worker (Fly.io/Railway) running the identical tick loop; no schema or handler changes.
+
+### 2026-09-18 — Phase 3 decisions (continuation prompt)
+
+| # | Decision | Why |
+|---|---|---|
+| P3-1 | Identity numbers (passport, Aadhaar and other government IDs) are sealed with AES-256-GCM under `DATA_ENCRYPTION_KEY`, indexed by a keyed HMAC, masked as `XXXX-XXXX-1234` everywhere, and revealed only through audited endpoints. Aadhaar is now accepted (it was refused in Phase 2) because hard rule 7 expects it and it is encrypted and masked. | Hard rule 7. Phase 2 stored passports in clear. |
+| P3-2 | Passport search is an exact match on the blind index; substring search on identity numbers is gone. | Substring search is impossible on sealed data without leaking it. |
+| P3-3 | Production without `DATA_ENCRYPTION_KEY` refuses to store identity numbers (503 NOT_CONFIGURED) instead of storing them in clear. | Rule 9 (never fake) + rule 7. |

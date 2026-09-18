@@ -12,3 +12,4 @@ export { Field, TextInput, Select, Textarea } from './Field';
 export { KeyValue, type KV } from './KeyValue';
 export { Money } from './Money';
 export { EmptyState } from './EmptyState';
+export { RevealableId } from './RevealableId';
