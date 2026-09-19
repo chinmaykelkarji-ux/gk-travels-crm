@@ -28,6 +28,7 @@ export async function buildSnapshot(db: DbClient, tripId: string): Promise<TripS
     },
   });
   if (!t) throw notFound('Trip');
+  const itn = await db.itinerary.findFirst({ where: { tripId }, orderBy: { createdAt: 'asc' }, select: { revision: true, sharedRevision: true } });
   return {
     stage: t.stage as TripStage, departure: t.departure, returnDate: t.returnDate, isInternational: t.isInternational, travellers: t.travellers.length,
     hotels: t.hotelBookings.map(h => ({ status: h.status, label: `${h.hotelName} (${h.checkIn.toISOString().slice(0, 10)})` })),
@@ -35,6 +36,7 @@ export async function buildSnapshot(db: DbClient, tripId: string): Promise<TripS
     activities: t.activityBookings.map(a => ({ status: a.status, label: a.name })),
     tickets: t.tickets.map(k => ({ status: k.status, label: `${k.mode.toLowerCase()} ${k.pnr ?? k.displayNumber ?? ''}`.trim() })),
     passportProblems: t.travellers.filter(x => ['EXPIRED', 'INSUFFICIENT'].includes(passportStatus(x.traveller.passportExpiry, { travelDate: t.departure }))).map(x => travellerDisplayName(x.traveller)),
+    itinerary: { exists: !!itn, shared: itn?.sharedRevision != null, changedSinceShared: !!itn && itn.sharedRevision != null && itn.revision > itn.sharedRevision },
   };
 }
 

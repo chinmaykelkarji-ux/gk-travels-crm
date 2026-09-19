@@ -31,6 +31,8 @@ export interface TripSnapshot {
   activities: { status: string; label: string }[];
   tickets:    { status: string; label: string }[];
   passportProblems: string[];  // traveller names with expired / < 6 months passports
+  /** Itinerary state; absent in callers that do not track it. */
+  itinerary?: { exists: boolean; shared: boolean; changedSinceShared: boolean };
 }
 
 export type CheckSeverity = 'block' | 'warn';
@@ -57,6 +59,9 @@ export function readinessChecks(t: TripSnapshot): Check[] {
   const wl = t.tickets.filter(x => x.status === 'WAITLISTED' || x.status === 'RAC' || x.status === 'PARTIAL').map(x => x.label);
   if (wl.length) out.push({ code: 'TICKET_WAITLISTED', severity: 'warn', message: `${wl.length} ticket(s) still waitlisted or RAC`, items: wl });
   if (t.isInternational && t.passportProblems.length) out.push({ code: 'PASSPORT', severity: 'block', message: `${t.passportProblems.length} passport(s) expired or short of six months`, items: t.passportProblems });
+  if (t.itinerary && !t.itinerary.exists) out.push({ code: 'ITINERARY_MISSING', severity: 'warn', message: 'No itinerary yet' });
+  else if (t.itinerary && !t.itinerary.shared) out.push({ code: 'ITINERARY_NOT_SHARED', severity: 'warn', message: 'Itinerary not yet shared with the customer' });
+  else if (t.itinerary?.changedSinceShared) out.push({ code: 'ITINERARY_CHANGED', severity: 'warn', message: 'Itinerary changed since the customer last got it' });
   const anything = [...t.hotels, ...t.vehicles, ...t.activities, ...t.tickets].some(r => open(r.status));
   if (!anything) out.push({ code: 'NOTHING_BOOKED', severity: 'warn', message: 'No hotel, transport, activity or ticket on this trip' });
   return out;

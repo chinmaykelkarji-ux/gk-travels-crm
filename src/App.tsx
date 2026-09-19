@@ -91,6 +91,7 @@ const ItineraryPrintPage = lazy(() => import('@/pages/print/ItineraryPrintPage')
 const InvoicePrintPage   = lazy(() => import('@/pages/print/InvoicePrintPage'));
 const VoucherPrintPage   = lazy(() => import('@/pages/print/VoucherPrintPage'));
 const QuotationPrintPage = lazy(() => import('@/pages/print/QuotationPrintPage'));
+const TripItineraryPrintPage = lazy(() => import('@/features/itineraries/pages/ItineraryPrintPage'));
 
 // ─── QueryClient ─────────────────────────────────────────────
 
@@ -339,6 +340,7 @@ export default function App() {
               <Route path="/print/invoice/:id"   element={<Suspense fallback={<PageSpinner />}><InvoicePrintPage /></Suspense>} />
               <Route path="/print/voucher/:id"   element={<Suspense fallback={<PageSpinner />}><VoucherPrintPage /></Suspense>} />
               <Route path="/print/quotation/:id" element={<Suspense fallback={<PageSpinner />}><QuotationPrintPage /></Suspense>} />
+              <Route path="/print/trip-itinerary/:id" element={<Suspense fallback={<PageSpinner />}><TripItineraryPrintPage /></Suspense>} />
             </Route>
 
           </Routes>

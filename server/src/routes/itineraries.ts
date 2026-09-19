@@ -35,6 +35,15 @@ function normaliseDays(raw: Record<string, unknown>[]) {
 
 const WITH_DAYS = { include: { days: { orderBy: { sortOrder: 'asc' as const } } } };
 
+// V2 itineraries (Phase 3.5) carry timed items and internal notes that this
+// builder does not know about; replacing their days here would drop them.
+async function refuseV2(id: string, res: import('express').Response): Promise<boolean> {
+  const it = await prisma.itinerary.findUnique({ where: { id }, select: { format: true, tripId: true } });
+  if (it?.format !== 'V2') return false;
+  res.status(409).json({ error: `This itinerary is edited in the trip workspace${it.tripId ? ` (trip ${it.tripId}, Itinerary tab)` : ''}.`, code: 'STATE_CONFLICT' });
+  return true;
+}
+
 // ── Auto-fill from Trip / Quotation (declared before /:id) ────
 
 router.get('/from-trip/:tripId', requirePermission('trips:read'), async (req, res) => {
@@ -204,6 +213,7 @@ router.post('/', requirePermission('trips:write'), async (req, res) => {
 router.put('/:id', requirePermission('trips:write'), async (req, res) => {
   try {
     const id = String(req.params.id);
+    if (await refuseV2(id, res)) return;
     const { days = [], ...body } = req.body as { days?: Record<string, unknown>[]; [k: string]: unknown };
     const { id: _ignored, ...iData } = stripMeta(body as Record<string, unknown>);
     const normDays = normaliseDays(days as Record<string, unknown>[]);
@@ -230,6 +240,7 @@ router.put('/:id', requirePermission('trips:write'), async (req, res) => {
 router.delete('/:id', requirePermission('trips:write'), async (req, res) => {
   try {
     const id = String(req.params.id);
+    if (await refuseV2(id, res)) return;
     await prisma.$transaction([
       prisma.itineraryDay.deleteMany({ where: { itineraryId: id } }),
       prisma.itinerary.delete({ where: { id } }),

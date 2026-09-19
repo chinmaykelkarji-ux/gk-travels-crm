@@ -44,6 +44,7 @@ model Organization {
   quotationItems        QuotationItem[]
   itinerarys            Itinerary[]
   itineraryDays         ItineraryDay[]
+  itineraryItems        ItineraryItem[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -855,9 +856,9 @@ model QuotationItem {
 }
 
 model Itinerary {
-  organizationId   String         @default("org_gktravels")
-  organization     Organization   @relation(fields: [organizationId], references: [id])
-  id               String         @id
+  organizationId   String          @default("org_gktravels")
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  id               String          @id
   tripId           String?
   quotationId      String?
   title            String
@@ -867,16 +868,26 @@ model Itinerary {
   customerEmail    String?
   startDate        String?
   endDate          String?
-  pax              Int            @default(1)
-  status           String         @default("draft")
+  pax              Int             @default(1)
+  status           String          @default("draft")
   notes            String?
   emergencyContact String?
   template         String?
   createdDate      String
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  passengerIds     Json           @default("[]")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  passengerIds     Json            @default("[]")
+  // Phase 3.5: V2 itineraries are built in the trip workspace; the classic
+  // builder refuses to overwrite them (it would drop items and internal notes).
+  format           String          @default("CLASSIC")
+  internalNotes    String?
+  revision         Int             @default(0)
+  sharedRevision   Int?
+  sharedAt         DateTime?
+  sharedById       String?
+  updatedById      String?
   days             ItineraryDay[]
+  items            ItineraryItem[]
 
   @@index([organizationId])
   @@index([tripId])
@@ -886,9 +897,9 @@ model Itinerary {
 }
 
 model ItineraryDay {
-  organizationId String       @default("org_gktravels")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  id             String       @id @default(cuid())
+  organizationId String          @default("org_gktravels")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  id             String          @id @default(cuid())
   itineraryId    String
   dayNumber      Int
   date           String?
@@ -898,18 +909,52 @@ model ItineraryDay {
   evening        String?
   hotelName      String?
   hotelAddress   String?
-  meals          Json         @default("[]")
+  meals          Json            @default("[]")
   transfers      String?
-  activities     Json         @default("[]")
+  activities     Json            @default("[]")
   notes          String?
-  sortOrder      Int          @default(0)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  itinerary      Itinerary    @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  internalNotes  String?
+  sortOrder      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  itinerary      Itinerary       @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  items          ItineraryItem[]
 
   @@index([organizationId])
   @@index([itineraryId])
   @@map("itinerary_days")
+}
+
+// One timed entry on a day (train departure, hotel check-in, darshan, free
+// time). `details` is what the customer reads; `internalNote` and
+// `internalCost` never leave the office. Entries pulled from bookings keep
+// their source so a later sync can move or remove them.
+model ItineraryItem {
+  id              String       @id @default(cuid())
+  organizationId  String       @default("org_gktravels")
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  itineraryId     String
+  itinerary       Itinerary    @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  dayId           String
+  day             ItineraryDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  sortOrder       Int          @default(0)
+  time            String?
+  kind            String       @default("NOTE")
+  title           String
+  details         String?
+  internalNote    String?
+  internalCost    Decimal?     @db.Decimal(12, 2)
+  customerVisible Boolean      @default(true)
+  sourceType      String?
+  sourceId        String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([itineraryId])
+  @@index([dayId])
+  @@index([sourceType, sourceId])
+  @@map("itinerary_items")
 }
 
 model Voucher {

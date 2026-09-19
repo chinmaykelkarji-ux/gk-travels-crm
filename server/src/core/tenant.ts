@@ -26,7 +26,7 @@ import { currentOrganizationId } from './requestContext.js';
 export const TENANT_MODELS: ReadonlySet<string> = new Set([
   'User', 'Customer', 'Lead', 'Trip', 'Booking', 'Payment', 'Receivable', 'ReceivableEntry',
   'FinancialTransaction', 'Task', 'ActivityLog', 'Communication', 'Reminder', 'Vendor',
-  'VendorPayment', 'Quotation', 'QuotationItem', 'Itinerary', 'ItineraryDay', 'Voucher',
+  'VendorPayment', 'Quotation', 'QuotationItem', 'Itinerary', 'ItineraryDay', 'ItineraryItem', 'Voucher',
   'Traveller', 'TripTraveller', 'CompanySettings', 'NumberingSequence', 'Invoice', 'InvoiceLineItem',
   'CreditNote', 'CreditNoteLineItem', 'DebitNote', 'DebitNoteLineItem', 'TripService',
   'OutboxEvent', 'MessageLog', 'Enquiry', 'SalesQuote', 'SalesQuoteItem', 'Session',

@@ -11,7 +11,7 @@ import { Prisma } from '@prisma/client';
 import { prismaUnscoped, type DbClient } from '../lib/prisma.js';
 import { currentOrganizationId } from './requestContext.js';
 
-export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX' | 'GK' | 'TKT';
+export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX' | 'GK' | 'TKT' | 'ITN';
 
 export interface DisplayIdOptions { width?: number; year?: number; /** Text before the year in the id; defaults to the prefix. */ displayPrefix?: string }
 
@@ -46,6 +46,7 @@ const TAKEN: Partial<Record<DisplayPrefix, (id: string) => Promise<boolean>>> = 
   PAX: async id => !!(await prismaUnscoped.traveller.findUnique({ where: { id }, select: { id: true } })),
   GK:  async id => !!(await prismaUnscoped.trip.findUnique({ where: { id }, select: { id: true } })),
   VEN: async id => !!(await prismaUnscoped.vendor.findUnique({ where: { id }, select: { id: true } })),
+  ITN: async id => !!(await prismaUnscoped.itinerary.findUnique({ where: { id }, select: { id: true } })),
 };
 
 /** nextDisplayId that never returns an id already used as a primary key. */
