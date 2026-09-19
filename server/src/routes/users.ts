@@ -20,7 +20,7 @@ const SAFE_SELECT = {
   updatedAt:   true,
 } as const;
 
-const VALID_ROLES = ['ADMIN', 'BOOKING', 'OPERATIONS', 'ACCOUNTS'] as const;
+const VALID_ROLES = ['ADMIN', 'BOOKING', 'OPERATIONS', 'ACCOUNTS', 'DRIVER'] as const;
 
 // GET /api/users/me — current user's own profile
 router.get('/me', async (req: AuthRequest, res) => {
@@ -96,7 +96,7 @@ router.post('/', requirePermission('users:write'), async (req: AuthRequest, res)
         email:        email.trim().toLowerCase(),
         passwordHash,
         name:         name.trim(),
-        role:         assignedRole as 'ADMIN' | 'BOOKING' | 'OPERATIONS' | 'ACCOUNTS',
+        role:         assignedRole as (typeof VALID_ROLES)[number],
       },
       select: SAFE_SELECT,
     });

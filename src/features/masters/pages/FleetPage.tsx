@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api';
 import { mastersApi, type Driver, type Vehicle } from '../api';
 import { useCompliance, useDrivers, useMasterMutation, useVehicles } from '../hooks';
 import { VehicleForm, DriverForm } from '../components/FleetForms';
+import { DriverLoginLink } from '../components/DriverLoginLink';
 import { ComplianceBadge, ComplianceDetail } from '../components/ComplianceBadge';
 import { ImportDrawer } from '../components/ImportDrawer';
 
@@ -92,6 +93,7 @@ export default function FleetPage() {
       <Drawer open={!!driver} onOpenChange={o => { if (!o) { setDriver(null); saveDriver.reset(); } }} title={driver === 'new' ? 'New driver' : driver ? driver.name : ''}>
         {driver && <DriverForm initial={driver === 'new' ? undefined : driver} submitting={saveDriver.isPending} error={saveDriver.error as ApiError | null} onCancel={() => setDriver(null)}
           onSubmit={body => saveDriver.mutate({ id: driver === 'new' ? undefined : driver.id, body }, { onSuccess: d => { toast.success('Driver saved', d.name); setDriver(null); } })} />}
+        {driver && driver !== 'new' && can('users:write') && <DriverLoginLink driverId={driver.id} currentUserId={driver.appAccess?.userId ?? null} />}
       </Drawer>
       <ImportDrawer kind={tab === 'drivers' ? 'drivers' : 'vehicles'} open={importing} onOpenChange={setImporting} />
     </div>

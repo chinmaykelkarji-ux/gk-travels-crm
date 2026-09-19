@@ -135,7 +135,7 @@ export async function seedVendor(id = 'VEN-2026-0001', overrides: Record<string,
   });
 }
 
-export async function seedUser(id: string, role: 'ADMIN' | 'BOOKING' | 'ACCOUNTS' | 'OPERATIONS') {
+export async function seedUser(id: string, role: 'ADMIN' | 'BOOKING' | 'ACCOUNTS' | 'OPERATIONS' | 'DRIVER') {
   const user = await prisma.user.create({
     data: { id, email: `${id.toLowerCase()}@example.test`, passwordHash: 'x', name: id, role, isActive: true },
   });

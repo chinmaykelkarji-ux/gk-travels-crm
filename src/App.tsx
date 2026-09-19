@@ -57,6 +57,7 @@ const TripsPage           = lazy(() => import('@/features/trips/pages/TripsPage'
 const TripWorkspacePage   = lazy(() => import('@/features/trips/pages/TripWorkspacePage'));
 const TodayPage           = lazy(() => import('@/features/tasks/pages/TodayPage'));
 const TaskRulesPage       = lazy(() => import('@/features/tasks/pages/TaskRulesPage'));
+const DriverPage          = lazy(() => import('@/features/driver/pages/DriverPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -148,9 +149,12 @@ function AppShell() {
   const dataLoading = useStore(s => s.dataLoading);
   const dataError   = useStore(s => s.dataError);
 
-  // Auth is already confirmed by ProtectedRoute — fetch CRM data immediately.
+  // Auth is already confirmed by ProtectedRoute — fetch CRM data immediately
+  // (drivers have their own page and never load the office data).
+  const { user: authUser } = useAuth();
+  const isDriver = authUser?.role === 'DRIVER';
   useEffect(() => {
-    void fetchAll();
+    if (!isDriver) void fetchAll();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -178,6 +182,8 @@ function AppShell() {
       setCreating(false);
     }
   }
+
+  if (isDriver) return <Navigate to="/driver" replace />;
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#EEF2F7' }}>
@@ -265,6 +271,7 @@ export default function App() {
 
             {/* ── Protected routes (authenticated only) ────────── */}
             <Route element={<ProtectedRoute redirectTo="/login" />}>
+              <Route path="/driver" element={<Suspense fallback={<PageSpinner />}><DriverPage /></Suspense>} />
               <Route element={<AppShell />}>
                 <Route index                         element={<Dashboard />} />
                 <Route path="/trips"                 element={<TripsPage />} />

@@ -1494,6 +1494,7 @@ enum Role {
   BOOKING
   OPERATIONS
   ACCOUNTS
+  DRIVER
 }
 
 enum GstMode {

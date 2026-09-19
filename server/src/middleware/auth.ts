@@ -78,6 +78,8 @@ function reject(res: Response, message: string): void {
   res.status(401).json({ error: message });
 }
 
+const DRIVER_ALLOWED = [/^\/api\/v2\/driver(\/|\?|$)/, /^\/api\/v2\/me(\?|$)/, /^\/api\/auth\//];
+
 // ─── requireAuth middleware ───────────────────────────────────
 // Verifies the JWT cookie, then the server-side session it names (cached for
 // 60 s), and publishes the actor into the request context so the tenant-
@@ -111,6 +113,12 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   const session = await validateSession(payload.sid, organizationId);
   if (!session || session.userId !== payload.id) {
     reject(res, 'Session expired. Please sign in again.');
+    return;
+  }
+
+  // A driver login reaches only the driver view, its own profile and sign-out.
+  if (payload.role === 'DRIVER' && !DRIVER_ALLOWED.some(r => r.test(req.originalUrl))) {
+    res.status(403).json({ error: 'Drivers can only use the driver view', code: 'FORBIDDEN' });
     return;
   }
 

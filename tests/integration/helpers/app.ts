@@ -3,13 +3,14 @@ import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { hasTestDb } from './db';
 
-export type Role = 'ADMIN' | 'BOOKING' | 'ACCOUNTS' | 'OPERATIONS';
+export type Role = 'ADMIN' | 'BOOKING' | 'ACCOUNTS' | 'OPERATIONS' | 'DRIVER';
 
 export const USER_IDS: Record<Role, string> = {
   ADMIN:      'U-ADMIN',
   BOOKING:    'U-BOOKING',
   ACCOUNTS:   'U-ACCOUNTS',
   OPERATIONS: 'U-OPERATIONS',
+  DRIVER:     'U-DRIVER',
 };
 
 export const app = hasTestDb

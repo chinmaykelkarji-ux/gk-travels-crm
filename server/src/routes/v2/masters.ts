@@ -16,6 +16,8 @@ import type { ImportKind } from '../../../../src/shared/calc/importMapping.js';
 import * as vendors from '../../modules/masters/vendors.service.js';
 import * as hotels from '../../modules/masters/hotels.service.js';
 import * as fleet from '../../modules/masters/fleet.service.js';
+import * as driverLogins from '../../modules/masters/driverLogin.service.js';
+import { DriverLoginLink } from '../../../../src/shared/contracts/driver.js';
 import * as activities from '../../modules/masters/activities.service.js';
 import * as importer from '../../modules/masters/import.service.js';
 
@@ -57,6 +59,8 @@ vehiclesRouter.put('/:id', requirePermission('masters:write'), validate({ body: 
 
 export const driversRouter = Router();
 driversRouter.use(requireAuth);
+driversRouter.get('/logins', requirePermission('users:write'), async (_req, res) => { res.json(await driverLogins.listDriverLogins()); });
+driversRouter.put('/:id/login', requirePermission('users:write'), validate({ body: DriverLoginLink }), async (req: AuthRequest, res) => { res.json(await driverLogins.linkDriverLogin(id(req), body<z.infer<typeof DriverLoginLink>>(res).userId, req.userId)); });
 driversRouter.get('/', requirePermission('masters:read'), validate({ query: MasterListQuery }), async (_req, res) => { res.json(await fleet.listDrivers(query(res))); });
 driversRouter.post('/', requirePermission('masters:write'), validate({ body: DriverInput }), async (req: AuthRequest, res) => { res.status(201).json(await fleet.createDriver(body<z.infer<typeof DriverInput>>(res), req.userId)); });
 driversRouter.get('/:id', requirePermission('masters:read'), async (req: AuthRequest, res) => { res.json(await fleet.getDriver(id(req))); });

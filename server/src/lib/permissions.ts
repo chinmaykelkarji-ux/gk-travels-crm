@@ -20,6 +20,8 @@
 //                 prices are hidden from roles without commercial access
 //   operations:* — hotel bookings, vehicle duties, activity bookings, tickets,
 //                 trip workspace (write: BOOKING, OPERATIONS; read: all staff)
+//   DRIVER     — driver:duties only; requireAuth also fences a DRIVER session
+//                to /api/v2/driver, /api/v2/me and /api/auth (middleware/auth.ts)
 // ============================================================
 
 import type { Response, NextFunction, RequestHandler } from 'express';
@@ -79,6 +81,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',
     'documents:read', 'documents:write',
+  ],
+  // Driver view only (/driver): their own confirmed duties and status updates.
+  DRIVER: [
+    'driver:duties',
   ],
 };
 

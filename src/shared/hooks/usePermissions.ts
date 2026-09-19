@@ -63,6 +63,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'messaging:read', 'messaging:write',
     'documents:read', 'documents:write',
   ],
+  // Driver view only (/driver): their own confirmed duties and status updates.
+  DRIVER: [
+    'driver:duties',
+  ],
 };
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -70,6 +74,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   BOOKING:    'Booking',
   OPERATIONS: 'Operations',
   ACCOUNTS:   'Accounts',
+  DRIVER:     'Driver',
 };
 
 export const ROLE_COLORS: Record<UserRole, string> = {
@@ -77,6 +82,7 @@ export const ROLE_COLORS: Record<UserRole, string> = {
   BOOKING:    'bg-emerald-100 text-emerald-700',
   OPERATIONS: 'bg-blue-100 text-blue-700',
   ACCOUNTS:   'bg-amber-100 text-amber-700',
+  DRIVER:     'bg-slate-200 text-slate-700',
 };
 
 export function hasPermission(role: UserRole | null | undefined, permission: string): boolean {
