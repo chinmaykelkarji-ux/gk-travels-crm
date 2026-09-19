@@ -18,6 +18,8 @@
 //   masters:*  — hotels, vehicles, drivers, activities (BOOKING, OPERATIONS);
 //   rates:write — hotel rate sheets and activity prices (BOOKING); rates and
 //                 prices are hidden from roles without commercial access
+//   operations:* — hotel bookings, vehicle duties, activity bookings, tickets,
+//                 trip workspace (write: BOOKING, OPERATIONS; read: all staff)
 // ============================================================
 
 import type { Response, NextFunction, RequestHandler } from 'express';
@@ -41,6 +43,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard:read',
     'suppliers:read',
     'masters:read', 'masters:write', 'rates:write',
+    'operations:read', 'operations:write',
     'ai:use',
   ],
 
@@ -60,6 +63,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'documents:read', 'documents:write',
     'reports:read',
     'masters:read',
+    'operations:read',
   ],
 
   OPERATIONS: [
@@ -69,6 +73,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'bookings:read',
     'suppliers:read', 'suppliers:write',
     'masters:read', 'masters:write',
+    'operations:read', 'operations:write',
     'trip-services:read', 'trip-services:status',
     'vouchers:write',
     'tasks:read', 'tasks:write',

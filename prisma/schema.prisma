@@ -78,6 +78,9 @@ model Organization {
   vehicles               Vehicle[]
   drivers                Driver[]
   activities             Activity[]
+  hotelBookings          HotelBooking[]
+  vehicleAssignments     VehicleAssignment[]
+  activityBookings       ActivityBooking[]
 
   @@map("organizations")
 }
@@ -431,8 +434,15 @@ model Trip {
   travellers          TripTraveller[]
   contract            BookingContract?
 
+  // Phase 3: operational stage (legacy "status" is kept in step for the classic screens).
+  stage               TripStage          @default(PLANNING)
+  hotelBookings       HotelBooking[]
+  vehicleAssignments  VehicleAssignment[]
+  activityBookings    ActivityBooking[]
+
   @@index([organizationId])
   @@index([status])
+  @@index([organizationId, stage])
   @@index([departure])
   @@index([customerId])
   @@index([invoiceId])
@@ -711,6 +721,9 @@ model Vendor {
   vehicles        Vehicle[]
   drivers         Driver[]
   activities      Activity[]
+  hotelBookings      HotelBooking[]
+  vehicleAssignments VehicleAssignment[]
+  activityBookings   ActivityBooking[]
 
   @@index([organizationId])
   @@index([type])
@@ -1713,6 +1726,9 @@ model BookingContract {
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   schedule           PaymentScheduleItem[]
+  hotelBookings      HotelBooking[]
+  vehicleAssignments VehicleAssignment[]
+  activityBookings   ActivityBooking[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -1879,6 +1895,7 @@ model Hotel {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   roomTypes      HotelRoomType[]
+  bookings       HotelBooking[]
 
   @@index([organizationId, city])
   @@index([organizationId, name])
@@ -1901,6 +1918,7 @@ model HotelRoomType {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   rates          HotelRate[]
+  bookings       HotelBooking[]
 
   @@unique([hotelId, name])
   @@index([organizationId])
@@ -1954,6 +1972,7 @@ model Vehicle {
   isActive        Boolean          @default(true)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  assignments     VehicleAssignment[]
 
   @@unique([organizationId, registrationNo])
   @@index([vendorId])
@@ -1983,6 +2002,7 @@ model Driver {
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   defaultForVehicles Vehicle[]    @relation("VehicleDefaultDriver")
+  assignments        VehicleAssignment[]
 
   @@index([organizationId, phoneNormalized])
   @@index([vendorId])
@@ -2011,8 +2031,180 @@ model Activity {
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+  bookings        ActivityBooking[]
 
   @@index([organizationId, city])
   @@index([vendorId])
   @@map("activities")
+}
+
+// ============================================================
+// TRIP OPERATIONS (Phase 3.2): hotel bookings, vehicle assignments,
+// activity bookings. Money in Decimal; cost/sell redacted by role.
+// ============================================================
+
+enum TripStage {
+  PLANNING
+  CONFIRMING
+  READY
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum OpsStatus {
+  REQUESTED
+  ON_HOLD
+  CONFIRMED
+  CANCELLED
+}
+
+enum AssignmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum DriverDutyStatus {
+  ASSIGNED
+  ACKNOWLEDGED
+  STARTED
+  ARRIVED
+  ON_BOARD
+  COMPLETED
+  ISSUE
+}
+
+model HotelBooking {
+  id              String           @id @default(cuid())
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  tripId          String
+  trip            Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  contractId      String?
+  contract        BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  hotelId         String?
+  hotel           Hotel?           @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+  hotelName       String
+  city            String?
+  roomTypeId      String?
+  roomType        HotelRoomType?   @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
+  roomTypeName    String?
+  mealPlan        MealPlan?
+  checkIn         DateTime         @db.Date
+  checkOut        DateTime         @db.Date
+  rooms           Int              @default(1)
+  adults          Int              @default(2)
+  children        Int              @default(0)
+  travellerIds    Json             @default("[]")
+  status          OpsStatus        @default(REQUESTED)
+  confirmationNo  String?
+  vendorId        String?
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  costAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  sellAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  customerNotes   String?
+  internalNotes   String?
+  requestedAt     DateTime?
+  confirmedAt     DateTime?
+  confirmedById   String?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  legacyBookingId String?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([organizationId, legacyBookingId])
+  @@index([tripId])
+  @@index([organizationId, checkIn])
+  @@index([organizationId, status])
+  @@map("hotel_bookings")
+}
+
+model VehicleAssignment {
+  id              String           @id @default(cuid())
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  tripId          String
+  trip            Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  contractId      String?
+  contract        BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  vehicleId       String?
+  vehicle         Vehicle?         @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  driverId        String?
+  driver          Driver?          @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vendorId        String?
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vehicleType     String?
+  seatsRequired   Int?
+  vehicleRegNo    String?
+  driverName      String?
+  driverPhone     String?
+  startAt         DateTime
+  endAt           DateTime
+  pickupPoint     String?
+  dropPoint       String?
+  route           String?
+  pax             Int              @default(0)
+  status          AssignmentStatus @default(REQUESTED)
+  driverStatus    DriverDutyStatus @default(ASSIGNED)
+  driverStatusAt  DateTime?
+  driverNote      String?
+  confirmationNo  String?
+  costAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  sellAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  customerNotes   String?
+  internalNotes   String?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  legacyBookingId String?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([organizationId, legacyBookingId])
+  @@index([tripId])
+  @@index([vehicleId, startAt])
+  @@index([driverId, startAt])
+  @@index([organizationId, startAt])
+  @@map("vehicle_assignments")
+}
+
+model ActivityBooking {
+  id              String           @id @default(cuid())
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  tripId          String
+  trip            Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  contractId      String?
+  contract        BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  activityId      String?
+  activity        Activity?        @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  name            String
+  city            String?
+  date            DateTime         @db.Date
+  time            String?
+  adults          Int              @default(1)
+  children        Int              @default(0)
+  status          OpsStatus        @default(REQUESTED)
+  confirmationNo  String?
+  vendorId        String?
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  costAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  sellAmount      Decimal          @default(0) @db.Decimal(12, 2)
+  customerNotes   String?
+  internalNotes   String?
+  confirmedAt     DateTime?
+  cancelReason    String?
+  legacyBookingId String?
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([organizationId, legacyBookingId])
+  @@index([tripId])
+  @@index([organizationId, date])
+  @@map("activity_bookings")
 }
