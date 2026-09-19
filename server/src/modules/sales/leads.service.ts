@@ -5,7 +5,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
-import { nextDisplayId } from '../../core/numbering.js';
+import { nextDisplayId, nextFreeDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { getContext } from '../../core/requestContext.js';
 import { normalizePhone } from '../../../../src/shared/calc/phone.js';
@@ -88,7 +88,7 @@ export async function createLead(input: LeadCreate, actorId?: string | null) {
   }
   const assignee = await assertAssignee(input.assignedToUserId);
   return prisma.$transaction(async tx => {
-    const id = await nextDisplayId(tx, 'L');
+    const id = await nextFreeDisplayId(tx, 'L');
     const { force: _f, ...rest } = input;
     const lead = await tx.lead.create({
       data: {
@@ -194,7 +194,7 @@ export async function convertLead(id: string, input: LeadConvert, actorId?: stri
   const ctx = getContext();
   return prisma.$transaction(async tx => {
     if (!customerId) {
-      customerId = await nextDisplayId(tx, 'CUS');
+      customerId = await nextFreeDisplayId(tx, 'CUS');
       await tx.customer.create({ data: { id: customerId, name: lead.name, phone: lead.phone, phoneNormalized: normalizePhone(lead.phone), email: lead.email, source: lead.source, sourceLeadId: lead.id, createdDate: today() } });
       await audit(tx, { action: 'customer_created', entityType: 'customer', entityId: customerId, userId: actorId, description: `Customer ${lead.name} created from lead ${lead.id}`, after: { name: lead.name, phone: lead.phone } });
     }

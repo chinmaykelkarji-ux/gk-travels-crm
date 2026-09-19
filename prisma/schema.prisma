@@ -84,6 +84,7 @@ model Organization {
   tickets                Ticket[]
   ticketSegments         TicketSegment[]
   ticketPassengers       TicketPassenger[]
+  tripPickupPoints       TripPickupPoint[]
 
   @@map("organizations")
 }
@@ -104,6 +105,7 @@ model User {
   assignedLeads     Lead[]       @relation("LeadAssignee")
   assignedEnquiries Enquiry[]    @relation("EnquiryAssignee")
   driverProfile     Driver?
+  opsTrips          Trip[]       @relation("TripOpsOwner")
 
   @@index([organizationId])
   @@map("users")
@@ -388,36 +390,36 @@ model Lead {
 }
 
 model Trip {
-  organizationId      String           @default("org_gktravels")
-  organization        Organization     @relation(fields: [organizationId], references: [id])
-  id                  String           @id
-  tripNumber          Int              @unique @default(autoincrement())
+  organizationId      String            @default("org_gktravels")
+  organization        Organization      @relation(fields: [organizationId], references: [id])
+  id                  String            @id
+  tripNumber          Int               @unique @default(autoincrement())
   invoiceId           String?
   customer            String
-  phone               String           @default("")
+  phone               String            @default("")
   email               String?
   customerId          String?
   destination         String
-  type                String           @default("Leisure")
-  pax                 Int              @default(1)
+  type                String            @default("Leisure")
+  pax                 Int               @default(1)
   departure           String?
   returnDate          String?
-  status              String           @default("draft")
+  status              String            @default("draft")
   totalAmount         Float?
-  gstRate             Float            @default(5)
-  discount            Float            @default(0)
-  gstAmount           Float            @default(0)
+  gstRate             Float             @default(5)
+  discount            Float             @default(0)
+  gstAmount           Float             @default(0)
   totalPayable        Float?
-  paidAmount          Float            @default(0)
-  balanceDue          Float            @default(0)
-  supplierCost        Float            @default(0)
-  grossMargin         Float            @default(0)
-  marginPct           Float            @default(0)
-  visaStatus          String           @default("pending")
-  hotelStatus         String           @default("pending")
-  flightStatus        String           @default("pending")
-  checkInStatus       String           @default("not_due")
-  notes               String           @default("")
+  paidAmount          Float             @default(0)
+  balanceDue          Float             @default(0)
+  supplierCost        Float             @default(0)
+  grossMargin         Float             @default(0)
+  marginPct           Float             @default(0)
+  visaStatus          String            @default("pending")
+  hotelStatus         String            @default("pending")
+  flightStatus        String            @default("pending")
+  checkInStatus       String            @default("not_due")
+  notes               String            @default("")
   assignedTo          String?
   createdDate         String
   createdBy           String?
@@ -425,26 +427,34 @@ model Trip {
   convertedFromLeadId String?
   convertedAt         String?
   convertedBy         String?
-  timeline            Json             @default("[]")
-  itinerary           Json             @default("[]")
-  documents           Json             @default("[]")
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  gstMode             GstMode          @default(EXCLUDED)
-  taxableAmount       Float            @default(0)
-  passengerIds        Json             @default("[]")
+  timeline            Json              @default("[]")
+  itinerary           Json              @default("[]")
+  documents           Json              @default("[]")
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  gstMode             GstMode           @default(EXCLUDED)
+  taxableAmount       Float             @default(0)
+  passengerIds        Json              @default("[]")
   payments            Payment[]
   tasks               Task[]
   services            TripService[]
   travellers          TripTraveller[]
-  contract            BookingContract?
+  // One booking contract per party (family) on a group tour (Phase 3.4).
+  contracts           BookingContract[]
 
   // Phase 3: operational stage (legacy "status" is kept in step for the classic screens).
-  stage               TripStage          @default(PLANNING)
-  hotelBookings       HotelBooking[]
-  vehicleAssignments  VehicleAssignment[]
-  activityBookings    ActivityBooking[]
-  tickets             Ticket[]
+  stage              TripStage           @default(PLANNING)
+  stageChangedAt     DateTime?
+  cancelReason       String?
+  tourName           String?
+  isInternational    Boolean             @default(false)
+  assignedOpsUserId  String?
+  assignedOps        User?               @relation("TripOpsOwner", fields: [assignedOpsUserId], references: [id], onDelete: SetNull)
+  pickupPoints       TripPickupPoint[]
+  hotelBookings      HotelBooking[]
+  vehicleAssignments VehicleAssignment[]
+  activityBookings   ActivityBooking[]
+  tickets            Ticket[]
 
   @@index([organizationId])
   @@index([status])
@@ -716,17 +726,17 @@ model Vendor {
   salesQuoteItems SalesQuoteItem[]
 
   // v2 (Phase 3.1). "type" is kept in step for the classic Suppliers screen.
-  kind            VendorKind       @default(OTHER)
-  city            String?
-  state           String?
-  address         String?
-  pan             String?
-  phoneNormalized String?
-  creditDays      Int?
-  hotels          Hotel[]
-  vehicles        Vehicle[]
-  drivers         Driver[]
-  activities      Activity[]
+  kind               VendorKind          @default(OTHER)
+  city               String?
+  state              String?
+  address            String?
+  pan                String?
+  phoneNormalized    String?
+  creditDays         Int?
+  hotels             Hotel[]
+  vehicles           Vehicle[]
+  drivers            Driver[]
+  activities         Activity[]
   hotelBookings      HotelBooking[]
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
@@ -1017,11 +1027,11 @@ model Voucher {
 // Travellers (table "passengers" kept from v1). A traveller is a person who
 // travels; a customer is who we sell to. One customer usually has several.
 model Traveller {
-  organizationId        String          @default("org_gktravels")
-  organization          Organization    @relation(fields: [organizationId], references: [id])
-  id                    String          @id
+  organizationId        String            @default("org_gktravels")
+  organization          Organization      @relation(fields: [organizationId], references: [id])
+  id                    String            @id
   customerId            String?
-  customer              Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer              Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   firstName             String
   lastName              String
   displayName           String?
@@ -1062,8 +1072,8 @@ model Traveller {
   emergencyRelation     String?
   notes                 String?
   createdDate           String
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   @@index([organizationId])
   @@index([customerId])
@@ -1082,16 +1092,21 @@ enum TravellerRole {
 // Who is on which trip. trips.passengerIds (JSON) is kept in step for the
 // legacy screens until Phase 3 replaces them.
 model TripTraveller {
-  id             String        @id @default(cuid())
-  organizationId String        @default("org_gktravels")
-  organization   Organization  @relation(fields: [organizationId], references: [id])
+  id             String           @id @default(cuid())
+  organizationId String           @default("org_gktravels")
+  organization   Organization     @relation(fields: [organizationId], references: [id])
   tripId         String
-  trip           Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  trip           Trip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
   travellerId    String
-  traveller      Traveller     @relation(fields: [travellerId], references: [id], onDelete: Cascade)
-  role           TravellerRole @default(ADULT)
-  position       Int           @default(0)
-  createdAt      DateTime      @default(now())
+  traveller      Traveller        @relation(fields: [travellerId], references: [id], onDelete: Cascade)
+  role           TravellerRole    @default(ADULT)
+  position       Int              @default(0)
+  createdAt      DateTime         @default(now())
+  // Party (family booking contract) and pickup point on a group tour.
+  contractId     String?
+  contract       BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  pickupPointId  String?
+  pickupPoint    TripPickupPoint? @relation(fields: [pickupPointId], references: [id], onDelete: SetNull)
 
   @@unique([tripId, travellerId])
   @@index([organizationId])
@@ -1707,8 +1722,9 @@ model BookingContract {
   customer           Customer              @relation(fields: [customerId], references: [id])
   partyId            String?
   partyName          String?
-  tripId             String?               @unique
+  tripId             String?
   trip               Trip?                 @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  tripTravellers     TripTraveller[]
   destination        String
   departureDate      DateTime?
   returnDate         DateTime?
@@ -1741,6 +1757,7 @@ model BookingContract {
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
+  @@index([tripId])
   @@index([salesQuoteId])
   @@index([customerId])
   @@index([status])
@@ -1913,19 +1930,19 @@ model Hotel {
 }
 
 model HotelRoomType {
-  id             String       @id @default(cuid())
-  organizationId String       @default("org_gktravels")
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String         @id @default(cuid())
+  organizationId String         @default("org_gktravels")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
   hotelId        String
-  hotel          Hotel        @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel          Hotel          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   name           String
-  maxAdults      Int          @default(2)
-  maxChildren    Int          @default(1)
-  mealPlans      Json         @default("[\"CP\"]")
+  maxAdults      Int            @default(2)
+  maxChildren    Int            @default(1)
+  mealPlans      Json           @default("[\"CP\"]")
   notes          String?
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   rates          HotelRate[]
   bookings       HotelBooking[]
 
@@ -1960,27 +1977,27 @@ model HotelRate {
 }
 
 model Vehicle {
-  id              String           @id @default(cuid())
-  organizationId  String           @default("org_gktravels")
-  organization    Organization     @relation(fields: [organizationId], references: [id])
+  id              String              @id @default(cuid())
+  organizationId  String              @default("org_gktravels")
+  organization    Organization        @relation(fields: [organizationId], references: [id])
   registrationNo  String
   type            String
   make            String?
   model           String?
-  seats           Int              @default(4)
-  ownership       VehicleOwnership @default(OWNED)
+  seats           Int                 @default(4)
+  ownership       VehicleOwnership    @default(OWNED)
   vendorId        String?
-  vendor          Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vendor          Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   defaultDriverId String?
-  defaultDriver   Driver?          @relation("VehicleDefaultDriver", fields: [defaultDriverId], references: [id], onDelete: SetNull)
-  insuranceExpiry DateTime?        @db.Date
-  permitExpiry    DateTime?        @db.Date
-  fitnessExpiry   DateTime?        @db.Date
-  pucExpiry       DateTime?        @db.Date
+  defaultDriver   Driver?             @relation("VehicleDefaultDriver", fields: [defaultDriverId], references: [id], onDelete: SetNull)
+  insuranceExpiry DateTime?           @db.Date
+  permitExpiry    DateTime?           @db.Date
+  fitnessExpiry   DateTime?           @db.Date
+  pucExpiry       DateTime?           @db.Date
   notes           String?
-  isActive        Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   assignments     VehicleAssignment[]
 
   @@unique([organizationId, registrationNo])
@@ -1989,28 +2006,28 @@ model Vehicle {
 }
 
 model Driver {
-  id                 String       @id @default(cuid())
-  organizationId     String       @default("org_gktravels")
-  organization       Organization @relation(fields: [organizationId], references: [id])
+  id                 String              @id @default(cuid())
+  organizationId     String              @default("org_gktravels")
+  organization       Organization        @relation(fields: [organizationId], references: [id])
   name               String
   phone              String
   phoneNormalized    String?
   altPhone           String?
   vendorId           String?
-  vendor             Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vendor             Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   // App login for the driver view (role DRIVER); one user per driver.
-  userId             String?      @unique
-  user               User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId             String?             @unique
+  user               User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   licenceNo          String?
-  licenceExpiry      DateTime?    @db.Date
-  languages          Json         @default("[]")
+  licenceExpiry      DateTime?           @db.Date
+  languages          Json                @default("[]")
   address            String?
   emergencyContact   String?
   notes              String?
-  isActive           Boolean      @default(true)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  defaultForVehicles Vehicle[]    @relation("VehicleDefaultDriver")
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  defaultForVehicles Vehicle[]           @relation("VehicleDefaultDriver")
   assignments        VehicleAssignment[]
 
   @@index([organizationId, phoneNormalized])
@@ -2019,27 +2036,27 @@ model Driver {
 }
 
 model Activity {
-  id              String       @id @default(cuid())
-  organizationId  String       @default("org_gktravels")
-  organization    Organization @relation(fields: [organizationId], references: [id])
+  id              String            @id @default(cuid())
+  organizationId  String            @default("org_gktravels")
+  organization    Organization      @relation(fields: [organizationId], references: [id])
   name            String
   city            String
   category        String?
   vendorId        String?
-  vendor          Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  vendor          Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   durationMinutes Int?
   description     String?
   inclusions      String?
-  costAdult       Decimal?     @db.Decimal(12, 2)
-  costChild       Decimal?     @db.Decimal(12, 2)
-  sellAdult       Decimal?     @db.Decimal(12, 2)
-  sellChild       Decimal?     @db.Decimal(12, 2)
+  costAdult       Decimal?          @db.Decimal(12, 2)
+  costChild       Decimal?          @db.Decimal(12, 2)
+  sellAdult       Decimal?          @db.Decimal(12, 2)
+  sellChild       Decimal?          @db.Decimal(12, 2)
   minPax          Int?
   maxPax          Int?
   notes           String?
-  isActive        Boolean      @default(true)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
   bookings        ActivityBooking[]
 
   @@index([organizationId, city])
@@ -2365,4 +2382,29 @@ model TicketPassenger {
   @@index([travellerId])
   @@index([organizationId])
   @@map("ticket_passengers")
+}
+
+// Where a group tour collects its passengers (e.g. Karad, Sangli, Miraj, Belagavi), in route order.
+model TripPickupPoint {
+  id             String          @id @default(cuid())
+  organizationId String          @default("org_gktravels")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  tripId         String
+  trip           Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  seq            Int
+  name           String
+  address        String?
+  landmark       String?
+  pickupAt       DateTime?
+  contactName    String?
+  contactPhone   String?
+  mapUrl         String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  travellers     TripTraveller[]
+
+  @@index([tripId])
+  @@index([organizationId])
+  @@map("trip_pickup_points")
 }

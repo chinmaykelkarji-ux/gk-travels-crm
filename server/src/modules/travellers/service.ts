@@ -6,7 +6,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
-import { nextDisplayId } from '../../core/numbering.js';
+import { nextDisplayId, nextFreeDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { passportStatus, travellerDisplayName } from '../../../../src/shared/calc/travellers.js';
 import { travellerIdentityData, presentTraveller, passportHash } from '../../core/identity.js';
@@ -112,7 +112,7 @@ export async function createTraveller(input: TravellerCreate, actorId?: string |
     }
   }
   return prisma.$transaction(async tx => {
-    const id = await nextDisplayId(tx, 'PAX');
+    const id = await nextFreeDisplayId(tx, 'PAX');
     const { force: _force, passportNumber, govtIdNumber, ...rest } = input;
     const t = await tx.traveller.create({
       data: { id, ...rest, ...travellerIdentityData({ passportNumber, govtIdNumber }), createdDate: today() } as Prisma.TravellerUncheckedCreateInput,

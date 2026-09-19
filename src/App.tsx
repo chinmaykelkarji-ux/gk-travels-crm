@@ -53,6 +53,8 @@ const FleetPage           = lazy(() => import('@/features/masters/pages/FleetPag
 const ActivitiesPage      = lazy(() => import('@/features/masters/pages/ActivitiesPage'));
 const TicketsPage         = lazy(() => import('@/features/tickets/pages/TicketsPage'));
 const TicketDetailPage    = lazy(() => import('@/features/tickets/pages/TicketDetailPage'));
+const TripsPage           = lazy(() => import('@/features/trips/pages/TripsPage'));
+const TripWorkspacePage   = lazy(() => import('@/features/trips/pages/TripWorkspacePage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -262,8 +264,10 @@ export default function App() {
             <Route element={<ProtectedRoute redirectTo="/login" />}>
               <Route element={<AppShell />}>
                 <Route index                         element={<Dashboard />} />
-                <Route path="/trips"                 element={<Trips />} />
-                <Route path="/trips/:id"             element={<TripDetail />} />
+                <Route path="/trips"                 element={<TripsPage />} />
+                <Route path="/trips/:id"             element={<TripWorkspacePage />} />
+                <Route path="/legacy/trips"          element={<Trips />} />
+                <Route path="/legacy/trips/:id"      element={<TripDetail />} />
                 <Route path="/trips/:tripId/itinerary" element={<RoleGuard allowed={['ADMIN', 'BOOKING']}><AiItineraryBuilder /></RoleGuard>} />
                 <Route path="/bookings"              element={<Bookings />} />
                 <Route path="/bookings/:id"          element={<BookingDetail />} />

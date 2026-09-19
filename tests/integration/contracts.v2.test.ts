@@ -56,8 +56,8 @@ describe.skipIf(!hasTestDb)('booking contracts v2', () => {
     expect((await as('OPERATIONS').get('/api/v2/contracts')).body.total).toBe(1);
   });
 
-  it('family-wise split creates one contract per party whose totals add up, with shared services apportioned by pax', async () => {
-    const { accepted } = await acceptedQuote(true);
+  it('family-wise split: one tour, one contract per party whose totals add up; party payments are not guessed', async () => {
+    const { accepted, travellers } = await acceptedQuote(true);
     expect(accepted.bookings).toHaveLength(2);
     const list = (await as('BOOKING').get('/api/v2/contracts')).body;
     expect(list.total).toBe(2);
@@ -65,14 +65,21 @@ describe.skipIf(!hasTestDb)('booking contracts v2', () => {
     expect(k.contractNumber).toBe(`BK-${YEAR}-0001`);
     expect(k.totalAmount + s.totalAmount).toBe(33600);
     expect(k.adults + k.children).toBe(3);
+    expect(k.tripId).toBe(s.tripId);
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { id: k.tripId }, include: { travellers: true, services: true } });
+    expect(trip).toMatchObject({ pax: 5, totalPayable: 33600, stage: 'CONFIRMING', status: 'confirmed' });
+    expect(trip.services).toHaveLength(3);
+    expect(trip.travellers.find(t => t.travellerId === travellers[0].id)?.contractId).toBe(k.id);
+    expect(trip.travellers.find(t => t.travellerId === travellers[1].id)?.contractId).toBe(s.id);
+    // Receipts are recorded on the tour until per-party payments exist: no paid status, no false reminders.
+    await prisma.trip.update({ where: { id: k.tripId }, data: { paidAmount: 10000 } });
     const kd = (await as('BOOKING').get(`/api/v2/contracts/${k.id}`)).body;
-    expect(kd.services.map((x: { notes: string; sellPrice: number }) => [x.notes, x.sellPrice])).toEqual(expect.arrayContaining([['Room K', 10000], ['Tempo traveller', 6000]]));
-    expect(kd.services).toHaveLength(2);
-    expect(kd.tripId).not.toBe(s.tripId);
-    expect((await prisma.trip.findUniqueOrThrow({ where: { id: kd.tripId } })).pax).toBe(3);
+    expect(kd).toMatchObject({ paymentTracking: 'TOUR', received: null, payments: { paid: null, balance: null, next: null } });
+    expect(kd.schedule.every((x: { status: string }) => x.status === 'NOT_TRACKED')).toBe(true);
+    expect((await as('BOOKING').get('/api/v2/contracts/payments-due?days=90')).body).toEqual([]);
   });
 
-  it('schedule edits must add up to the total and stay ordered; statuses follow the contract and sync the trip', async () => {
+  it('schedule edits must add up to the total and stay ordered; cancelling the only booking cancels the trip', async () => {
     const { accepted } = await acceptedQuote(false);
     const id = accepted.bookings[0];
     const bad = await as('BOOKING').put(`/api/v2/contracts/${id}/schedule`, { items: [{ seq: 1, label: 'Advance', dueDate: iso(0), amount: 10000 }, { seq: 2, label: 'Balance', dueDate: iso(-5), amount: 10000 }] });
@@ -91,13 +98,13 @@ describe.skipIf(!hasTestDb)('booking contracts v2', () => {
     const due = await as('BOOKING').get('/api/v2/contracts/payments-due?days=10');
     expect(due.body.map((d: { label: string; outstanding: number }) => [d.label, d.outstanding])).toEqual([['Advance', 8000]]);
 
+    // In progress / completed follow the trip stage; only cancellation is set on the booking itself.
+    expect((await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'IN_PROGRESS' })).status).toBe(409);
     expect((await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'CANCELLED' })).status).toBe(400);
-    const ip = await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'IN_PROGRESS' });
-    expect(ip.body.status).toBe('IN_PROGRESS');
-    expect((await prisma.trip.findUniqueOrThrow({ where: { id: ok.body.tripId } })).status).toBe('in_progress');
-    const done = await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'COMPLETED' });
-    expect(done.body.completedAt).not.toBeNull();
-    expect((await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'CANCELLED', reason: 'x' })).status).toBe(409);
+    const cancelled = await as('BOOKING').post(`/api/v2/contracts/${id}/status`, { status: 'CANCELLED', reason: 'Family emergency' });
+    expect(cancelled.body.status).toBe('CANCELLED');
+    // The last open booking on the trip: the trip is cancelled with it.
+    expect(await prisma.trip.findUniqueOrThrow({ where: { id: ok.body.tripId } })).toMatchObject({ stage: 'CANCELLED', status: 'cancelled' });
     expect((await as('BOOKING').put(`/api/v2/contracts/${id}/schedule`, { items: [{ seq: 1, label: 'All', dueDate: iso(0), amount: 33600 }] })).status).toBe(409);
     expect((await as('BOOKING').get('/api/v2/contracts')).body.total).toBe(0);
     expect((await as('BOOKING').get('/api/v2/contracts?includeClosed=true')).body.total).toBe(1);

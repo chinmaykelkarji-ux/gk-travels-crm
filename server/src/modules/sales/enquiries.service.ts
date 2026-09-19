@@ -6,7 +6,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
-import { nextDisplayId } from '../../core/numbering.js';
+import { nextDisplayId, nextFreeDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { normalizePhone } from '../../../../src/shared/calc/phone.js';
 import { ENQUIRY_TRANSITIONS, paxTotal, type EnquiryCreate, type EnquiryUpdate, type EnquiryListQuery, type EnquiryStatus } from '../../../../src/shared/contracts/sales.js';
@@ -79,7 +79,7 @@ export async function createEnquiry(input: EnquiryCreate, actorId?: string | nul
       const existing = phoneNormalized ? await tx.customer.findFirst({ where: { phoneNormalized, deletedAt: null }, select: { id: true } }) : null;
       if (existing) customerId = existing.id;
       else {
-        customerId = await nextDisplayId(tx, 'CUS');
+        customerId = await nextFreeDisplayId(tx, 'CUS');
         await tx.customer.create({ data: { id: customerId, name: input.newCustomer.name, phone: input.newCustomer.phone, phoneNormalized, email: input.newCustomer.email ?? null, source: input.source, createdDate: today() } });
         await audit(tx, { action: 'customer_created', entityType: 'customer', entityId: customerId, userId: actorId, description: `Customer ${input.newCustomer.name} created with enquiry`, after: { name: input.newCustomer.name, phone: input.newCustomer.phone } });
       }

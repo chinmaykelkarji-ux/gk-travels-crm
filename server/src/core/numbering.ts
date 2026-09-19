@@ -8,7 +8,7 @@
 // ============================================================
 
 import { Prisma } from '@prisma/client';
-import type { DbClient } from '../lib/prisma.js';
+import { prismaUnscoped, type DbClient } from '../lib/prisma.js';
 import { currentOrganizationId } from './requestContext.js';
 
 export type DisplayPrefix = 'CUS' | 'L' | 'ENQ' | 'Q' | 'BK' | 'TR' | 'VEN' | 'PAX' | 'GK' | 'TKT';
@@ -34,6 +34,28 @@ export async function nextDisplayId(db: DbClient, prefix: DisplayPrefix, opts: D
     }
   }
   throw new Error('numbering: could not allocate a display id');
+}
+
+// Tables whose primary key is the display id and that the classic screens
+// still write with client-generated ids. The sequence can land on an id the
+// classic client already used; those are skipped. Checked across all
+// organisations because the primary key is global.
+const TAKEN: Partial<Record<DisplayPrefix, (id: string) => Promise<boolean>>> = {
+  CUS: async id => !!(await prismaUnscoped.customer.findUnique({ where: { id }, select: { id: true } })),
+  L:   async id => !!(await prismaUnscoped.lead.findUnique({ where: { id }, select: { id: true } })),
+  PAX: async id => !!(await prismaUnscoped.traveller.findUnique({ where: { id }, select: { id: true } })),
+  GK:  async id => !!(await prismaUnscoped.trip.findUnique({ where: { id }, select: { id: true } })),
+  VEN: async id => !!(await prismaUnscoped.vendor.findUnique({ where: { id }, select: { id: true } })),
+};
+
+/** nextDisplayId that never returns an id already used as a primary key. */
+export async function nextFreeDisplayId(db: DbClient, prefix: DisplayPrefix, opts: DisplayIdOptions = {}): Promise<string> {
+  const taken = TAKEN[prefix];
+  for (let i = 0; i < 50; i++) {
+    const id = await nextDisplayId(db, prefix, opts);
+    if (!taken || !(await taken(id))) return id;
+  }
+  throw new Error(`numbering: no free ${prefix} id after 50 attempts`);
 }
 
 /** SQL that seeds a prefix's sequence from existing ids (used by migrations). */

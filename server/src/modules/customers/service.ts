@@ -8,7 +8,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
-import { nextDisplayId } from '../../core/numbering.js';
+import { nextFreeDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { normalizePhone } from '../../../../src/shared/calc/phone.js';
 import { customerIdentityData, presentCustomer, presentTraveller } from '../../core/identity.js';
@@ -128,7 +128,7 @@ export async function createCustomer(input: CustomerCreate, actorId?: string | n
   }
 
   return prisma.$transaction(async tx => {
-    const id = await nextDisplayId(tx, 'CUS');
+    const id = await nextFreeDisplayId(tx, 'CUS');
     const { force: _force, preferences, tags, passportNo, ...rest } = input;
     const customer = await tx.customer.create({
       data: {

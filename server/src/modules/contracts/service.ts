@@ -1,8 +1,9 @@
 // ============================================================
-// Booking contracts (Phase 2.7). Created when a quotation is accepted — one
-// for the whole group, or one per party for family-wise billing. Each
-// contract owns a payment schedule and a legacy Trip (with TripService rows)
-// so the existing operations and finance screens keep working.
+// Booking contracts (Phase 2.7, reshaped in 3.4). Created when a quotation is
+// accepted — one for the whole group, or one per party for family-wise
+// billing — all on ONE trip (the tour). Each contract owns a payment schedule;
+// the trip carries the classic finance columns and TripService rows so the
+// existing operations and finance screens keep working.
 // ============================================================
 
 import type { Prisma } from '@prisma/client';
@@ -13,30 +14,28 @@ import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { defaultSchedule, validateSchedule, allocatePayments, scheduleSummary } from '../../../../src/shared/calc/schedule.js';
 import { CONTRACT_TRANSITIONS, type ContractListQuery, type ContractStatus, type ScheduleInput } from '../../../../src/shared/contracts/contracts.js';
 import { registerOnAccepted, type OnAccepted } from '../quotations/service.js';
+import { tripChanged } from '../operations/hooks.js';
 import { syncTripTravellersFromIds } from '../travellers/service.js';
+import { nextTripId } from '../trips/ids.js';
+import { applyStage } from '../trips/stage.js';
+import type { TripStage } from '../../../../src/shared/calc/tripStage.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const n = (v: Prisma.Decimal | number | null | undefined) => (v === null || v === undefined ? 0 : Number(v));
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const isoDay = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
 
-/** GK-YYYY-NNNN trip ids from the sequence; skips numbers the legacy client already used. */
-async function nextTripId(tx: DbClient): Promise<string> {
-  for (let i = 0; i < 50; i++) {
-    const id = await nextDisplayId(tx, 'GK');
-    if (!(await tx.trip.findUnique({ where: { id }, select: { id: true } }))) return id;
-  }
-  throw new Error('Could not allocate a trip id');
-}
-
-const TRIP_STATUS: Record<ContractStatus, string> = { CONFIRMED: 'confirmed', IN_PROGRESS: 'in_progress', COMPLETED: 'completed', CANCELLED: 'cancelled' };
 
 // ── Creation on acceptance ────────────────────────────────────
+// One trip for the whole tour (hotels, transport, tickets and itinerary are
+// shared), and one booking contract per party when the customer wants
+// family-wise billing, each with its own payment schedule.
 
 export const createContractsFromQuote: OnAccepted = async (tx, quote, totals, { splitByParty, actorId }) => {
   const pax = { adults: quote.adults, children: quote.children, infants: quote.infants };
   const totalPax = pax.adults + pax.children + pax.infants || 1;
   const selected = quote.lineItems.filter(i => totals.items.find(t => t.id === i.id)?.included);
+  const partyTravellers = (p: { travellerIds: unknown }) => (Array.isArray(p.travellerIds) ? (p.travellerIds as string[]) : []);
 
   type Plan = { partyId: string | null; partyName: string | null; pax: { adults: number; children: number; infants: number }; share: number; travellerIds: string[]; totals: { subtotal: number; tax: number; total: number; cost: number } };
   const plans: Plan[] = splitByParty
@@ -44,47 +43,44 @@ export const createContractsFromQuote: OnAccepted = async (tx, quote, totals, { 
         const pt = totals.parties.find(x => x.partyId === p.id)!;
         const ppax = p.adults + p.children + p.infants;
         const partyPax = quote.parties.reduce((s, x) => s + x.adults + x.children + x.infants, 0) || 1;
-        return { partyId: p.id, partyName: p.name, pax: { adults: p.adults, children: p.children, infants: p.infants }, share: ppax / partyPax, travellerIds: Array.isArray(p.travellerIds) ? (p.travellerIds as string[]) : [], totals: { subtotal: pt.sell, tax: pt.tax, total: pt.total, cost: pt.cost } };
+        return { partyId: p.id, partyName: p.name, pax: { adults: p.adults, children: p.children, infants: p.infants }, share: ppax / partyPax, travellerIds: partyTravellers(p), totals: { subtotal: pt.sell, tax: pt.tax, total: pt.total, cost: pt.cost } };
       })
-    : [{ partyId: null, partyName: null, pax, share: 1, travellerIds: quote.parties.flatMap(p => (Array.isArray(p.travellerIds) ? (p.travellerIds as string[]) : [])), totals: { subtotal: totals.subtotal, tax: totals.tax, total: totals.total, cost: totals.cost } }];
+    : [{ partyId: null, partyName: null, pax, share: 1, travellerIds: quote.parties.flatMap(partyTravellers), totals: { subtotal: totals.subtotal, tax: totals.tax, total: totals.total, cost: totals.cost } }];
 
-  const created: string[] = [];
-  let firstTripId: string | null = null;
-  for (const plan of plans) {
-    const contractNumber = await nextDisplayId(tx, 'BK');
-    const tripId = await nextTripId(tx);
-    const paxCount = plan.pax.adults + plan.pax.children + plan.pax.infants || totalPax;
-    const taxable = r2(plan.totals.total - plan.totals.tax);
-    const margin = r2(taxable - plan.totals.cost);
-    const trip = await tx.trip.create({
+  // The tour: legacy finance columns carry the whole-group figures for the classic screens.
+  const tripId = await nextTripId(tx);
+  const taxable = r2(totals.total - totals.tax);
+  const margin = r2(taxable - totals.cost);
+  const allTravellerIds = Array.from(new Set(plans.flatMap(p => p.travellerIds)));
+  const trip = await tx.trip.create({
+    data: {
+      id: tripId, customer: quote.customer.name, phone: quote.customer.phone, email: quote.customer.email, customerId: quote.customerId,
+      destination: quote.enquiry.destination, type: 'Leisure', pax: totalPax, departure: isoDay(quote.enquiry.departureDate), returnDate: isoDay(quote.enquiry.returnDate),
+      status: 'confirmed', stage: 'CONFIRMING', stageChangedAt: new Date(), tourName: quote.title ?? null,
+      totalAmount: taxable, gstRate: n(quote.gstRate), discount: r2(totals.discountAmount), gstAmount: totals.tax, gstMode: quote.gstMode,
+      taxableAmount: taxable, totalPayable: totals.total, paidAmount: 0, balanceDue: totals.total, supplierCost: totals.cost, grossMargin: margin,
+      marginPct: taxable > 0 ? r2(margin / taxable * 100) : 0, notes: `From quotation ${quote.quoteNumber}${splitByParty ? ` — ${plans.length} parties` : ''}`,
+      createdDate: today(), createdBy: actorId ?? null, sourceLeadId: null, passengerIds: allTravellerIds as Prisma.InputJsonValue,
+    },
+  });
+
+  // Classic service lines, once per selected item at full value.
+  for (const item of selected) {
+    const it = totals.items.find(t => t.id === item.id)!;
+    await tx.tripService.create({
       data: {
-        id: tripId, customer: quote.customer.name, phone: quote.customer.phone, email: quote.customer.email, customerId: quote.customerId,
-        destination: quote.enquiry.destination, type: 'Leisure', pax: paxCount, departure: isoDay(quote.enquiry.departureDate), returnDate: isoDay(quote.enquiry.returnDate),
-        status: 'confirmed', totalAmount: taxable, gstRate: n(quote.gstRate), discount: r2(totals.discountAmount * plan.share), gstAmount: plan.totals.tax, gstMode: quote.gstMode,
-        taxableAmount: taxable, totalPayable: plan.totals.total, paidAmount: 0, balanceDue: plan.totals.total, supplierCost: plan.totals.cost, grossMargin: margin,
-        marginPct: taxable > 0 ? r2(margin / taxable * 100) : 0, notes: `From quotation ${quote.quoteNumber}${plan.partyName ? ` — ${plan.partyName}` : ''}`,
-        createdDate: today(), createdBy: actorId ?? null, sourceLeadId: null, passengerIds: plan.travellerIds as Prisma.InputJsonValue,
+        tripId: trip.id, type: item.serviceType, status: 'REQUESTED', serviceDate: item.serviceDate ?? quote.enquiry.departureDate ?? new Date(),
+        supplierId: item.supplierId, costPrice: r2(it.cost), sellPrice: r2(it.sell),
+        details: { ...(item.details as object), pricingBasis: item.pricingBasis, quoteItemId: item.id, ...(item.partyId ? { partyId: item.partyId } : { sharedAcrossParties: splitByParty }) } as Prisma.InputJsonValue,
+        notes: item.description + (item.customerNote ? ` — ${item.customerNote}` : ''),
       },
     });
-    if (!firstTripId) firstTripId = trip.id;
+  }
+  if (allTravellerIds.length) await syncTripTravellersFromIds(tx, trip.id, allTravellerIds);
 
-    for (const item of selected) {
-      const own = item.partyId === plan.partyId || (!splitByParty);
-      const shared = splitByParty && !item.partyId;
-      if (!own && !shared) continue;
-      const it = totals.items.find(t => t.id === item.id)!;
-      const factor = shared ? plan.share : 1;
-      await tx.tripService.create({
-        data: {
-          tripId: trip.id, type: item.serviceType, status: 'REQUESTED', serviceDate: item.serviceDate ?? quote.enquiry.departureDate ?? new Date(),
-          supplierId: item.supplierId, costPrice: r2(it.cost * factor), sellPrice: r2(it.sell * factor),
-          details: { ...(item.details as object), pricingBasis: item.pricingBasis, quoteItemId: item.id, ...(shared ? { sharedAcrossParties: true, share: r2(plan.share) } : {}) } as Prisma.InputJsonValue,
-          notes: item.description + (item.customerNote ? ` — ${item.customerNote}` : ''),
-        },
-      });
-    }
-    if (plan.travellerIds.length) await syncTripTravellersFromIds(tx, trip.id, plan.travellerIds);
-
+  const created: string[] = [];
+  for (const plan of plans) {
+    const contractNumber = await nextDisplayId(tx, 'BK');
     const contract = await tx.bookingContract.create({
       data: {
         contractNumber, salesQuoteId: quote.id, enquiryId: quote.enquiryId, customerId: quote.customerId, partyId: plan.partyId, partyName: plan.partyName, tripId: trip.id,
@@ -95,33 +91,40 @@ export const createContractsFromQuote: OnAccepted = async (tx, quote, totals, { 
         schedule: { create: defaultSchedule(plan.totals.total, { today: today(), departureDate: isoDay(quote.enquiry.departureDate) }).map(s => ({ seq: s.seq, label: s.label, dueDate: new Date(`${s.dueDate}T00:00:00.000Z`), amount: s.amount })) },
       },
     });
+    if (plan.travellerIds.length) await tx.tripTraveller.updateMany({ where: { tripId: trip.id, travellerId: { in: plan.travellerIds } }, data: { contractId: contract.id } });
     created.push(contract.id);
     await audit(tx, { action: 'contract_created', entityType: 'contract', entityId: contract.id, userId: actorId, description: `Booking ${contractNumber} (${plan.partyName ?? 'whole group'}) ₹${plan.totals.total} — trip ${trip.id}`, after: { tripId: trip.id, total: plan.totals.total, quoteId: quote.id } });
-    await audit(tx, { action: 'trip_created', entityType: 'trip', entityId: trip.id, userId: actorId, description: `Trip ${trip.id} created from quotation ${quote.quoteNumber}`, after: { contractId: contract.id } });
     await tx.outboxEvent.create({ data: { eventType: 'BOOKING_CONFIRMED', payload: { tripId: trip.id, salesQuoteId: quote.id, contractId: contract.id }, idempotencyKey: `booking-confirmed:${contract.id}` } });
   }
-  await tx.salesQuote.update({ where: { id: quote.id }, data: { convertedTripId: firstTripId, convertedAt: new Date() } });
+  await audit(tx, { action: 'trip_created', entityType: 'trip', entityId: trip.id, userId: actorId, description: `Trip ${trip.id} created from quotation ${quote.quoteNumber}${plans.length > 1 ? ` with ${plans.length} parties` : ''}`, after: { contractIds: created } });
+  await tx.salesQuote.update({ where: { id: quote.id }, data: { convertedTripId: trip.id, convertedAt: new Date() } });
   return created;
 };
 registerOnAccepted(createContractsFromQuote);
 
 // ── Reads ─────────────────────────────────────────────────────
 
-const INCLUDE = { customer: { select: { id: true, name: true, phone: true } }, salesQuote: { select: { id: true, quoteNumber: true, title: true } }, schedule: { orderBy: { seq: 'asc' as const } }, trip: { select: { id: true, status: true, paidAmount: true, balanceDue: true } } } as const;
+const INCLUDE = { customer: { select: { id: true, name: true, phone: true } }, salesQuote: { select: { id: true, quoteNumber: true, title: true } }, schedule: { orderBy: { seq: 'asc' as const } }, trip: { select: { id: true, status: true, stage: true, paidAmount: true, balanceDue: true, _count: { select: { contracts: true } } } } } as const;
 type Row = Prisma.BookingContractGetPayload<{ include: typeof INCLUDE }>;
 
 function toDto(c: Row) {
   const items = c.schedule.map(s => ({ id: s.id, seq: s.seq, label: s.label, dueDate: s.dueDate.toISOString().slice(0, 10), amount: n(s.amount) }));
-  const received = n(c.trip?.paidAmount);
-  const states = allocatePayments(items, received, today());
-  const summary = scheduleSummary(states);
+  // Receipts are recorded against the trip until per-party payments exist
+  // (Finance phase). With several parties on one trip nobody can say which
+  // family paid, so the party schedule shows amounts without a paid status.
+  const paymentTracking: 'CONTRACT' | 'TOUR' = (c.trip?._count.contracts ?? 1) > 1 ? 'TOUR' : 'CONTRACT';
+  const received = paymentTracking === 'CONTRACT' ? n(c.trip?.paidAmount) : null;
+  const states = allocatePayments(items, received ?? 0, today());
+  const computed = scheduleSummary(states);
+  const schedule = paymentTracking === 'CONTRACT' ? states : states.map(s => ({ ...s, paidAmount: 0, status: 'NOT_TRACKED' as const }));
+  const summary = paymentTracking === 'CONTRACT' ? computed : { ...computed, paid: null, balance: null, overdue: 0, next: null };
   return {
     id: c.id, contractNumber: c.contractNumber, status: c.status, salesQuoteId: c.salesQuoteId, quote: c.salesQuote, enquiryId: c.enquiryId, customer: c.customer,
     partyId: c.partyId, partyName: c.partyName, tripId: c.tripId, trip: c.trip, destination: c.destination,
     departureDate: isoDay(c.departureDate), returnDate: isoDay(c.returnDate), adults: c.adults, children: c.children, infants: c.infants, travellerIds: Array.isArray(c.travellerIds) ? c.travellerIds : [],
     subtotal: n(c.subtotal), discountAmount: n(c.discountAmount), taxAmount: n(c.taxAmount), totalAmount: n(c.totalAmount), costAmount: n(c.costAmount), gstMode: c.gstMode, gstRate: n(c.gstRate),
     paymentPolicy: c.paymentPolicy, cancellationPolicy: c.cancellationPolicy, notes: c.notes, cancelledAt: c.cancelledAt, cancellationReason: c.cancellationReason, completedAt: c.completedAt, createdAt: c.createdAt,
-    schedule: states, received, payments: summary,
+    schedule, received, payments: summary, paymentTracking,
   };
 }
 export type ContractDto = ReturnType<typeof toDto>;
@@ -168,15 +171,42 @@ export async function setSchedule(id: string, input: ScheduleInput, actorId?: st
   return getContract(id);
 }
 
+/**
+ * Contract statuses follow the trip: starting the trip puts its bookings in
+ * progress and completing it completes them (modules/trips/stage.ts). The
+ * only status set here is CANCELLED: one family pulls out of the tour. Its
+ * travellers leave the trip and the tour totals drop; when the last open
+ * booking is cancelled, the trip itself is cancelled.
+ */
 export async function setContractStatus(id: string, status: ContractStatus, reason: string | null | undefined, actorId?: string | null) {
   const c = await prisma.bookingContract.findUnique({ where: { id }, include: INCLUDE });
   if (!c) throw notFound('Booking');
   if (c.status === status) return getContract(id);
-  if (!(CONTRACT_TRANSITIONS[c.status] ?? []).includes(status)) throw stateConflict(`A ${c.status.toLowerCase()} booking cannot move to ${status.toLowerCase()}`);
+  if (status !== 'CANCELLED') throw stateConflict('A booking goes in progress or completes with its trip — change the stage in the trip workspace');
+  if (!(CONTRACT_TRANSITIONS[c.status] ?? []).includes(status)) throw stateConflict(`A ${c.status.toLowerCase()} booking cannot be cancelled`);
+  if (!reason) throw new AppError('VALIDATION_ERROR', 400, 'Give a reason for cancelling', { reason: 'Required' });
   await prisma.$transaction(async tx => {
-    await tx.bookingContract.update({ where: { id }, data: { status, ...(status === 'CANCELLED' ? { cancelledAt: new Date(), cancellationReason: reason ?? null } : {}), ...(status === 'COMPLETED' ? { completedAt: new Date() } : {}) } });
-    if (c.tripId) await tx.trip.update({ where: { id: c.tripId }, data: { status: TRIP_STATUS[status] } });
-    await audit(tx, { action: 'contract_status_changed', entityType: 'contract', entityId: id, userId: actorId, description: `Booking ${c.contractNumber}: ${c.status} → ${status}${reason ? ` (${reason})` : ''}`, before: { status: c.status }, after: { status } });
+    await tx.bookingContract.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancellationReason: reason } });
+    await audit(tx, { action: 'contract_status_changed', entityType: 'contract', entityId: id, userId: actorId, description: `Booking ${c.contractNumber}${c.partyName ? ` (${c.partyName})` : ''}: ${c.status} → CANCELLED (${reason}). Refund and cancellation charges are settled in Finance.`, before: { status: c.status }, after: { status: 'CANCELLED' } });
+    if (!c.tripId) return;
+    const open = await tx.bookingContract.findMany({ where: { tripId: c.tripId, status: { not: 'CANCELLED' } }, select: { totalAmount: true, taxAmount: true } });
+    const trip = await tx.trip.findUniqueOrThrow({ where: { id: c.tripId }, select: { stage: true, paidAmount: true } });
+    if (!open.length) {
+      if (trip.stage !== 'CANCELLED' && trip.stage !== 'COMPLETED') await applyStage(tx, c.tripId, trip.stage as TripStage, 'CANCELLED', `Last booking ${c.contractNumber} cancelled: ${reason}`, actorId);
+      return;
+    }
+    // One party leaves a shared tour: its travellers come off the trip, the tour totals shrink.
+    const leaving = await tx.tripTraveller.findMany({ where: { tripId: c.tripId, contractId: id }, select: { travellerId: true } });
+    if (leaving.length) {
+      await tx.tripTraveller.deleteMany({ where: { tripId: c.tripId, contractId: id } });
+      const remaining = await tx.tripTraveller.findMany({ where: { tripId: c.tripId }, orderBy: { position: 'asc' }, select: { travellerId: true } });
+      await tx.trip.update({ where: { id: c.tripId }, data: { passengerIds: remaining.map(r => r.travellerId) as Prisma.InputJsonValue, pax: remaining.length } });
+    }
+    const totalPayable = r2(open.reduce((s, x) => s + n(x.totalAmount), 0));
+    const tax = r2(open.reduce((s, x) => s + n(x.taxAmount), 0));
+    await tx.trip.update({ where: { id: c.tripId }, data: { totalPayable, gstAmount: tax, taxableAmount: r2(totalPayable - tax), totalAmount: r2(totalPayable - tax), balanceDue: Math.max(0, r2(totalPayable - n(trip.paidAmount))) } });
+    await audit(tx, { action: 'trip_party_removed', entityType: 'trip', entityId: c.tripId, userId: actorId, description: `${c.partyName ?? c.contractNumber} left the tour (${leaving.length} traveller(s)); tour total now ₹${totalPayable}`, after: { contractId: id, travellers: leaving.map(l => l.travellerId) } });
+    await tripChanged(tx, c.tripId, 'contract_cancelled', actorId);
   });
   return getContract(id);
 }
@@ -193,6 +223,7 @@ export async function setContractNotes(id: string, notes: string | null, actorId
 export async function paymentsDue(days = 7) {
   const rows = await prisma.bookingContract.findMany({ where: { status: { in: ['CONFIRMED', 'IN_PROGRESS'] } }, include: INCLUDE });
   const horizon = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
-  return rows.map(toDto).flatMap(c => c.schedule.filter(s => s.status !== 'PAID' && s.dueDate <= horizon).map(s => ({ contractId: c.id, contractNumber: c.contractNumber, customer: c.customer, tripId: c.tripId, destination: c.destination, ...s, outstanding: s.amount - s.paidAmount })))
+  // Party schedules on shared trips have no paid status yet; they would only produce false reminders.
+  return rows.map(toDto).filter(c => c.paymentTracking === 'CONTRACT').flatMap(c => c.schedule.filter(s => s.status !== 'PAID' && s.dueDate <= horizon).map(s => ({ contractId: c.id, contractNumber: c.contractNumber, customer: c.customer, tripId: c.tripId, destination: c.destination, ...s, outstanding: s.amount - s.paidAmount })))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }

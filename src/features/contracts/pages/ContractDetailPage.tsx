@@ -76,6 +76,7 @@ export default function ContractDetailPage() {
             <section className="bg-white border border-slate-200 rounded-md p-4 text-sm space-y-1.5">
               <h2 className="text-sm font-medium text-slate-800 mb-2">Money</h2>
               <Row label="Contract value"><Money value={c.totalAmount} /></Row>
+              {c.paymentTracking === 'TOUR' && <p className="text-xs text-slate-500">This family shares trip {c.tripId} with other parties. Receipts are recorded on the tour for now, so this schedule shows amounts due without a paid status.</p>}
               <Row label="Received"><Money value={c.received} /></Row>
               <Row label="Balance" strong><span className={c.payments.overdue > 0 ? 'text-red-600' : ''}><Money value={c.payments.balance} /></span></Row>
               {c.payments.overdue > 0 && <Row label="Overdue"><span className="text-red-600"><Money value={c.payments.overdue} /></span></Row>}

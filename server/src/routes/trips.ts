@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { prisma, type DbClient } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
 import { syncTripTravellersFromIds } from '../modules/travellers/service.js';
 import { logActivity } from '../lib/activity.js';
 import { redactTrip } from '../lib/redact.js';
+import { stageForLegacyStatus, type TripStage } from '../../../src/shared/calc/tripStage.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -29,8 +30,25 @@ async function nextTripId(): Promise<string> {
 // timestamps, the DB-generated display number, and the invoice lock that
 // invoiceService sets/clears.
 function sanitize(body: Record<string, unknown>) {
-  const { payments, tasks, services, createdAt, updatedAt, tripNumber, invoiceId, ...rest } = body;
+  const {
+    payments, tasks, services, createdAt, updatedAt, tripNumber, invoiceId,
+    // v2-owned (trip control centre): stage via /api/v2/trips/:id/stage, relations via their own APIs.
+    stage, stageChangedAt, cancelReason, tourName, isInternational, assignedOpsUserId, assignedOps,
+    contracts, travellers, pickupPoints, hotelBookings, vehicleAssignments, activityBookings, tickets,
+    ...rest
+  } = body;
   return rest;
+}
+
+/** A classic status edit moves the stage too (no readiness checks: the classic screen predates them). */
+async function followLegacyStatus(tx: DbClient, tripId: string, status: unknown, userId?: string) {
+  if (typeof status !== 'string') return;
+  const t = await tx.trip.findUnique({ where: { id: tripId }, select: { stage: true } });
+  if (!t) return;
+  const next = stageForLegacyStatus(status, t.stage as TripStage);
+  if (!next) return;
+  await tx.trip.update({ where: { id: tripId }, data: { stage: next, stageChangedAt: new Date() } });
+  await logActivity(tx, { action: 'trip_stage_changed', entityType: 'trip', entityId: tripId, userId, description: `Trip ${tripId}: stage ${t.stage} → ${next} (status "${status}" set on the classic screen)`, before: { stage: t.stage }, after: { stage: next } });
 }
 
 // GET /api/trips — supplier cost / margin zeroed for non-commercial roles
@@ -75,6 +93,8 @@ router.post('/', requirePermission('trips:write'), async (req: AuthRequest, res)
         create: data as Parameters<typeof prisma.trip.create>[0]['data'],
       });
       if (Array.isArray(rest.passengerIds)) await syncTripTravellersFromIds(tx, saved.id, rest.passengerIds);
+      if (existed) await followLegacyStatus(tx, saved.id, rest.status, req.userId);
+      else if (typeof rest.status === 'string') { const st = stageForLegacyStatus(rest.status, 'PLANNING'); if (st) await tx.trip.update({ where: { id: saved.id }, data: { stage: st } }); }
       return saved;
     });
 
@@ -100,7 +120,7 @@ router.post('/', requirePermission('trips:write'), async (req: AuthRequest, res)
 });
 
 // PUT /api/trips/:id
-router.put('/:id', requirePermission('trips:write'), async (req, res) => {
+router.put('/:id', requirePermission('trips:write'), async (req: AuthRequest, res) => {
   try {
     const { id: _ignored, ...data } = sanitize(req.body as Record<string, unknown>);
     const trip = await prisma.$transaction(async tx => {
@@ -110,7 +130,8 @@ router.put('/:id', requirePermission('trips:write'), async (req, res) => {
       });
       // Legacy screens edit passengerIds; keep trip_travellers (v2) in step.
       if (Array.isArray(data.passengerIds)) await syncTripTravellersFromIds(tx, updated.id, data.passengerIds);
-      return updated;
+      await followLegacyStatus(tx, updated.id, data.status, req.userId);
+      return tx.trip.findUniqueOrThrow({ where: { id: updated.id } });
     });
     res.json(trip);
   } catch (err) {
@@ -132,6 +153,15 @@ router.delete('/:id', requirePermission('trips:write'), async (req: AuthRequest,
     const invoiceCount = await prisma.invoice.count({
       where: { tripIds: { array_contains: id } },
     });
+    // Supplier bookings and customer contracts are real commitments: cancel them, never delete them silently.
+    const [contracts, hotels, vehicles, activities, tickets] = await Promise.all([
+      prisma.bookingContract.count({ where: { tripId: id } }), prisma.hotelBooking.count({ where: { tripId: id } }),
+      prisma.vehicleAssignment.count({ where: { tripId: id } }), prisma.activityBooking.count({ where: { tripId: id } }), prisma.ticket.count({ where: { tripId: id } }),
+    ]);
+    if (contracts + hotels + vehicles + activities + tickets > 0) {
+      res.status(409).json({ error: `Cannot delete trip — it has ${[contracts && `${contracts} booking(s)`, hotels && `${hotels} hotel booking(s)`, vehicles && `${vehicles} vehicle duty(ies)`, activities && `${activities} activity booking(s)`, tickets && `${tickets} ticket(s)`].filter(Boolean).join(', ')}. Cancel the trip instead.` });
+      return;
+    }
     if (invoiceCount > 0) {
       res.status(409).json({
         error: `Cannot delete trip — ${invoiceCount} invoice(s) reference this trip. Cancel or remove those invoices first.`,

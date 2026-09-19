@@ -9,7 +9,7 @@ import { useContractList } from '../hooks';
 import type { Contract } from '../api';
 
 export const CONTRACT_TONE: Record<ContractStatus, Tone> = { CONFIRMED: 'accent', IN_PROGRESS: 'warning', COMPLETED: 'success', CANCELLED: 'danger' };
-export const INSTALMENT_TONE: Record<string, Tone> = { PAID: 'success', PARTIAL: 'warning', DUE: 'warning', OVERDUE: 'danger', UPCOMING: 'neutral' };
+export const INSTALMENT_TONE: Record<string, Tone> = { PAID: 'success', PARTIAL: 'warning', DUE: 'warning', OVERDUE: 'danger', UPCOMING: 'neutral', NOT_TRACKED: 'neutral' };
 
 export default function ContractsPage() {
   const navigate = useNavigate();
@@ -29,7 +29,7 @@ export default function ContractsPage() {
     ...(showMoney ? [
       { key: 'total', header: 'Total', align: 'right', render: c => <Money value={c.totalAmount} /> } as Column<Contract>,
       { key: 'balance', header: 'Balance', align: 'right', render: c => <span className={c.payments.overdue > 0 ? 'text-red-600' : ''}><Money value={c.payments.balance} /></span> } as Column<Contract>,
-      { key: 'next', header: 'Next due', hideBelow: 'lg', render: c => c.payments.next ? <span className="inline-flex items-center gap-1"><StatusPill tone={INSTALMENT_TONE[c.payments.next.status]}>{c.payments.next.label}</StatusPill><span className="text-xs text-slate-500">{fmtDate(c.payments.next.dueDate)}</span></span> : <span className="text-slate-400">settled</span> } as Column<Contract>,
+      { key: 'next', header: 'Next due', hideBelow: 'lg', render: c => c.paymentTracking === 'TOUR' ? <span className="text-xs text-slate-400">on the tour</span> : c.payments.next ? <span className="inline-flex items-center gap-1"><StatusPill tone={INSTALMENT_TONE[c.payments.next.status]}>{c.payments.next.label}</StatusPill><span className="text-xs text-slate-500">{fmtDate(c.payments.next.dueDate)}</span></span> : <span className="text-slate-400">settled</span> } as Column<Contract>,
     ] : []),
   ];
 
