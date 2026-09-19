@@ -81,6 +81,9 @@ model Organization {
   hotelBookings          HotelBooking[]
   vehicleAssignments     VehicleAssignment[]
   activityBookings       ActivityBooking[]
+  tickets                Ticket[]
+  ticketSegments         TicketSegment[]
+  ticketPassengers       TicketPassenger[]
 
   @@map("organizations")
 }
@@ -217,6 +220,7 @@ model Document {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   links             DocumentLink[]
+  tickets           Ticket[]
 
   @@index([organizationId, status])
   @@index([organizationId, type])
@@ -295,6 +299,7 @@ model Customer {
   salesQuotes SalesQuote[]
   travellers  Traveller[]
   contracts   BookingContract[]
+  tickets     Ticket[]
 
   @@index([organizationId])
   @@index([phone])
@@ -439,6 +444,7 @@ model Trip {
   hotelBookings       HotelBooking[]
   vehicleAssignments  VehicleAssignment[]
   activityBookings    ActivityBooking[]
+  tickets             Ticket[]
 
   @@index([organizationId])
   @@index([status])
@@ -724,6 +730,7 @@ model Vendor {
   hotelBookings      HotelBooking[]
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
+  tickets            Ticket[]
 
   @@index([organizationId])
   @@index([type])
@@ -1035,6 +1042,7 @@ model Traveller {
   govtIdNumberHash      String?
   govtIdLast4           String?
   trips                 TripTraveller[]
+  ticketRows            TicketPassenger[]
   dateOfBirth           String?
   nationality           String?
   gender                String?
@@ -1729,6 +1737,7 @@ model BookingContract {
   hotelBookings      HotelBooking[]
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
+  tickets            Ticket[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -2207,4 +2216,153 @@ model ActivityBooking {
   @@index([tripId])
   @@index([organizationId, date])
   @@map("activity_bookings")
+}
+
+// ============================================================
+// TICKETS (Phase 3.3): ticket -> segments -> passenger rows
+// ============================================================
+
+enum TicketMode {
+  FLIGHT
+  TRAIN
+  BUS
+}
+
+enum TicketStatus {
+  REQUESTED
+  ON_HOLD
+  CONFIRMED
+  PARTIAL
+  WAITLISTED
+  RAC
+  CANCELLED
+}
+
+enum PassengerStatus {
+  PENDING
+  CONFIRMED
+  WAITLISTED
+  RAC
+  CANCELLED
+}
+
+model Ticket {
+  id               String            @id @default(cuid())
+  organizationId   String            @default("org_gktravels")
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  displayNumber    String?
+  tripId           String?
+  trip             Trip?             @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  contractId       String?
+  contract         BookingContract?  @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  customerId       String?
+  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  mode             TicketMode
+  status           TicketStatus      @default(REQUESTED)
+  pnr              String?
+  carrier          String?
+  bookingRef       String?
+  quota            String?
+  travelClass      String?
+  vendorId         String?
+  vendor           Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  baseFare         Decimal           @default(0) @db.Decimal(12, 2)
+  taxes            Decimal           @default(0) @db.Decimal(12, 2)
+  otherCharges     Decimal           @default(0) @db.Decimal(12, 2)
+  serviceFee       Decimal           @default(0) @db.Decimal(12, 2)
+  serviceFeeGstPct Decimal?          @db.Decimal(5, 2)
+  serviceFeeGst    Decimal           @default(0) @db.Decimal(12, 2)
+  totalFare        Decimal           @default(0) @db.Decimal(12, 2)
+  costAmount       Decimal           @default(0) @db.Decimal(12, 2)
+  currency         String            @default("INR")
+  sourceDocumentId String?
+  sourceDocument   Document?         @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  chartPrepared    Boolean           @default(false)
+  chartCheckedAt   DateTime?
+  bookedAt         DateTime?
+  cancelledAt      DateTime?
+  cancelReason     String?
+  customerNotes    String?
+  internalNotes    String?
+  legacyBookingId  String?
+  createdById      String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  segments         TicketSegment[]
+  passengers       TicketPassenger[]
+
+  @@unique([organizationId, displayNumber])
+  @@unique([organizationId, legacyBookingId])
+  @@index([tripId])
+  @@index([customerId])
+  @@index([organizationId, pnr])
+  @@index([organizationId, status])
+  @@map("tickets")
+}
+
+// One leg: its own number, class, times and boarding / dropping points.
+model TicketSegment {
+  id             String            @id @default(cuid())
+  organizationId String            @default("org_gktravels")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  ticketId       String
+  ticket         Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  seq            Int
+  carrierNumber  String?
+  carrierName    String?
+  fromCode       String?
+  fromName       String
+  toCode         String?
+  toName         String
+  departAt       DateTime?
+  arriveAt       DateTime?
+  travelClass    String?
+  boardingPoint  String?
+  droppingPoint  String?
+  terminal       String?
+  platform       String?
+  baggage        String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  passengers     TicketPassenger[]
+
+  @@unique([ticketId, seq])
+  @@index([organizationId, departAt])
+  @@map("ticket_segments")
+}
+
+// One passenger on one segment (paxIndex groups a person across segments).
+model TicketPassenger {
+  id               String          @id @default(cuid())
+  organizationId   String          @default("org_gktravels")
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  ticketId         String
+  ticket           Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  segmentId        String
+  segment          TicketSegment   @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  paxIndex         Int
+  travellerId      String?
+  traveller        Traveller?      @relation(fields: [travellerId], references: [id], onDelete: SetNull)
+  name             String
+  paxType          String          @default("ADULT")
+  age              Int?
+  gender           String?
+  status           PassengerStatus @default(PENDING)
+  bookingStatus    String?
+  currentStatus    String?
+  waitlistPosition Int?
+  coach            String?
+  seat             String?
+  berth            String?
+  ticketNumber     String?
+  boardingPoint    String?
+  fare             Decimal?        @db.Decimal(12, 2)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([segmentId, paxIndex])
+  @@index([ticketId])
+  @@index([travellerId])
+  @@index([organizationId])
+  @@map("ticket_passengers")
 }

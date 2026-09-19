@@ -135,7 +135,7 @@ describe.skipIf(!hasTestDb)('job runner', () => {
 
     const activeOrgs = await prisma.organization.count({ where: { isActive: true } });
     const first = await jobs!.runTick({ budgetMs: 15_000 });
-    expect(first.systemJobsEnqueued).toBe(activeOrgs * 3); // scheduler.rules + outbox.dispatch + identity.encrypt-legacy per organisation
+    expect(first.systemJobsEnqueued).toBe(activeOrgs * 4); // scheduler.rules + outbox.dispatch + identity.encrypt-legacy + legacy.bookings-import per organisation
     const second = await jobs!.runTick({ budgetMs: 15_000 });
     expect(second.systemJobsEnqueued).toBe(0);          // same windows → no duplicates
 

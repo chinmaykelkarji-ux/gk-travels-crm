@@ -26,4 +26,10 @@ export default async function globalSetup() {
     stdio: ['pipe', 'inherit', 'inherit'],
     env: { ...process.env, DATABASE_URL: url },
   });
+  // SQL functions that migrations define and the application calls (db push
+  // creates tables only). Re-running them is harmless: they are CREATE OR
+  // REPLACE plus an idempotent import over empty tables.
+  for (const file of ['prisma/migrations/20260918230100_import_legacy_bookings/migration.sql']) {
+    execSync(`npx prisma db execute --url "${url}" --file "${file}"`, { stdio: 'inherit', env: { ...process.env, DATABASE_URL: url } });
+  }
 }

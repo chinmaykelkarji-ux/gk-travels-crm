@@ -53,6 +53,7 @@ import quotationsV2Router    from './routes/v2/quotations.js';
 import contractsV2Router     from './routes/v2/contracts.js';
 import { vendorsRouter as vendorsV2Router, hotelsRouter, vehiclesRouter, driversRouter, activitiesRouter, mastersRouter } from './routes/v2/masters.js';
 import opsRouter             from './routes/v2/operations.js';
+import ticketsRouter         from './routes/v2/tickets.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -155,6 +156,7 @@ app.use('/api/v2/drivers',    driversRouter);
 app.use('/api/v2/activities', activitiesRouter);
 app.use('/api/v2/masters',    mastersRouter);
 app.use('/api/v2/ops',        opsRouter);
+app.use('/api/v2/tickets',    ticketsRouter);
 if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
 app.use('/api/jobs',          jobsRouter);
 

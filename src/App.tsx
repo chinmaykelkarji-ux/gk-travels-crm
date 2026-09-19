@@ -51,6 +51,8 @@ const HotelsPage          = lazy(() => import('@/features/masters/pages/HotelsPa
 const HotelDetailPage     = lazy(() => import('@/features/masters/pages/HotelDetailPage'));
 const FleetPage           = lazy(() => import('@/features/masters/pages/FleetPage'));
 const ActivitiesPage      = lazy(() => import('@/features/masters/pages/ActivitiesPage'));
+const TicketsPage         = lazy(() => import('@/features/tickets/pages/TicketsPage'));
+const TicketDetailPage    = lazy(() => import('@/features/tickets/pages/TicketDetailPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -278,6 +280,8 @@ export default function App() {
                 <Route path="/hotels/:id"            element={<HotelDetailPage />} />
                 <Route path="/fleet"                 element={<FleetPage />} />
                 <Route path="/activities"            element={<ActivitiesPage />} />
+                <Route path="/tickets"               element={<TicketsPage />} />
+                <Route path="/tickets/:id"           element={<TicketDetailPage />} />
                 <Route path="/vendors"               element={<Vendors />} />
                 <Route path="/vendors/:id"           element={<VendorDetail />} />
                 <Route path="/quotations"            element={<Quotations />} />
