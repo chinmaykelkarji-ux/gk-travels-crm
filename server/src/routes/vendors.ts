@@ -6,6 +6,8 @@ import { requirePermission, requireAnyPermission } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 import { redactVendor, canSeeBankDetails } from '../lib/redact.js';
 import { today } from '../../../src/shared/utils/date.js';
+import { kindFromLegacyType } from '../../../src/shared/contracts/masters.js';
+import { normalizePhone } from '../../../src/shared/calc/phone.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -16,9 +18,14 @@ router.use(requireAuth);
 // from roles that may see them; otherwise the stored value is kept, so an
 // OPERATIONS user editing a phone number cannot wipe (or set) the account
 // the accounts team pays into.
-function stripMeta(body: Record<string, unknown>, role: string | undefined) {
-  const { createdAt, updatedAt, payments, tripServices, salesQuoteItems, bankDetails, ...rest } = body;
-  return canSeeBankDetails(role) && bankDetails !== undefined ? { ...rest, bankDetails } : rest;
+function stripMeta(body: Record<string, unknown>, role: string | undefined): Record<string, unknown> {
+  const { createdAt, updatedAt, payments, tripServices, salesQuoteItems, bankDetails, hotels, vehicles, drivers, activities, kind, phoneNormalized, ...rest } = body;
+  // The classic screen edits "type"; the v2 kind and normalised phone follow it.
+  const derived = {
+    ...(typeof rest.type === 'string' ? { kind: kindFromLegacyType(rest.type) } : {}),
+    ...(typeof rest.phone === 'string' ? { phoneNormalized: normalizePhone(rest.phone) } : {}),
+  };
+  return canSeeBankDetails(role) && bankDetails !== undefined ? { ...rest, ...derived, bankDetails } : { ...rest, ...derived };
 }
 
 function calcOutstanding(totalCost: number, advancePaid: number, isPaid: boolean): number {

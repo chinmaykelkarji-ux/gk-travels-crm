@@ -13,3 +13,4 @@ export { KeyValue, type KV } from './KeyValue';
 export { Money } from './Money';
 export { EmptyState } from './EmptyState';
 export { RevealableId } from './RevealableId';
+export { FormShell, useServerFieldErrors } from './FormShell';

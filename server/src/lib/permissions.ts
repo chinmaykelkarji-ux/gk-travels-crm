@@ -14,6 +14,10 @@
 //                GST, reports; read-only trips/bookings/customers/vendors
 //   OPERATIONS — execution: trips (read), services (status), vendors,
 //                vouchers, tasks, messaging; no pricing/margins/payables
+//
+//   masters:*  — hotels, vehicles, drivers, activities (BOOKING, OPERATIONS);
+//   rates:write — hotel rate sheets and activity prices (BOOKING); rates and
+//                 prices are hidden from roles without commercial access
 // ============================================================
 
 import type { Response, NextFunction, RequestHandler } from 'express';
@@ -36,6 +40,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'documents:read', 'documents:write',
     'dashboard:read',
     'suppliers:read',
+    'masters:read', 'masters:write', 'rates:write',
     'ai:use',
   ],
 
@@ -54,6 +59,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'commissions:read', 'commissions:write',
     'documents:read', 'documents:write',
     'reports:read',
+    'masters:read',
   ],
 
   OPERATIONS: [
@@ -62,6 +68,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'customers:read',
     'bookings:read',
     'suppliers:read', 'suppliers:write',
+    'masters:read', 'masters:write',
     'trip-services:read', 'trip-services:status',
     'vouchers:write',
     'tasks:read', 'tasks:write',

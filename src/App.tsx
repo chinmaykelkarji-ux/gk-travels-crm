@@ -46,6 +46,11 @@ const QuoteEditorPage     = lazy(() => import('@/features/quotations/pages/Quote
 const QuoteDetailPage     = lazy(() => import('@/features/quotations/pages/QuoteDetailPage'));
 const ContractsPage       = lazy(() => import('@/features/contracts/pages/ContractsPage'));
 const ContractDetailPage  = lazy(() => import('@/features/contracts/pages/ContractDetailPage'));
+const SuppliersPage       = lazy(() => import('@/features/masters/pages/SuppliersPage'));
+const HotelsPage          = lazy(() => import('@/features/masters/pages/HotelsPage'));
+const HotelDetailPage     = lazy(() => import('@/features/masters/pages/HotelDetailPage'));
+const FleetPage           = lazy(() => import('@/features/masters/pages/FleetPage'));
+const ActivitiesPage      = lazy(() => import('@/features/masters/pages/ActivitiesPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -268,6 +273,11 @@ export default function App() {
                 <Route path="/operations"            element={<Operations />} />
                 <Route path="/operations-dashboard"  element={<RoleGuard allowed={['ADMIN', 'BOOKING', 'OPERATIONS']}><OperationsDashboard /></RoleGuard>} />
                 <Route path="/trips/:id/timeline"    element={<TripTimeline />} />
+                <Route path="/suppliers"             element={<SuppliersPage />} />
+                <Route path="/hotels"                element={<HotelsPage />} />
+                <Route path="/hotels/:id"            element={<HotelDetailPage />} />
+                <Route path="/fleet"                 element={<FleetPage />} />
+                <Route path="/activities"            element={<ActivitiesPage />} />
                 <Route path="/vendors"               element={<Vendors />} />
                 <Route path="/vendors/:id"           element={<VendorDetail />} />
                 <Route path="/quotations"            element={<Quotations />} />

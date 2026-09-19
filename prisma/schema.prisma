@@ -72,6 +72,12 @@ model Organization {
   salesQuoteItemRates    SalesQuoteItemRate[]
   bookingContracts       BookingContract[]
   paymentScheduleItems   PaymentScheduleItem[]
+  hotels                 Hotel[]
+  hotelRoomTypes         HotelRoomType[]
+  hotelRates             HotelRate[]
+  vehicles               Vehicle[]
+  drivers                Driver[]
+  activities             Activity[]
 
   @@map("organizations")
 }
@@ -91,6 +97,7 @@ model User {
   sessions          Session[]
   assignedLeads     Lead[]       @relation("LeadAssignee")
   assignedEnquiries Enquiry[]    @relation("EnquiryAssignee")
+  driverProfile     Driver?
 
   @@index([organizationId])
   @@map("users")
@@ -692,8 +699,23 @@ model Vendor {
   tripServices    TripService[]
   salesQuoteItems SalesQuoteItem[]
 
+  // v2 (Phase 3.1). "type" is kept in step for the classic Suppliers screen.
+  kind            VendorKind       @default(OTHER)
+  city            String?
+  state           String?
+  address         String?
+  pan             String?
+  phoneNormalized String?
+  creditDays      Int?
+  hotels          Hotel[]
+  vehicles        Vehicle[]
+  drivers         Driver[]
+  activities      Activity[]
+
   @@index([organizationId])
   @@index([type])
+  @@index([organizationId, kind])
+  @@index([organizationId, phoneNormalized])
   @@map("vendors")
 }
 
@@ -1802,4 +1824,195 @@ enum SalesQuoteStatus {
   ACCEPTED
   REJECTED
   EXPIRED
+}
+
+// ============================================================
+// OPERATIONS MASTERS (Phase 3.1): hotels, fleet, activities
+// ============================================================
+
+enum VendorKind {
+  DMC
+  AIR_CONSOLIDATOR
+  HOTEL
+  TRANSPORT
+  ACTIVITY
+  GUIDE
+  VISA
+  INSURANCE
+  RAIL_BUS_AGENT
+  OTHER
+}
+
+enum MealPlan {
+  EP
+  CP
+  MAP
+  AP
+  AI
+}
+
+enum VehicleOwnership {
+  OWNED
+  VENDOR
+}
+
+model Hotel {
+  id             String          @id @default(cuid())
+  organizationId String          @default("org_gktravels")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  name           String
+  city           String
+  state          String?
+  category       String?
+  vendorId       String?
+  vendor         Vendor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  address        String?
+  phone          String?
+  email          String?
+  gstin          String?
+  checkInTime    String?
+  checkOutTime   String?
+  amenities      Json            @default("[]")
+  notes          String?
+  isActive       Boolean         @default(true)
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  roomTypes      HotelRoomType[]
+
+  @@index([organizationId, city])
+  @@index([organizationId, name])
+  @@index([vendorId])
+  @@map("hotels")
+}
+
+model HotelRoomType {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  hotelId        String
+  hotel          Hotel        @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name           String
+  maxAdults      Int          @default(2)
+  maxChildren    Int          @default(1)
+  mealPlans      Json         @default("[\"CP\"]")
+  notes          String?
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  rates          HotelRate[]
+
+  @@unique([hotelId, name])
+  @@index([organizationId])
+  @@map("hotel_room_types")
+}
+
+// One season per row; seasons for the same room type and meal plan never
+// overlap (src/shared/calc/hotelRates.ts, enforced by the service).
+model HotelRate {
+  id             String        @id @default(cuid())
+  organizationId String        @default("org_gktravels")
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  roomTypeId     String
+  roomType       HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  mealPlan       MealPlan
+  validFrom      DateTime      @db.Date
+  validTo        DateTime      @db.Date
+  costPerNight   Decimal       @db.Decimal(12, 2)
+  sellPerNight   Decimal?      @db.Decimal(12, 2)
+  extraAdult     Decimal?      @db.Decimal(12, 2)
+  extraChild     Decimal?      @db.Decimal(12, 2)
+  gstRatePct     Decimal?      @db.Decimal(5, 2)
+  label          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([roomTypeId, mealPlan, validFrom])
+  @@map("hotel_rates")
+}
+
+model Vehicle {
+  id              String           @id @default(cuid())
+  organizationId  String           @default("org_gktravels")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  registrationNo  String
+  type            String
+  make            String?
+  model           String?
+  seats           Int              @default(4)
+  ownership       VehicleOwnership @default(OWNED)
+  vendorId        String?
+  vendor          Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  defaultDriverId String?
+  defaultDriver   Driver?          @relation("VehicleDefaultDriver", fields: [defaultDriverId], references: [id], onDelete: SetNull)
+  insuranceExpiry DateTime?        @db.Date
+  permitExpiry    DateTime?        @db.Date
+  fitnessExpiry   DateTime?        @db.Date
+  pucExpiry       DateTime?        @db.Date
+  notes           String?
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([organizationId, registrationNo])
+  @@index([vendorId])
+  @@map("vehicles")
+}
+
+model Driver {
+  id                 String       @id @default(cuid())
+  organizationId     String       @default("org_gktravels")
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  name               String
+  phone              String
+  phoneNormalized    String?
+  altPhone           String?
+  vendorId           String?
+  vendor             Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  // App login for the driver view (role DRIVER); one user per driver.
+  userId             String?      @unique
+  user               User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  licenceNo          String?
+  licenceExpiry      DateTime?    @db.Date
+  languages          Json         @default("[]")
+  address            String?
+  emergencyContact   String?
+  notes              String?
+  isActive           Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  defaultForVehicles Vehicle[]    @relation("VehicleDefaultDriver")
+
+  @@index([organizationId, phoneNormalized])
+  @@index([vendorId])
+  @@map("drivers")
+}
+
+model Activity {
+  id              String       @id @default(cuid())
+  organizationId  String       @default("org_gktravels")
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  name            String
+  city            String
+  category        String?
+  vendorId        String?
+  vendor          Vendor?      @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  durationMinutes Int?
+  description     String?
+  inclusions      String?
+  costAdult       Decimal?     @db.Decimal(12, 2)
+  costChild       Decimal?     @db.Decimal(12, 2)
+  sellAdult       Decimal?     @db.Decimal(12, 2)
+  sellChild       Decimal?     @db.Decimal(12, 2)
+  minPax          Int?
+  maxPax          Int?
+  notes           String?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, city])
+  @@index([vendorId])
+  @@map("activities")
 }
