@@ -135,13 +135,17 @@ describe.skipIf(!hasTestDb)('job runner', () => {
 
     const activeOrgs = await prisma.organization.count({ where: { isActive: true } });
     const first = await jobs!.runTick({ budgetMs: 15_000 });
-    expect(first.systemJobsEnqueued).toBe(activeOrgs * 4); // scheduler.rules + outbox.dispatch + identity.encrypt-legacy + legacy.bookings-import per organisation
+    expect(first.systemJobsEnqueued).toBe(activeOrgs * 5); // scheduler.rules + outbox.dispatch + identity.encrypt-legacy + legacy.bookings-import + tasks.sweep per organisation
     const second = await jobs!.runTick({ budgetMs: 15_000 });
     expect(second.systemJobsEnqueued).toBe(0);          // same windows → no duplicates
 
     const sched = await prisma.job.findFirstOrThrow({ where: { type: 'scheduler.rules' } });
     expect(sched.status).toBe('SUCCEEDED');
     expect(sched.result).toMatchObject({ paymentReminders: 1 });
+    // The task engine's sweep raised the balance task for the same trip.
+    const sweepJob = await prisma.job.findFirstOrThrow({ where: { type: 'tasks.sweep' } });
+    expect(sweepJob.status).toBe('SUCCEEDED');
+    expect(await prisma.task.count({ where: { tripId: 'GK-2026-0001', ruleCode: 'BALANCE_DUE' } })).toBe(1);
     const events = await prisma.outboxEvent.findMany();
     expect(events.map(e => e.eventType)).toContain('PAYMENT_REMINDER_WHATSAPP');
     // Dispatch ran too: WhatsApp is not configured, so delivery is logged as FAILED, never thrown.

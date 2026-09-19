@@ -55,6 +55,8 @@ const TicketsPage         = lazy(() => import('@/features/tickets/pages/TicketsP
 const TicketDetailPage    = lazy(() => import('@/features/tickets/pages/TicketDetailPage'));
 const TripsPage           = lazy(() => import('@/features/trips/pages/TripsPage'));
 const TripWorkspacePage   = lazy(() => import('@/features/trips/pages/TripWorkspacePage'));
+const TodayPage           = lazy(() => import('@/features/tasks/pages/TodayPage'));
+const TaskRulesPage       = lazy(() => import('@/features/tasks/pages/TaskRulesPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -330,6 +332,8 @@ export default function App() {
                 <Route path="/gst-reports"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><GstReports /></RoleGuard>} />
                 <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
                 <Route path="/daily-ops"             element={<DailyOps />} />
+                <Route path="/today"                 element={<TodayPage />} />
+                <Route path="/settings/task-rules"   element={<TaskRulesPage />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />

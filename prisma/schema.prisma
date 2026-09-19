@@ -45,6 +45,7 @@ model Organization {
   itinerarys            Itinerary[]
   itineraryDays         ItineraryDay[]
   itineraryItems        ItineraryItem[]
+  taskRules             TaskRule[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -105,6 +106,7 @@ model User {
   sessions          Session[]
   assignedLeads     Lead[]       @relation("LeadAssignee")
   assignedEnquiries Enquiry[]    @relation("EnquiryAssignee")
+  assignedTasks     Task[]       @relation("TaskAssignee")
   driverProfile     Driver?
   opsTrips          Trip[]       @relation("TripOpsOwner")
 
@@ -616,29 +618,67 @@ model FinancialTransaction {
 }
 
 model Task {
-  organizationId String       @default("org_gktravels")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  id             String       @id
-  title          String
-  description    String?
-  priority       String       @default("medium")
-  status         String       @default("pending")
-  tripId         String?
-  bookingId      String?
-  customerId     String?
-  dueDate        String?
-  assignedTo     String?
-  completedDate  String?
-  createdDate    String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  trip           Trip?        @relation(fields: [tripId], references: [id])
+  organizationId   String       @default("org_gktravels")
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  id               String       @id
+  title            String
+  description      String?
+  priority         String       @default("medium")
+  status           String       @default("pending")
+  tripId           String?
+  bookingId        String?
+  customerId       String?
+  dueDate          String?
+  assignedTo       String?
+  completedDate    String?
+  createdDate      String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  trip             Trip?        @relation(fields: [tripId], references: [id])
+  // Phase 3.6 task engine. source RULE tasks carry ruleCode + a stable
+  // ruleKey (one task per key, ever); MANUAL tasks are typed by people.
+  source           String       @default("MANUAL")
+  ruleCode         String?
+  ruleKey          String?
+  entityType       String?
+  entityId         String?
+  dueAt            DateTime?
+  snoozedUntil     DateTime?
+  assignedToUserId String?
+  assignee         User?        @relation("TaskAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  /// Set when a person assigned the task; the engine then stops following the trip owner.
+  assignedByUserId String?
+  completedAt      DateTime?
+  completedById    String?
+  autoClosedAt     DateTime?
+  closeReason      String?
 
+  @@unique([organizationId, ruleKey])
   @@index([organizationId])
   @@index([tripId])
   @@index([status, dueDate])
+  @@index([status, dueAt])
   @@index([assignedTo])
+  @@index([assignedToUserId])
   @@map("tasks")
+}
+
+// Task engine settings: one row per rule the organisation has changed
+// (missing rows use the defaults in calc/taskRules.ts).
+model TaskRule {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  enabled        Boolean      @default(true)
+  params         Json         @default("{}")
+  updatedById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("task_rules")
 }
 
 model ActivityLog {

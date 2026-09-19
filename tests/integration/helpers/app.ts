@@ -33,6 +33,7 @@ export function as(role: Role) {
     get:    (path: string) => agent.get(path).set('Cookie', cookie),
     post:   (path: string, body?: unknown) => agent.post(path).set('Cookie', cookie).send(body as object),
     put:    (path: string, body?: unknown) => agent.put(path).set('Cookie', cookie).send(body as object),
+    patch:  (path: string, body?: unknown) => agent.patch(path).set('Cookie', cookie).send(body as object),
     delete: (path: string) => agent.delete(path).set('Cookie', cookie),
   };
 }

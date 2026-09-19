@@ -125,7 +125,7 @@ describe.skipIf(!hasTestDb)('travellers v2', () => {
     expect(links.map(l => l.travellerId)).toEqual([a.id]);
   });
 
-  it('passport alerts list expiring passports with upcoming trips; the scheduler raises one task per problem', async () => {
+  it('passport alerts list expiring passports with upcoming trips; the task engine raises one task per problem', async () => {
     const c = await customer();
     await seedTrip('GK-2026-0001', { customerId: c.id, customer: 'Asha Rao', destination: 'Bali', departure: iso(20), status: 'confirmed' });
     await seedTrip('GK-2026-0002', { customerId: c.id, destination: 'Goa', departure: iso(-10), status: 'completed' });
@@ -141,19 +141,16 @@ describe.skipIf(!hasTestDb)('travellers v2', () => {
     const s = alerts.body.find((a: { id: string }) => a.id === short.id);
     expect(s.upcomingTrips).toEqual([expect.objectContaining({ id: 'GK-2026-0001', status: 'INSUFFICIENT' })]);
 
-    const { runSchedulerRules } = await import('../../server/src/workers/schedulerWorker');
-    const { processOutboxBatch } = await import('../../server/src/workers/outboxWorker');
+    // The task engine (Phase 3.6) raises one task per problem; a sweep is idempotent.
+    const { sweep } = await import('../../server/src/modules/tasks/engine');
     const { runWithContext } = await import('../../server/src/core/requestContext');
-    const summary = await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => runSchedulerRules());
-    expect(summary.passportAlerts).toBe(1);
-    await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => processOutboxBatch());
-    const tasks = await prisma.task.findMany({ where: { tripId: 'GK-2026-0001' } });
+    await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => sweep());
+    // (The seeded trip also carries a balance, so the balance rule raises its own task.)
+    const tasks = await prisma.task.findMany({ where: { tripId: 'GK-2026-0001', ruleCode: 'PASSPORT_VALIDITY' } });
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].title).toMatch(/Passport/);
-    expect(tasks[0].customerId).toBe(c.id);
-    // Idempotent: a second pass adds nothing.
-    await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => runSchedulerRules());
-    await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => processOutboxBatch());
-    expect(await prisma.task.count({ where: { tripId: 'GK-2026-0001' } })).toBe(1);
+    expect(tasks[0]).toMatchObject({ source: 'RULE', ruleCode: 'PASSPORT_VALIDITY', customerId: c.id, entityId: short.id });
+    expect(tasks[0].title).toMatch(/Passport validity short/);
+    await runWithContext({ organizationId: 'org_gktravels', source: 'SYSTEM' }, () => sweep());
+    expect(await prisma.task.count({ where: { tripId: 'GK-2026-0001', ruleCode: 'PASSPORT_VALIDITY' } })).toBe(1);
   });
 });
