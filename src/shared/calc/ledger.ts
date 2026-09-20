@@ -25,6 +25,7 @@ export const ACCOUNTS: AccountDef[] = [
   { code: '1000', name: 'Cash in hand', type: 'ASSET', group: 'Money', description: 'Notes and coins in the office cash box.' },
   { code: '1010', name: 'Bank account', type: 'ASSET', group: 'Money', description: 'The current account money is received into and paid from.' },
   { code: '1020', name: 'Payment gateway holding', type: 'ASSET', group: 'Money', description: 'Card / UPI collections the gateway has not settled into the bank yet.' },
+  { code: '1030', name: 'Unsorted receipts', type: 'ASSET', group: 'Money', description: 'Money from the classic screens where the payment method was not recorded. Move it to cash or bank once identified.' },
   { code: '1100', name: 'Customer dues (receivable)', type: 'ASSET', group: 'Customers', description: 'What customers still owe on invoices and booking schedules.' },
   { code: '1200', name: 'Advances to suppliers', type: 'ASSET', group: 'Suppliers', description: 'Money paid to a hotel, transporter or consolidator before their bill arrives.' },
   { code: '1300', name: 'Input GST', type: 'ASSET', group: 'Tax', description: 'GST charged by suppliers that may be claimed as input credit — verify with CA.' },
@@ -33,6 +34,7 @@ export const ACCOUNTS: AccountDef[] = [
   { code: '2100', name: 'Customer advances', type: 'LIABILITY', group: 'Customers', description: 'Money received before the tour is delivered; it becomes income when the trip is invoiced.' },
   { code: '2200', name: 'Output GST payable', type: 'LIABILITY', group: 'Tax', description: 'GST charged to customers and owed to the government — verify with CA.' },
   { code: '2210', name: 'TCS payable', type: 'LIABILITY', group: 'Tax', description: 'Tax collected at source on overseas tour packages — verify with CA.' },
+  { code: '2400', name: 'Staff reimbursements', type: 'LIABILITY', group: 'Office', description: "Money staff spent from their own pocket on the trip or the office, waiting to be paid back." },
   { code: '2300', name: 'Salaries payable', type: 'LIABILITY', group: 'Office', description: 'Salaries earned by staff and not yet paid.' },
   // Income
   { code: '4000', name: 'Tour package sales', type: 'INCOME', group: 'Income', description: 'Package and group tour billing, excluding GST.' },
@@ -56,6 +58,43 @@ export const ACCOUNTS: AccountDef[] = [
 ];
 export const ACCOUNT_BY_CODE = new Map(ACCOUNTS.map(a => [a.code, a]));
 export const accountName = (code: string) => ACCOUNT_BY_CODE.get(code)?.name ?? code;
+
+/** Which expense account a supplier bill lands in, by what it was for. */
+export const EXPENSE_ACCOUNT: Record<string, string> = {
+  HOTEL: '5000', TRANSPORT: '5010', TICKET: '5020', ACTIVITY: '5030', OTHER_TRIP: '5040', OFFICE: '6020',
+};
+/** Where money paid out comes from. Cheques and transfers leave the bank. */
+export const MONEY_ACCOUNT: Record<string, string> = {
+  CASH: '1000', UPI: '1010', BANK_TRANSFER: '1010', CHEQUE: '1010', CARD: '1020', GATEWAY: '1020', OTHER: '1030',
+};
+
+/** Aging buckets for what is owed, oldest money first. */
+export const AGING_BUCKETS = [
+  { key: 'current', label: 'Not due yet', from: -3650, to: 0 },
+  { key: '1-30', label: '1–30 days', from: 1, to: 30 },
+  { key: '31-60', label: '31–60 days', from: 31, to: 60 },
+  { key: '61-90', label: '61–90 days', from: 61, to: 90 },
+  { key: '90+', label: 'Over 90 days', from: 91, to: 36500 },
+] as const;
+export type AgingKey = typeof AGING_BUCKETS[number]['key'];
+
+/** Days overdue → which bucket the amount belongs in. */
+export function agingBucket(daysOverdue: number): AgingKey {
+  for (const b of AGING_BUCKETS) if (daysOverdue >= b.from && daysOverdue <= b.to) return b.key;
+  return '90+';
+}
+
+export interface AgingRow { daysOverdue: number; outstandingPaise: number }
+/** Totals per bucket for a payables or receivables board. */
+export function agingSummary(rows: AgingRow[]) {
+  const totals = Object.fromEntries(AGING_BUCKETS.map(b => [b.key, 0])) as Record<AgingKey, number>;
+  for (const r of rows) totals[agingBucket(r.daysOverdue)] += r.outstandingPaise;
+  return {
+    buckets: AGING_BUCKETS.map(b => ({ key: b.key, label: b.label, amountPaise: totals[b.key] })),
+    totalPaise: sumPaise(Object.values(totals)),
+    overduePaise: sumPaise(AGING_BUCKETS.filter(b => b.key !== 'current').map(b => totals[b.key])),
+  };
+}
 
 // ── Posting ───────────────────────────────────────────────────
 

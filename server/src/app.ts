@@ -60,6 +60,7 @@ import { tasksRouter as tasksV2Router, taskRulesRouter } from './routes/v2/tasks
 import driverRouter          from './routes/v2/driver.js';
 import ledgerRouter          from './routes/v2/ledger.js';
 import receiptsRouter        from './routes/v2/receipts.js';
+import payablesRouter        from './routes/v2/payables.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -170,6 +171,7 @@ app.use('/api/v2/task-rules', taskRulesRouter);
 app.use('/api/v2/driver',     driverRouter);
 app.use('/api/v2/ledger',     ledgerRouter);
 app.use('/api/v2/receipts',   receiptsRouter);
+app.use('/api/v2/payables',   payablesRouter);
 if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
 app.use('/api/jobs',          jobsRouter);
 

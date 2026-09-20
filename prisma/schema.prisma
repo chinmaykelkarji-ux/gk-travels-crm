@@ -50,6 +50,8 @@ model Organization {
   ledgerTransactions    LedgerTransaction[]
   ledgerLines           LedgerLine[]
   customerReceipts      CustomerReceipt[]
+  vendorBills           VendorBill[]
+  vendorBillPayments    VendorPaymentV2[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -466,6 +468,8 @@ model Trip {
   tickets            Ticket[]
   ledgerEntries      LedgerTransaction[]
   receipts           CustomerReceipt[]
+  vendorBills        VendorBill[]
+  vendorPaymentsV2   VendorPaymentV2[]
 
   @@index([organizationId])
   @@index([status])
@@ -791,6 +795,8 @@ model Vendor {
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
   ledgerEntries      LedgerTransaction[]
+  bills              VendorBill[]
+  billPayments       VendorPaymentV2[]
 
   @@index([organizationId])
   @@index([type])
@@ -1851,6 +1857,7 @@ model BookingContract {
   tickets            Ticket[]
   ledgerEntries      LedgerTransaction[]
   receipts           CustomerReceipt[]
+  vendorBills        VendorBill[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -2330,6 +2337,79 @@ model ActivityBooking {
   @@index([tripId])
   @@index([organizationId, date])
   @@map("activity_bookings")
+}
+
+// What a supplier has charged (hotel, transporter, consolidator, activity
+// provider) and the money paid against it. A payment with no bill is an
+// advance and sits in "Advances to suppliers" until a bill arrives.
+model VendorBill {
+  id                  String            @id
+  organizationId      String            @default("org_gktravels")
+  organization        Organization      @relation(fields: [organizationId], references: [id])
+  vendorId            String
+  vendor              Vendor            @relation(fields: [vendorId], references: [id])
+  billNumber          String
+  billDate            DateTime          @db.Date
+  dueDate             DateTime?         @db.Date
+  /// HOTEL / TRANSPORT / TICKET / ACTIVITY / OTHER_TRIP / OFFICE — decides the expense account.
+  category            String
+  amount              Decimal           @db.Decimal(12, 2)
+  gstAmount           Decimal           @default(0) @db.Decimal(12, 2)
+  status              String            @default("OPEN")
+  tripId              String?
+  trip                Trip?             @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  contractId          String?
+  contract            BookingContract?  @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  description         String?
+  notes               String?
+  documentId          String?
+  ledgerTransactionId String?           @unique
+  cancelledAt         DateTime?
+  cancelReason        String?
+  /// Set when the row came from the classic vendor payables screen.
+  legacyPayableId     String?
+  createdById         String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  payments            VendorPaymentV2[]
+
+  @@unique([organizationId, legacyPayableId])
+  @@index([organizationId, billDate])
+  @@index([vendorId])
+  @@index([tripId])
+  @@index([status])
+  @@map("vendor_bills")
+}
+
+model VendorPaymentV2 {
+  id                  String       @id
+  organizationId      String       @default("org_gktravels")
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  vendorId            String
+  vendor              Vendor       @relation(fields: [vendorId], references: [id])
+  billId              String?
+  bill                VendorBill?  @relation(fields: [billId], references: [id], onDelete: SetNull)
+  tripId              String?
+  trip                Trip?        @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  amount              Decimal      @db.Decimal(12, 2)
+  mode                String
+  paidAt              DateTime     @db.Date
+  reference           String?
+  notes               String?
+  status              String       @default("POSTED")
+  ledgerTransactionId String?      @unique
+  cancelledAt         DateTime?
+  cancelReason        String?
+  legacyPaymentId     String?
+  createdById         String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([organizationId, legacyPaymentId])
+  @@index([organizationId, paidAt])
+  @@index([vendorId])
+  @@index([billId])
+  @@map("vendor_bill_payments")
 }
 
 // Money received from (or refunded to) a customer. Held against the family

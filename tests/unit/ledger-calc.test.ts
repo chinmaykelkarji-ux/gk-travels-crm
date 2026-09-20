@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ACCOUNTS, ACCOUNT_BY_CODE, ACCOUNT_TYPES, checkLines, naturalBalance, profitAndLoss, reverseLines, trialBalance, withRunningBalance,
+  ACCOUNTS, ACCOUNT_BY_CODE, ACCOUNT_TYPES, agingBucket, agingSummary, checkLines, EXPENSE_ACCOUNT, MONEY_ACCOUNT,
+  naturalBalance, profitAndLoss, reverseLines, trialBalance, withRunningBalance,
 } from '../../src/shared/calc/ledger';
 
 describe('chart of accounts', () => {
@@ -80,5 +81,38 @@ describe('balances', () => {
       { debitPaise: 50_00, creditPaise: 0 },
     ]);
     expect(out.map(r => r.balancePaise)).toEqual([1_500_00, 1_300_00, 1_350_00]);
+  });
+});
+
+describe('supplier money', () => {
+  it('every bill category and payment method points at an account that exists', () => {
+    for (const [category, code] of Object.entries(EXPENSE_ACCOUNT)) {
+      expect(ACCOUNT_BY_CODE.get(code), category).toBeDefined();
+      expect(ACCOUNT_BY_CODE.get(code)!.type, category).toBe('EXPENSE');
+    }
+    for (const [mode, code] of Object.entries(MONEY_ACCOUNT)) {
+      expect(ACCOUNT_BY_CODE.get(code), mode).toBeDefined();
+      expect(ACCOUNT_BY_CODE.get(code)!.type, mode).toBe('ASSET');
+    }
+  });
+  it('buckets money by how late it is', () => {
+    expect(agingBucket(0)).toBe('current');
+    expect(agingBucket(-5)).toBe('current');
+    expect(agingBucket(1)).toBe('1-30');
+    expect(agingBucket(30)).toBe('1-30');
+    expect(agingBucket(31)).toBe('31-60');
+    expect(agingBucket(75)).toBe('61-90');
+    expect(agingBucket(400)).toBe('90+');
+  });
+  it('totals each bucket and says how much is late', () => {
+    const s = agingSummary([
+      { daysOverdue: 0, outstandingPaise: 5_000_00 },
+      { daysOverdue: 12, outstandingPaise: 2_000_00 },
+      { daysOverdue: 45, outstandingPaise: 20_000_00 },
+      { daysOverdue: 120, outstandingPaise: 10_000_00 },
+    ]);
+    expect(s.buckets.map(b => [b.key, b.amountPaise])).toEqual([['current', 5_000_00], ['1-30', 2_000_00], ['31-60', 20_000_00], ['61-90', 0], ['90+', 10_000_00]]);
+    expect(s.totalPaise).toBe(37_000_00);
+    expect(s.overduePaise).toBe(32_000_00);
   });
 });
