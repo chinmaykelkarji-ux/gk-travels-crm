@@ -35,7 +35,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   'Hotel', 'HotelRoomType', 'HotelRate', 'Vehicle', 'Driver', 'Activity',
   'HotelBooking', 'VehicleAssignment', 'ActivityBooking',
   'Ticket', 'TicketSegment', 'TicketPassenger', 'TripPickupPoint', 'TaskRule',
-  'LedgerAccount', 'LedgerTransaction', 'LedgerLine',
+  'LedgerAccount', 'LedgerTransaction', 'LedgerLine', 'CustomerReceipt',
 ]);
 
 const WHERE_OPS = new Set([

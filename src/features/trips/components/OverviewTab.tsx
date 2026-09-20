@@ -42,7 +42,7 @@ export function OverviewTab({ ws }: { ws: TripWorkspace }) {
             <li key={p.id} className="py-2 flex flex-wrap items-start justify-between gap-2 text-sm">
               <div><Link to={`/contracts/${p.id}`} className="font-medium text-indigo-700 hover:underline">{p.partyName ?? 'Whole group'}</Link> <span className="text-xs text-slate-500">{p.contractNumber} · {p.adults + p.children + p.infants} pax · {p.travellers} named</span>{p.status === 'CANCELLED' && <StatusPill tone="danger" className="ml-2">cancelled</StatusPill>}</div>
               <div className="text-right"><Money value={p.totalAmount} />
-                <div className="text-xs text-slate-500">{p.paymentTracking === 'TOUR' ? 'Receipts are on the tour for now' : `Balance ₹${(p.payments.balance ?? 0).toLocaleString('en-IN')}`}</div>
+                <div className="text-xs text-slate-500">Paid ₹{p.received.toLocaleString('en-IN')} · balance ₹{p.payments.balance.toLocaleString('en-IN')}</div>
                 <div className="text-xs text-slate-500">{p.schedule.map(s => `${s.label} ₹${s.amount.toLocaleString('en-IN')} by ${fmtDate(s.dueDate)}`).join(' · ')}</div>
               </div>
             </li>

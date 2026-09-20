@@ -71,12 +71,13 @@ describe.skipIf(!hasTestDb)('booking contracts v2', () => {
     expect(trip.services).toHaveLength(3);
     expect(trip.travellers.find(t => t.travellerId === travellers[0].id)?.contractId).toBe(k.id);
     expect(trip.travellers.find(t => t.travellerId === travellers[1].id)?.contractId).toBe(s.id);
-    // Receipts are recorded on the tour until per-party payments exist: no paid status, no false reminders.
-    await prisma.trip.update({ where: { id: k.tripId }, data: { paidAmount: 10000 } });
+    // Each family's money is its own: a receipt for the Kelkars leaves the Shah balance untouched.
+    expect((await as('ACCOUNTS').post('/api/v2/receipts', { contractId: k.id, amount: 10000, mode: 'CASH', receivedAt: iso(0) })).status).toBe(201);
     const kd = (await as('BOOKING').get(`/api/v2/contracts/${k.id}`)).body;
-    expect(kd).toMatchObject({ paymentTracking: 'TOUR', received: null, payments: { paid: null, balance: null, next: null } });
-    expect(kd.schedule.every((x: { status: string }) => x.status === 'NOT_TRACKED')).toBe(true);
-    expect((await as('BOOKING').get('/api/v2/contracts/payments-due?days=90')).body).toEqual([]);
+    expect(kd).toMatchObject({ received: 10000, payments: { paid: 10000, balance: k.totalAmount - 10000 } });
+    expect((await as('BOOKING').get(`/api/v2/contracts/${s.id}`)).body).toMatchObject({ received: 0, payments: { paid: 0, balance: s.totalAmount } });
+    const due = (await as('BOOKING').get('/api/v2/contracts/payments-due?days=90')).body;
+    expect([...new Set(due.map((d: { contractId: string }) => d.contractId))].sort()).toEqual([k.id, s.id].sort());
   });
 
   it('schedule edits must add up to the total and stay ordered; cancelling the only booking cancels the trip', async () => {
@@ -90,8 +91,8 @@ describe.skipIf(!hasTestDb)('booking contracts v2', () => {
     expect(ok.body.schedule).toHaveLength(3);
     expect((await as('OPERATIONS').put(`/api/v2/contracts/${id}/schedule`, { items: [] })).status).toBe(403);
 
-    // Money received on the trip flows into instalment states.
-    await prisma.trip.update({ where: { id: ok.body.tripId }, data: { paidAmount: 12000 } });
+    // Money received from the family flows into instalment states.
+    expect((await as('ACCOUNTS').post('/api/v2/receipts', { contractId: id, amount: 12000, mode: 'UPI', receivedAt: iso(0) })).status).toBe(201);
     const paid = (await as('BOOKING').get(`/api/v2/contracts/${id}`)).body;
     expect(paid.schedule.map((s: { status: string; paidAmount: number }) => [s.status, s.paidAmount])).toEqual([['PAID', 5000], ['PARTIAL', 7000], ['UPCOMING', 0]]);
     expect(paid.payments).toMatchObject({ paid: 12000, balance: 21600 });

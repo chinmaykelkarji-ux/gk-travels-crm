@@ -44,7 +44,7 @@ export interface TripWorkspace {
   };
   readiness: { stage: TripStage; checks: Check[]; transitions: { to: TripStage; allowed: boolean; blockers: Check[]; warnings: Check[] }[] };
   money: { totalPayable: number | null; paid: number | null; balance: number | null; quotedCost?: number | null; grossMargin?: number | null; marginPct?: number | null; bookedCost?: number; bookedSell?: number };
-  parties: { id: string; contractNumber: string; partyName: string | null; status: string; adults: number; children: number; infants: number; totalAmount: number; schedule: Instalment[]; payments: { total: number; paid: number | null; balance: number | null }; paymentTracking: 'CONTRACT' | 'TOUR'; travellers: number }[];
+  parties: { id: string; contractNumber: string; partyName: string | null; status: string; adults: number; children: number; infants: number; totalAmount: number; schedule: Instalment[]; payments: { total: number; paid: number; balance: number }; received: number; travellers: number }[];
   pickupPoints: { id: string; seq: number; name: string; address: string | null; landmark: string | null; pickupAt: string | null; pickupLocal: string | null; contactName: string | null; contactPhone: string | null; mapUrl: string | null; notes: string | null; travellers: number }[];
   travellers: { linkId: string; travellerId: string; name: string; role: string; phone: string | null; gender: string | null; dateOfBirth: string | null; contractId: string | null; partyName: string | null; pickupPointId: string | null; passportStatus: PassportStatus }[];
   hotels: HotelBookingRow[]; vehicles: VehicleDutyRow[]; activities: ActivityBookingRow[]; tickets: Ticket[];

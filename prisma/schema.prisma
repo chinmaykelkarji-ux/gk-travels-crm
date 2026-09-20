@@ -49,6 +49,7 @@ model Organization {
   ledgerAccounts        LedgerAccount[]
   ledgerTransactions    LedgerTransaction[]
   ledgerLines           LedgerLine[]
+  customerReceipts      CustomerReceipt[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -309,6 +310,7 @@ model Customer {
   contracts     BookingContract[]
   tickets       Ticket[]
   ledgerEntries LedgerTransaction[]
+  receipts      CustomerReceipt[]
 
   @@index([organizationId])
   @@index([phone])
@@ -463,6 +465,7 @@ model Trip {
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
   ledgerEntries      LedgerTransaction[]
+  receipts           CustomerReceipt[]
 
   @@index([organizationId])
   @@index([status])
@@ -1847,6 +1850,7 @@ model BookingContract {
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
   ledgerEntries      LedgerTransaction[]
+  receipts           CustomerReceipt[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -2326,6 +2330,60 @@ model ActivityBooking {
   @@index([tripId])
   @@index([organizationId, date])
   @@map("activity_bookings")
+}
+
+// Money received from (or refunded to) a customer. Held against the family
+// party's booking contract where there is one, so several families on one
+// tour keep separate balances. Every row has a ledger posting; cancelling
+// reverses the posting and keeps the row.
+enum ReceiptKind {
+  RECEIPT
+  REFUND
+}
+
+enum ReceiptMode {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+  GATEWAY
+  /// Classic rows whose method was never recorded; they sit in "Unsorted receipts" until someone says where the money went.
+  OTHER
+}
+
+model CustomerReceipt {
+  id                  String           @id
+  organizationId      String           @default("org_gktravels")
+  organization        Organization     @relation(fields: [organizationId], references: [id])
+  kind                ReceiptKind      @default(RECEIPT)
+  status              String           @default("POSTED")
+  contractId          String?
+  contract            BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  tripId              String?
+  trip                Trip?            @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  customerId          String?
+  customer            Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  amount              Decimal          @db.Decimal(12, 2)
+  mode                ReceiptMode
+  receivedAt          DateTime         @db.Date
+  reference           String?
+  notes               String?
+  ledgerTransactionId String?          @unique
+  cancelledAt         DateTime?
+  cancelReason        String?
+  /// Set when the row came from the classic payments table, so the import never doubles up.
+  legacyPaymentId     String?
+  createdById         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@unique([organizationId, legacyPaymentId])
+  @@index([organizationId, receivedAt])
+  @@index([contractId])
+  @@index([tripId])
+  @@index([customerId])
+  @@map("customer_receipts")
 }
 
 // ============================================================

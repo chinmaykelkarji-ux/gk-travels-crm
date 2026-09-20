@@ -12,6 +12,7 @@ import { audit } from '../../core/audit.js';
 import { nextDisplayId } from '../../core/numbering.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { defaultSchedule, validateSchedule, allocatePayments, scheduleSummary } from '../../../../src/shared/calc/schedule.js';
+import { sumPaise, toPaise, toRupees } from '../../../../src/shared/calc/money.js';
 import { CONTRACT_TRANSITIONS, type ContractListQuery, type ContractStatus, type ScheduleInput } from '../../../../src/shared/contracts/contracts.js';
 import { registerOnAccepted, type OnAccepted } from '../quotations/service.js';
 import { tripChanged } from '../operations/hooks.js';
@@ -104,27 +105,22 @@ registerOnAccepted(createContractsFromQuote);
 
 // ── Reads ─────────────────────────────────────────────────────
 
-const INCLUDE = { customer: { select: { id: true, name: true, phone: true } }, salesQuote: { select: { id: true, quoteNumber: true, title: true } }, schedule: { orderBy: { seq: 'asc' as const } }, trip: { select: { id: true, status: true, stage: true, paidAmount: true, balanceDue: true, _count: { select: { contracts: true } } } } } as const;
+const INCLUDE = { customer: { select: { id: true, name: true, phone: true } }, salesQuote: { select: { id: true, quoteNumber: true, title: true } }, schedule: { orderBy: { seq: 'asc' as const } }, receipts: { where: { status: 'POSTED' }, select: { kind: true, amount: true } }, trip: { select: { id: true, status: true, stage: true, paidAmount: true, balanceDue: true } } } as const;
 type Row = Prisma.BookingContractGetPayload<{ include: typeof INCLUDE }>;
 
 function toDto(c: Row) {
   const items = c.schedule.map(s => ({ id: s.id, seq: s.seq, label: s.label, dueDate: s.dueDate.toISOString().slice(0, 10), amount: n(s.amount) }));
-  // Receipts are recorded against the trip until per-party payments exist
-  // (Finance phase). With several parties on one trip nobody can say which
-  // family paid, so the party schedule shows amounts without a paid status.
-  const paymentTracking: 'CONTRACT' | 'TOUR' = (c.trip?._count.contracts ?? 1) > 1 ? 'TOUR' : 'CONTRACT';
-  const received = paymentTracking === 'CONTRACT' ? n(c.trip?.paidAmount) : null;
-  const states = allocatePayments(items, received ?? 0, today());
-  const computed = scheduleSummary(states);
-  const schedule = paymentTracking === 'CONTRACT' ? states : states.map(s => ({ ...s, paidAmount: 0, status: 'NOT_TRACKED' as const }));
-  const summary = paymentTracking === 'CONTRACT' ? computed : { ...computed, paid: null, balance: null, overdue: 0, next: null };
+  // What this family has actually paid: its own receipts, less any refund.
+  const received = toRupees(sumPaise(c.receipts.map(r => (r.kind === 'REFUND' ? -toPaise(Number(r.amount)) : toPaise(Number(r.amount))))));
+  const schedule = allocatePayments(items, received, today());
+  const summary = scheduleSummary(schedule);
   return {
     id: c.id, contractNumber: c.contractNumber, status: c.status, salesQuoteId: c.salesQuoteId, quote: c.salesQuote, enquiryId: c.enquiryId, customer: c.customer,
     partyId: c.partyId, partyName: c.partyName, tripId: c.tripId, trip: c.trip, destination: c.destination,
     departureDate: isoDay(c.departureDate), returnDate: isoDay(c.returnDate), adults: c.adults, children: c.children, infants: c.infants, travellerIds: Array.isArray(c.travellerIds) ? c.travellerIds : [],
     subtotal: n(c.subtotal), discountAmount: n(c.discountAmount), taxAmount: n(c.taxAmount), totalAmount: n(c.totalAmount), costAmount: n(c.costAmount), gstMode: c.gstMode, gstRate: n(c.gstRate),
     paymentPolicy: c.paymentPolicy, cancellationPolicy: c.cancellationPolicy, notes: c.notes, cancelledAt: c.cancelledAt, cancellationReason: c.cancellationReason, completedAt: c.completedAt, createdAt: c.createdAt,
-    schedule, received, payments: summary, paymentTracking,
+    schedule, received, payments: summary,
   };
 }
 export type ContractDto = ReturnType<typeof toDto>;
@@ -224,6 +220,6 @@ export async function paymentsDue(days = 7) {
   const rows = await prisma.bookingContract.findMany({ where: { status: { in: ['CONFIRMED', 'IN_PROGRESS'] } }, include: INCLUDE });
   const horizon = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
   // Party schedules on shared trips have no paid status yet; they would only produce false reminders.
-  return rows.map(toDto).filter(c => c.paymentTracking === 'CONTRACT').flatMap(c => c.schedule.filter(s => s.status !== 'PAID' && s.dueDate <= horizon).map(s => ({ contractId: c.id, contractNumber: c.contractNumber, customer: c.customer, tripId: c.tripId, destination: c.destination, ...s, outstanding: s.amount - s.paidAmount })))
+  return rows.map(toDto).flatMap(c => c.schedule.filter(s => s.status !== 'PAID' && s.dueDate <= horizon).map(s => ({ contractId: c.id, contractNumber: c.contractNumber, customer: c.customer, tripId: c.tripId, destination: c.destination, ...s, outstanding: s.amount - s.paidAmount })))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }

@@ -203,7 +203,7 @@ export async function getWorkspace(id: string, role: string | undefined) {
     },
     parties: parties.map(c => ({
       id: c.id, contractNumber: c.contractNumber, partyName: c.partyName, status: c.status, adults: c.adults, children: c.children, infants: c.infants,
-      totalAmount: c.totalAmount, schedule: c.schedule, payments: c.payments, paymentTracking: c.paymentTracking, customer: c.customer,
+      totalAmount: c.totalAmount, schedule: c.schedule, payments: c.payments, received: c.received, customer: c.customer,
       travellers: t.travellers.filter(x => x.contractId === c.id).length,
     })),
     pickupPoints: t.pickupPoints.map(p => ({ id: p.id, seq: p.seq, name: p.name, address: p.address, landmark: p.landmark, pickupAt: p.pickupAt?.toISOString() ?? null, pickupLocal: toIstLocal(p.pickupAt), contactName: p.contactName, contactPhone: p.contactPhone, mapUrl: p.mapUrl, notes: p.notes, travellers: p._count.travellers })),

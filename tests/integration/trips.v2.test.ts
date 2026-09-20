@@ -115,7 +115,7 @@ describe.skipIf(!hasTestDb)('trip control centre v2', () => {
     const acc = accRes.body;
     const tripId = (await prisma.bookingContract.findFirstOrThrow({ where: { id: acc.bookings[0] } })).tripId!;
     const ws = (await as('BOOKING').get(`/api/v2/trips/${tripId}`)).body;
-    expect(ws.parties.map((p: { partyName: string; travellers: number; paymentTracking: string }) => [p.partyName, p.travellers, p.paymentTracking])).toEqual([['Kulkarni', 1, 'TOUR'], ['Deshpande', 1, 'TOUR']]);
+    expect(ws.parties.map((p: { partyName: string; travellers: number; received: number }) => [p.partyName, p.travellers, p.received])).toEqual([['Kulkarni', 1, 0], ['Deshpande', 1, 0]]);
     expect(ws.money.totalPayable).toBe(24000);
 
     const [kul, desh] = ws.parties;
@@ -124,7 +124,7 @@ describe.skipIf(!hasTestDb)('trip control centre v2', () => {
     expect(after.travellers.map((t: { travellerId: string }) => t.travellerId)).toEqual([t1.id]);
     expect(after.trip).toMatchObject({ pax: 1, stage: 'CONFIRMING' });
     expect(after.money.totalPayable).toBe(12000);
-    expect(after.parties.find((p: { id: string }) => p.id === kul.id).paymentTracking).toBe('TOUR'); // still two contracts on the trip
+    expect(after.parties.find((p: { id: string }) => p.id === kul.id).payments.balance).toBe(12000); // its own balance, not the tour's
 
     await as('BOOKING').post(`/api/v2/contracts/${kul.id}/status`, { status: 'CANCELLED', reason: 'Tour called off' });
     expect(await prisma.trip.findUniqueOrThrow({ where: { id: tripId } })).toMatchObject({ stage: 'CANCELLED', status: 'cancelled' });
