@@ -58,6 +58,7 @@ const TripWorkspacePage   = lazy(() => import('@/features/trips/pages/TripWorksp
 const TodayPage           = lazy(() => import('@/features/tasks/pages/TodayPage'));
 const TaskRulesPage       = lazy(() => import('@/features/tasks/pages/TaskRulesPage'));
 const DriverPage          = lazy(() => import('@/features/driver/pages/DriverPage'));
+const BooksPage           = lazy(() => import('@/features/ledger/pages/BooksPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -340,6 +341,7 @@ export default function App() {
                 <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
                 <Route path="/daily-ops"             element={<DailyOps />} />
                 <Route path="/today"                 element={<TodayPage />} />
+                <Route path="/books"                 element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><BooksPage /></RoleGuard>} />
                 <Route path="/settings/task-rules"   element={<TaskRulesPage />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />

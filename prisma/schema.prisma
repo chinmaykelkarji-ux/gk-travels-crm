@@ -46,6 +46,9 @@ model Organization {
   itineraryDays         ItineraryDay[]
   itineraryItems        ItineraryItem[]
   taskRules             TaskRule[]
+  ledgerAccounts        LedgerAccount[]
+  ledgerTransactions    LedgerTransaction[]
+  ledgerLines           LedgerLine[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -300,11 +303,12 @@ model Customer {
   relationships        CustomerRelationship[] @relation("RelationshipFrom")
   relatedTo            CustomerRelationship[] @relation("RelationshipTo")
 
-  enquiries   Enquiry[]
-  salesQuotes SalesQuote[]
-  travellers  Traveller[]
-  contracts   BookingContract[]
-  tickets     Ticket[]
+  enquiries     Enquiry[]
+  salesQuotes   SalesQuote[]
+  travellers    Traveller[]
+  contracts     BookingContract[]
+  tickets       Ticket[]
+  ledgerEntries LedgerTransaction[]
 
   @@index([organizationId])
   @@index([phone])
@@ -458,6 +462,7 @@ model Trip {
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
+  ledgerEntries      LedgerTransaction[]
 
   @@index([organizationId])
   @@index([status])
@@ -782,6 +787,7 @@ model Vendor {
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
+  ledgerEntries      LedgerTransaction[]
 
   @@index([organizationId])
   @@index([type])
@@ -1840,6 +1846,7 @@ model BookingContract {
   vehicleAssignments VehicleAssignment[]
   activityBookings   ActivityBooking[]
   tickets            Ticket[]
+  ledgerEntries      LedgerTransaction[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -2319,6 +2326,101 @@ model ActivityBooking {
   @@index([tripId])
   @@index([organizationId, date])
   @@map("activity_bookings")
+}
+
+// ============================================================
+// LEDGER (Phase 4): double-entry books. Nothing posted is edited or
+// deleted; a mistake is corrected with a reversal that mirrors it.
+// ============================================================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
+model LedgerAccount {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  type           AccountType
+  group          String       @default("Other")
+  description    String?
+  /// Seeded accounts the posting services refer to by code; they cannot be deleted.
+  isSystem       Boolean      @default(true)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  lines          LedgerLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("ledger_accounts")
+}
+
+model LedgerTransaction {
+  id             String             @id @default(cuid())
+  organizationId String             @default("org_gktravels")
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  displayNumber  String
+  date           DateTime           @db.Date
+  narration      String
+  /// What caused the posting: receipt, refund, vendor_bill, vendor_payment, expense, invoice, manual, reversal.
+  sourceType     String
+  sourceId       String?
+  tripId         String?
+  trip           Trip?              @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  contractId     String?
+  contract       BookingContract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  customerId     String?
+  customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vendorId       String?
+  vendor         Vendor?            @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  reversalOfId   String?            @unique
+  reversalOf     LedgerTransaction? @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy     LedgerTransaction? @relation("LedgerReversal")
+  reversalReason String?
+  postedAt       DateTime           @default(now())
+  createdById    String?
+  source         String             @default("HUMAN")
+  lines          LedgerLine[]
+
+  @@unique([organizationId, displayNumber])
+  @@index([organizationId, date])
+  @@index([sourceType, sourceId])
+  @@index([tripId])
+  @@index([contractId])
+  @@map("ledger_transactions")
+}
+
+model LedgerLine {
+  id             String            @id @default(cuid())
+  organizationId String            @default("org_gktravels")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  transactionId  String
+  transaction    LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        LedgerAccount     @relation(fields: [accountId], references: [id])
+  /// Account code at posting time, so a renamed account still reads correctly.
+  accountCode    String
+  seq            Int               @default(0)
+  debit          Decimal           @default(0) @db.Decimal(14, 2)
+  credit         Decimal           @default(0) @db.Decimal(14, 2)
+  description    String?
+  customerId     String?
+  vendorId       String?
+  tripId         String?
+  contractId     String?
+  createdAt      DateTime          @default(now())
+
+  @@index([organizationId, accountCode])
+  @@index([transactionId])
+  @@index([tripId])
+  @@map("ledger_lines")
 }
 
 // ============================================================

@@ -58,6 +58,7 @@ import tripsV2Router          from './routes/v2/trips.js';
 import itinerariesV2Router    from './routes/v2/itineraries.js';
 import { tasksRouter as tasksV2Router, taskRulesRouter } from './routes/v2/tasks.js';
 import driverRouter          from './routes/v2/driver.js';
+import ledgerRouter          from './routes/v2/ledger.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -166,6 +167,7 @@ app.use('/api/v2/itineraries', itinerariesV2Router);
 app.use('/api/v2/tasks',      tasksV2Router);
 app.use('/api/v2/task-rules', taskRulesRouter);
 app.use('/api/v2/driver',     driverRouter);
+app.use('/api/v2/ledger',     ledgerRouter);
 if (getStorage()?.kind === 'local') app.use('/api/v2/storage/local', storageLocalRouter);
 app.use('/api/jobs',          jobsRouter);
 

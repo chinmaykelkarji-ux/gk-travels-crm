@@ -62,7 +62,18 @@ Branch `claude/travelos-phase-3-41f57b` (fast-forward of the Phase 0–2 branch)
 | 3.7 | Driver view (`/driver`, `/api/v2/driver`): new DRIVER role with only `driver:duties`; `requireAuth` fences a DRIVER session to the driver API, `/api/v2/me` and sign-out (everything else, including `/api/data/all` and the team list, is 403) and the SPA sends drivers straight to `/driver` without loading office data. A DRIVER login is linked to one driver record by an admin (Fleet → driver → "Driver app login"; DRIVER-role accounts only, one driver per login, audited, unlinking revokes the sessions). The driver sees only their confirmed duties (next 12 h back onwards; last 30 days tab): time, pickup → drop, vehicle, passenger count, customer-safe instructions, group contact, and — on the tour's departure day — the pickup points with times, map, contact and the names to collect. Never amounts, suppliers, identity numbers, dates of birth, e-mails or office notes. Mobile-first navy-and-gold page with one big next-step button (Acknowledged → On the way → Arrived → On board → Completed, `canMoveDriverStatus`), "Report a problem" (note required → urgent task for the trip's ops owner), completion marks the duty completed; every change audited with the driver as actor | ☑ | (this commit) | Migration `20260919030000_driver_role` adds the enum value. User management can create Driver logins. Office sees the driver status on the Transport tab |
 
 ## Phase 4 — Finance
-☐ Ledger with reversals · ☐ Customer payments vs schedules · ☐ Vendor invoices/payments · ☐ Expenses · ☐ Tax rules · ☐ Profitability view · ☐ Dashboard/analytics from ledger
+In progress on `claude/travelos-phase-3-41f57b`.
+
+| # | Module | Status | Commit | Notes |
+|---|--------|--------|--------|-------|
+| 4.0 | Ledger core (`/api/v2/ledger`, **Books** page): chart of accounts seeded from `calc/ledger.ts` (money, customers, suppliers, tax, income, trip costs, office, owner — tax accounts carry "verify with CA"), balanced double-entry postings with JV display numbers, `postEntry()` for other finance modules to call inside their own transaction, manual journal entries, reversal-only corrections (a reversal cannot be reversed; the original keeps its number and is marked), trial balance with the difference shown, period profit, account statement with opening balance and running total, journal filtered by account/trip/party/source/text. Every posting audited | ☑ | (this commit) | Migration `20260920000000_ledger` (reverse SQL in header). Nothing posts to the ledger yet — receipts, supplier bills and expenses follow in 4.1–4.3 |
+| 4.1 | Customer receipts per party (replacing `paymentTracking: TOUR`), allocation to schedule instalments, refunds | ☐ | | |
+| 4.2 | Supplier bills and payments, payables aging | ☐ | | |
+| 4.3 | Expenses with receipts | ☐ | | |
+| 4.4 | Tax rules (`TaxRule`) replacing hard-coded GST/TCS; invoice/CN/DN wired to them | ☐ | | |
+| 4.5 | Trip profitability and receivables/payables aging read models | ☐ | | |
+| 4.6 | Dashboard and analytics from the ledger; cached finance columns retired | ☐ | | |
+| 4.7 | Automation: overdue payment → task, reminder draft | ☐ | | |
 
 ## Phase 5 — Document intelligence
 ☐ Document centre · ☐ `AiProvider` + Claude + Gemini adapters · ☐ Evaluation harness (owner's PDFs in `eval-docs/`) · ☐ Pipeline: classify → extract → match → review → apply
