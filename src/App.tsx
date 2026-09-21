@@ -64,6 +64,7 @@ const PayablesPage        = lazy(() => import('@/features/payables/pages/Payable
 const ExpensesPage        = lazy(() => import('@/features/expenses/pages/ExpensesPage'));
 const TaxRatesPage        = lazy(() => import('@/features/tax/pages/TaxRulesPage'));
 const AiStatusPage        = lazy(() => import('@/features/ai/pages/AiStatusPage'));
+const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
@@ -355,6 +356,7 @@ export default function App() {
                 <Route path="/settings/task-rules"   element={<TaskRulesPage />} />
                 <Route path="/settings/tax-rates"    element={<TaxRatesPage />} />
                 <Route path="/settings/ai"           element={<AiStatusPage />} />
+                <Route path="/documents"             element={<DocumentsPage />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />

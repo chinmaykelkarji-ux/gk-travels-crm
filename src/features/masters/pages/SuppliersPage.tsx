@@ -12,6 +12,7 @@ import { mastersApi, type Vendor } from '../api';
 import { useVendors, useMasterMutation } from '../hooks';
 import { VendorForm } from '../components/VendorForm';
 import { ImportDrawer } from '../components/ImportDrawer';
+import { DocumentsPanel } from '@/features/documents/components/DocumentsPanel';
 
 export default function SuppliersPage() {
   const { can } = usePermissions();
@@ -57,6 +58,11 @@ export default function SuppliersPage() {
         {editing && <VendorForm initial={editing === 'new' ? undefined : editing} canEditBank={can('finance:read')} submitting={save.isPending} error={save.error as ApiError | null}
           onCancel={() => setEditing(null)}
           onSubmit={body => save.mutate({ id: editing === 'new' ? undefined : editing.id, body }, { onSuccess: v => { toast.success(editing === 'new' ? 'Vendor added' : 'Vendor saved', v.name); setEditing(null); save.reset(); } })} />}
+        {editing && editing !== 'new' && (
+          <div className="mt-4">
+            <DocumentsPanel entityType="vendor" entityId={editing.id} title="Agreements, rate sheets and bills" />
+          </div>
+        )}
       </Drawer>
       <ImportDrawer kind="vendors" open={importing} onOpenChange={setImporting} />
     </div>

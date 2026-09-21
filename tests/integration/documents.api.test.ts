@@ -117,6 +117,60 @@ describe.skipIf(!hasTestDb)('documents v2', () => {
     expect(await prisma.document.count()).toBe(1);
   });
 
+  it('a newer copy is a version: the old one is kept with its links, and only the newest is listed', async () => {
+    const first = await uploadAndComplete();
+    const v2 = await as('OPERATIONS').post(`/api/v2/documents/${first.id}/versions`, {
+      fileName: 'IndiGo-6E123-reissued.pdf', mimeType: 'application/pdf', sizeBytes: PDF.length,
+    });
+    expect(v2.status, JSON.stringify(v2.body)).toBe(201);
+    expect(v2.body.document).toMatchObject({ version: 2, previousVersionId: first.id, status: 'PENDING_UPLOAD' });
+    expect(v2.body.document.links.map((l: { entityType: string; entityId: string }) => `${l.entityType}:${l.entityId}`)).toEqual(['trip:GK-2026-0001']);
+    await request(app!).put(v2.body.upload.url).set('content-type', 'application/pdf').send(PDF);
+    expect((await as('OPERATIONS').post(`/api/v2/documents/${v2.body.document.id}/complete`)).status).toBe(200);
+
+    const listed = (await as('OPERATIONS').get('/api/v2/documents?entityType=trip&entityId=GK-2026-0001')).body;
+    expect(listed.items.map((d: { id: string }) => d.id)).toEqual([v2.body.document.id]);
+    const all = (await as('OPERATIONS').get('/api/v2/documents?entityType=trip&entityId=GK-2026-0001&includeSuperseded=true')).body;
+    expect(all.items).toHaveLength(2);
+
+    // The original stays reachable, and cannot be deleted while a newer copy points at it.
+    const old = await as('OPERATIONS').get(`/api/v2/documents/${first.id}`);
+    expect(old.status).toBe(200);
+    expect(old.body.versions.map((v: { version: number }) => v.version)).toEqual([2]);
+    const del = await as('OPERATIONS').delete(`/api/v2/documents/${first.id}`);
+    expect(del.status).toBe(409);
+  });
+
+  it('details can be corrected, and an identity document can never be marked customer-visible', async () => {
+    const doc = await uploadAndComplete();
+    const patched = await as('OPERATIONS').patch(`/api/v2/documents/${doc.id}`, {
+      title: 'Kashi group — outbound ticket', expiresAt: '2027-03-31', notes: 'Group PNR for 42 yatris', customerVisible: true,
+    });
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+    expect(patched.body).toMatchObject({ title: 'Kashi group — outbound ticket', customerVisible: true, notes: 'Group PNR for 42 yatris' });
+    expect(patched.body.expiresAt.slice(0, 10)).toBe('2027-03-31');
+    expect(await prisma.activityLog.count({ where: { action: 'document_updated', entityId: doc.id } })).toBe(1);
+
+    // Turning it into a passport takes the visibility away with it.
+    const asPassport = await as('OPERATIONS').patch(`/api/v2/documents/${doc.id}`, { type: 'PASSPORT' });
+    expect(asPassport.body).toMatchObject({ type: 'PASSPORT', customerVisible: false });
+    expect((await as('OPERATIONS').patch(`/api/v2/documents/${doc.id}`, { customerVisible: true })).body.customerVisible).toBe(false);
+    expect((await as('OPERATIONS').patch(`/api/v2/documents/${doc.id}`, {})).status).toBe(400);
+  });
+
+  it('finds a document by its words, and lists what expires before a date', async () => {
+    const doc = await uploadAndComplete();
+    await as('OPERATIONS').patch(`/api/v2/documents/${doc.id}`, { title: 'Yatri passport copy', type: 'PASSPORT', expiresAt: '2026-12-31' });
+    const other = await register('OPERATIONS', { fileName: 'hotel.pdf', type: 'HOTEL_CONFIRMATION', title: 'Ganga View confirmation', links: [] });
+
+    const found = (await as('OPERATIONS').get('/api/v2/documents?q=passport')).body;
+    expect(found.items.map((d: { id: string }) => d.id)).toEqual([doc.id]);
+    const expiring = (await as('OPERATIONS').get('/api/v2/documents?expiringBefore=2027-01-31')).body;
+    expect(expiring.items.map((d: { id: string }) => d.id)).toEqual([doc.id]);
+    expect((await as('OPERATIONS').get('/api/v2/documents?expiringBefore=2026-06-30')).body.items).toHaveLength(0);
+    expect((await as('OPERATIONS').get('/api/v2/documents?type=HOTEL_CONFIRMATION')).body.items.map((d: { id: string }) => d.id)).toEqual([other.body.document.id]);
+  });
+
   it('says honestly what the machine can do today, to anyone who may see documents, and never shows a key', async () => {
     const saved = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;

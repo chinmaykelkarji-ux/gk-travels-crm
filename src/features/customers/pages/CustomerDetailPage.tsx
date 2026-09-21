@@ -9,6 +9,7 @@ import { usePermissions } from '@/shared/hooks/usePermissions';
 import { fmtDate, fmtDateTime } from '@/shared/utils/date';
 import { formatPhone } from '@/shared/calc/phone';
 import { ApiError } from '@/lib/api';
+import { DocumentsPanel } from '@/features/documents/components/DocumentsPanel';
 import { useCustomer, useUpdateCustomer, useDeleteCustomer, useMergeCustomers, useRelationships } from '../hooks';
 import { CustomerForm } from '../components/CustomerForm';
 import { CustomerPicker } from '../components/CustomerPicker';
@@ -323,12 +324,9 @@ function TravellersTab({ data, canWrite }: { data: Customer360; canWrite: boolea
   );
 }
 
+/** The same document centre as everywhere else, filtered to this customer. */
 function DocumentsTab({ data }: { data: Customer360 }) {
-  return <DataTable dense rows={data.documents} rowKey={d => d.linkId} emptyTitle="No documents attached" emptyHint="Upload passports, IDs and receipts from the Documents module." columns={[
-    { key: 'title', header: 'Document' }, { key: 'type', header: 'Type', render: d => <StatusPill>{d.type.toLowerCase()}</StatusPill> },
-    { key: 'status', header: 'Status', render: d => d.status.toLowerCase() }, { key: 'expiresAt', header: 'Expires', render: d => fmtDate(d.expiresAt) },
-    { key: 'createdAt', header: 'Added', render: d => fmtDate(d.createdAt) },
-  ]} />;
+  return <DocumentsPanel entityType="customer" entityId={data.customer.id} title="Documents for this customer" />;
 }
 
 function ActivityTab({ data }: { data: Customer360 }) {
