@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { requirePermission } from '../lib/permissions.js';
 import {
+  presentInvoice,
   createInvoice,
   updateInvoice,
   cancelInvoice,
@@ -20,7 +21,7 @@ const include = { items: { orderBy: { sortOrder: 'asc' as const } } };
 
 router.get('/', requirePermission('finance:read'), async (_req, res) => {
   try {
-    res.json(await prisma.invoice.findMany({ orderBy: { createdAt: 'desc' }, include }));
+    res.json((await prisma.invoice.findMany({ orderBy: { createdAt: 'desc' }, include })).map(presentInvoice));
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
@@ -59,7 +60,7 @@ router.get('/:id', requirePermission('finance:read'), async (req, res) => {
   try {
     const inv = await prisma.invoice.findUnique({ where: { id: String(req.params.id) }, include });
     if (!inv) { res.status(404).json({ error: 'Not found' }); return; }
-    res.json(inv);
+    res.json(presentInvoice(inv));
   } catch (err) { res.status(500).json({ error: String(err) }); }
 });
 
@@ -69,7 +70,7 @@ router.post('/', requirePermission('finance:write'), async (req: AuthRequest, re
   try {
     const input = { ...(req.body as CreateInvoiceInput), createdBy: req.userId };
     const invoice = await createInvoice(input);
-    res.status(201).json(invoice);
+    res.status(201).json(presentInvoice(invoice));
   } catch (err) {
     console.error('[invoices POST]', err);
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -82,7 +83,7 @@ router.put('/:id', requirePermission('finance:write'), async (req: AuthRequest, 
   try {
     const input = { ...(req.body as UpdateInvoiceInput), updatedBy: req.userId };
     const invoice = await updateInvoice(String(req.params.id), input);
-    res.json(invoice);
+    res.json(presentInvoice(invoice));
   } catch (err) {
     console.error('[invoices PUT]', err);
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
@@ -96,7 +97,7 @@ router.post('/:id/cancel', requirePermission('finance:write'), async (req: AuthR
     const { reason } = req.body as { reason: string };
     if (!reason) { res.status(400).json({ error: 'Cancellation reason is required' }); return; }
     const invoice = await cancelInvoice(String(req.params.id), reason, req.userId);
-    res.json(invoice);
+    res.json(presentInvoice(invoice));
   } catch (err) {
     console.error('[invoices cancel]', err);
     res.status(400).json({ error: err instanceof Error ? err.message : String(err) });

@@ -1333,6 +1333,13 @@ model Invoice {
   notes         String?
   termsAndConds String?
 
+  /// TCS collected on an overseas package, when the tax rule is switched on.
+  /// (The older money columns on this table are Float from the classic
+  /// screens; new ones are Decimal, as money should be.)
+  tcsRate    Decimal? @db.Decimal(5, 2)
+  tcsAmount  Decimal  @default(0) @db.Decimal(12, 2)
+  isOverseas Boolean  @default(false)
+
   // Source bookings/trips this invoice was generated from (locked once invoiced)
   bookingIds   Json    @default("[]")
   tripIds      Json    @default("[]")

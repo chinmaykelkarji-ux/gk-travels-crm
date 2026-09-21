@@ -12,6 +12,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logActivity, type DbClient } from '../lib/activity.js';
+import { postInvoice, postCreditNote, postDebitNote, reverseDocumentPostings } from '../modules/invoices/posting.js';
+import { tcsForInvoice } from '../modules/invoices/tcs.js';
 import { today } from '../../../src/shared/utils/date.js';
 import { calcReceivableFinance } from '../../../src/shared/utils/finance.js';
 import { uid } from '../../../src/shared/utils/id.js';
@@ -37,6 +39,14 @@ function round2(n: number): number {
 
 // One row per organisation (CompanySettings.organizationId is unique). The
 // original single-tenant row keeps its historical id "default".
+/**
+ * Decimal columns come back from Prisma as strings; the screens and the
+ * classic store expect numbers, like the rest of this table.
+ */
+export function presentInvoice<T extends { tcsAmount?: unknown; tcsRate?: unknown }>(inv: T): T {
+  return { ...inv, tcsAmount: Number(inv.tcsAmount ?? 0), tcsRate: inv.tcsRate === null || inv.tcsRate === undefined ? null : Number(inv.tcsRate) };
+}
+
 export async function getOrCreateCompanySettings(db: DbClient = prisma) {
   const organizationId = currentOrganizationId();
   return db.companySettings.upsert({
@@ -201,6 +211,9 @@ export async function createInvoice(input: CreateInvoiceInput) {
     const companyAddress = [settings.addressLine1, settings.addressLine2, settings.city, settings.state, settings.pincode]
       .filter(Boolean).join(', ') || null;
 
+    // TCS on an overseas package, when the tax rule says to charge it.
+    const tcs = await tcsForInvoice(tx, { customerId: input.customerId ?? null, tripIds, invoiceDate: input.invoiceDate, amount: totals.totalAmount });
+
     const id = `INV-${uid()}`;
     const invoice = await tx.invoice.create({
       data: {
@@ -227,7 +240,10 @@ export async function createInvoice(input: CreateInvoiceInput) {
         sgstAmount:        totals.sgstAmount,
         igstAmount:        totals.igstAmount,
         totalGstAmount:    totals.totalGstAmount,
-        totalAmount:       totals.totalAmount,
+        totalAmount:       totals.totalAmount + tcs.amount,
+        tcsRate:           tcs.rate,
+        tcsAmount:         tcs.amount,
+        isOverseas:        tcs.isOverseas,
         notes:             input.notes ?? null,
         termsAndConds:     input.termsAndConds ?? settings.invoiceTerms ?? null,
         bookingIds:        bookingIds as unknown as Prisma.InputJsonValue,
@@ -264,6 +280,14 @@ export async function createInvoice(input: CreateInvoiceInput) {
         include: { items: { orderBy: { sortOrder: 'asc' } } },
       });
     }
+
+    // The books: customer dues up, sales, GST and any TCS recognised, and
+    // money already received moved against this invoice.
+    await postInvoice(tx, {
+      id: finalInvoice.id, invoiceNumber, invoiceDate: input.invoiceDate, customerId: input.customerId ?? null, customerName: input.customerName,
+      taxableAmount: totals.taxableAmount, totalGstAmount: totals.totalGstAmount, totalAmount: totals.totalAmount + tcs.amount,
+      tcsAmount: tcs.amount, tripIds,
+    }, input.createdBy ?? null);
 
     await logActivity(tx, {
       action:      'invoice_created',
@@ -367,6 +391,7 @@ export async function updateInvoice(id: string, input: UpdateInvoiceInput) {
 }
 
 export async function cancelInvoice(id: string, reason: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['invoice', 'advance_adjust'], `Invoice cancelled: ${reason}`, userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findUniqueOrThrow({ where: { id } });
     const settings = await getOrCreateCompanySettings(tx);
@@ -423,6 +448,7 @@ export async function cancelInvoice(id: string, reason: string, userId?: string 
 // recently issued for its FY) and unlocks any bookings/trips it covered.
 // Blocked if GST-frozen or if Credit/Debit Notes were issued against it.
 export async function deleteInvoice(id: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['invoice', 'advance_adjust'], 'Invoice deleted', userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.invoice.findUniqueOrThrow({
       where:   { id },
@@ -546,6 +572,12 @@ export async function createCreditNote(input: CreateCreditNoteInput) {
       }
     }
 
+    // The books: the sale and its GST come back, and the customer owes less.
+    await postCreditNote(tx, {
+      id: creditNote.id, creditNoteNumber, creditNoteDate: input.date, customerId: invoice.customerId, customerName: invoice.customerName,
+      taxableAmount: totals.taxableAmount, totalGstAmount: totals.totalGstAmount, totalAmount: totals.totalAmount, invoiceId: invoice.id,
+    }, input.createdBy ?? null);
+
     await logActivity(tx, {
       action:      'credit_note_created',
       description: `Credit Note ${creditNoteNumber} issued against Invoice ${invoice.invoiceNumber} (₹${totals.totalAmount.toLocaleString('en-IN')}) — ${input.reason}`,
@@ -637,6 +669,7 @@ export async function updateCreditNote(id: string, input: UpdateCreditDebitNoteI
 }
 
 export async function cancelCreditNote(id: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['credit_note'], 'Credit note cancelled', userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.creditNote.findUniqueOrThrow({ where: { id } });
     const settings = await getOrCreateCompanySettings(tx);
@@ -677,6 +710,7 @@ export async function cancelCreditNote(id: string, userId?: string | null) {
 // first so the linked invoice's balance stays correct. Allowed regardless
 // of status (including CANCELLED).
 export async function deleteCreditNote(id: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['credit_note'], 'Credit note deleted', userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.creditNote.findUniqueOrThrow({ where: { id } });
     const settings = await getOrCreateCompanySettings(tx);
@@ -776,6 +810,12 @@ export async function createDebitNote(input: CreateDebitNoteInput) {
       }
     }
 
+    // The books: an extra charge on the same customer.
+    await postDebitNote(tx, {
+      id: debitNote.id, debitNoteNumber, debitNoteDate: input.date, customerId: invoice.customerId, customerName: invoice.customerName,
+      taxableAmount: totals.taxableAmount, totalGstAmount: totals.totalGstAmount, totalAmount: totals.totalAmount,
+    }, input.createdBy ?? null);
+
     await logActivity(tx, {
       action:      'debit_note_created',
       description: `Debit Note ${debitNoteNumber} issued against Invoice ${invoice.invoiceNumber} (₹${totals.totalAmount.toLocaleString('en-IN')}) — ${input.reason}`,
@@ -858,6 +898,7 @@ export async function updateDebitNote(id: string, input: UpdateCreditDebitNoteIn
 }
 
 export async function cancelDebitNote(id: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['debit_note'], 'Debit note cancelled', userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.debitNote.findUniqueOrThrow({ where: { id } });
     const settings = await getOrCreateCompanySettings(tx);
@@ -898,6 +939,7 @@ export async function cancelDebitNote(id: string, userId?: string | null) {
 // first so the linked invoice's balance stays correct. Allowed regardless
 // of status (including CANCELLED).
 export async function deleteDebitNote(id: string, userId?: string | null) {
+  await reverseDocumentPostings([id], ['debit_note'], 'Debit note deleted', userId);
   return prisma.$transaction(async (tx) => {
     const existing = await tx.debitNote.findUniqueOrThrow({ where: { id } });
     const settings = await getOrCreateCompanySettings(tx);

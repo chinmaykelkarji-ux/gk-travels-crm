@@ -111,6 +111,9 @@ export function InvoicePrintView({ invoice, companySettings, linkedTrip, receiva
             ) : (
               <tr><td style={{ padding: '3px 0', color: DOC_COLORS.textMedium }}>IGST @ 5%</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(invoice.igstAmount)}</td></tr>
             )}
+            {Number(invoice.tcsAmount ?? 0) > 0 && (
+              <tr><td style={{ padding: '3px 0', color: DOC_COLORS.textMedium }}>TCS @ {Number(invoice.tcsRate ?? 0)}%</td><td style={{ padding: '3px 0', textAlign: 'right' }}>{formatCurrency(Number(invoice.tcsAmount))}</td></tr>
+            )}
             <tr style={{ borderTop: `2px solid ${DOC_COLORS.primary}` }}>
               <td style={{ padding: '6px 0', fontWeight: 700, fontSize: 15, color: DOC_COLORS.primary }}>TOTAL AMOUNT</td>
               <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 700, fontSize: 15, color: DOC_COLORS.primary }}>{formatCurrency(invoice.totalAmount)}</td>

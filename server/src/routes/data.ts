@@ -17,7 +17,7 @@ import { hasPermission } from '../lib/permissions.js';
 import {
   redactTrip, redactBooking, redactVendor, redactCompanySettings, redactActivity,
 } from '../lib/redact.js';
-import { getOrCreateCompanySettings } from '../services/invoiceService.js';
+import { getOrCreateCompanySettings, presentInvoice } from '../services/invoiceService.js';
 import { presentCustomer, presentTraveller } from '../core/identity.js';
 
 const router = Router();
@@ -79,7 +79,7 @@ router.get('/all', requireAuth, async (req: AuthRequest, res) => {
       vouchers,
       receivables,
       communications,
-      invoices,
+      invoices: invoices.map(presentInvoice),
       creditNotes,
       debitNotes,
       companySettings: redactCompanySettings(companySettings, role),

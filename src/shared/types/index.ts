@@ -1013,6 +1013,11 @@ export interface Invoice {
   totalGstAmount:    number;
   totalAmount:       number;
 
+  /** TCS on an overseas package, when the tax rule is switched on. */
+  tcsRate?:          number | null;
+  tcsAmount?:        number;
+  isOverseas?:       boolean;
+
   notes?:            string | null;
   termsAndConds?:    string | null;
 
