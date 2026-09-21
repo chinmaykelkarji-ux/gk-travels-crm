@@ -78,4 +78,22 @@ describe.skipIf(!hasTestDb)('finance read models', () => {
     expect((await as('OPERATIONS').get('/api/v2/finance/trips/GK-2026-0001/profit')).status).toBe(403);
     expect((await as('OPERATIONS').get('/api/v2/finance/receivables')).status).toBe(403);
   });
+
+  it('the money page adds up the period from the books: billed, spent, in hand and owed both ways', async () => {
+    await seedVendor('VEN-2026-0001', { name: 'Ganga View Hotel' });
+    await as('ACCOUNTS').post('/api/invoices', invoice());                                     // 1,00,000 + 5,000 GST
+    await as('ACCOUNTS').post('/api/v2/receipts', { tripId: 'GK-2026-0001', amount: 60_000, mode: 'CASH', receivedAt: istToday() });
+    await as('ACCOUNTS').post('/api/v2/payables/bills', { vendorId: 'VEN-2026-0001', billNumber: 'GV/11', billDate: istToday(), category: 'HOTEL', amount: 31_500, gstAmount: 1_500, tripId: 'GK-2026-0001' });
+    await as('OPERATIONS').post('/api/v2/expenses', { date: istToday(), category: 'OFFICE', amount: 2_000, paidBy: 'CASH', description: 'Stationery' });
+
+    const s = (await as('ACCOUNTS').get(`/api/v2/finance/summary?from=${day(-30)}&to=${istToday()}`)).body;
+    expect(s).toMatchObject({ income: 100_000, expense: 32_000, profit: 68_000 });
+    expect(s.cashInHand).toBe(58_000);                       // 60,000 in, 2,000 out
+    expect(s.owedToUs).toBe(45_000);                         // 1,05,000 billed less 60,000 received
+    expect(s.owedBySupplier).toBe(31_500);
+    expect(s.tax).toMatchObject({ outputGst: 5_000, inputGst: 1_500, netGst: 3_500 });
+    expect(s.months.at(-1)).toMatchObject({ income: 100_000, expense: 32_000 });
+    expect(s.topTrips[0]).toMatchObject({ tripId: 'GK-2026-0001', billed: 100_000, cost: 30_000, margin: 70_000 });
+    expect((await as('BOOKING').get('/api/v2/finance/summary')).status).toBe(403);
+  });
 });

@@ -5,10 +5,18 @@ import { Router } from 'express';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.js';
 import { requireAnyPermission, requirePermission } from '../../lib/permissions.js';
 import * as svc from '../../modules/finance/service.js';
+import { istToday } from '../../../../src/shared/calc/istTime.js';
+import { financialYear, financialYearRange } from '../../../../src/shared/calc/tax.js';
 
 const router = Router();
 router.use(requireAuth);
 
+router.get('/summary', requirePermission('finance:read'), async (req, res) => {
+  const q = req.query as { from?: string; to?: string };
+  const to = q.to && /^\d{4}-\d{2}-\d{2}$/.test(q.to) ? q.to : istToday();
+  const from = q.from && /^\d{4}-\d{2}-\d{2}$/.test(q.from) ? q.from : financialYearRange(financialYear(to)).from;
+  res.json(await svc.moneySummary(from, to));
+});
 router.get('/receivables', requirePermission('finance:read'), async (_req, res) => { res.json(await svc.receivables()); });
 router.get('/trips/:id/profit', requireAnyPermission('finance:read', 'trips:write'), async (req: AuthRequest, res) => {
   res.json(await svc.profitForTrip(String(req.params.id)));

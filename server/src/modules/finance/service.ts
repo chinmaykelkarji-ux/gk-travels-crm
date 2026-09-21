@@ -12,6 +12,7 @@ import { istToday } from '../../../../src/shared/calc/istTime.js';
 import { sumPaise, toPaise, toRupees } from '../../../../src/shared/calc/money.js';
 import { agingSummary } from '../../../../src/shared/calc/ledger.js';
 import { ageInvoices, customerPosition, tripProfit, type InvoiceForAging } from '../../../../src/shared/calc/receivables.js';
+import { dayDate } from '../masters/common.js';
 
 const RECEIVABLE = '1100';
 const ADVANCES = '2100';
@@ -124,5 +125,86 @@ export async function profitForTrip(tripId: string) {
     margin: toRupees(p.marginPaise), marginPct: p.marginPct,
     received: toRupees(p.receivedPaise), balance: toRupees(p.balancePaise),
     costLines: p.costLines.map(l => ({ label: l.label, actual: toRupees(l.actualPaise), planned: toRupees(l.plannedPaise) })),
+  };
+}
+
+// ── The money summary ─────────────────────────────────────────
+
+const CASH = ['1000', '1010', '1020', '1030'];
+const EXPENSES = ['5000', '5010', '5020', '5030', '5040', '6000', '6010', '6020', '6030', '6040'];
+const PAYABLE = '2000';
+const OUTPUT_GST = '2200';
+const INPUT_GST = '1300';
+const TCS_PAYABLE = '2210';
+const STAFF_OWED = '2400';
+
+/** Month by month income and spending, from the ledger. */
+async function monthlySeries(from: string, to: string) {
+  const rows = await prisma.$queryRaw<{ month: string; code: string; debit: number; credit: number }[]>`
+    SELECT to_char(t."date", 'YYYY-MM') AS month, l."accountCode" AS code,
+           COALESCE(SUM(l."debit"), 0)::float8 AS debit, COALESCE(SUM(l."credit"), 0)::float8 AS credit
+    FROM "ledger_lines" l
+    JOIN "ledger_transactions" t ON t."id" = l."transactionId"
+    WHERE t."date" BETWEEN ${dayDate(from)!}::date AND ${dayDate(to)!}::date
+      AND l."accountCode" = ANY(${[...INCOME, ...EXPENSES]})
+    GROUP BY 1, 2
+    ORDER BY 1`;
+  const months = new Map<string, { month: string; incomePaise: number; expensePaise: number }>();
+  for (const r of rows) {
+    const m = months.get(r.month) ?? { month: r.month, incomePaise: 0, expensePaise: 0 };
+    if (INCOME.includes(r.code)) m.incomePaise += toPaise(r.credit) - toPaise(r.debit);
+    else m.expensePaise += toPaise(r.debit) - toPaise(r.credit);
+    months.set(r.month, m);
+  }
+  return [...months.values()].sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/**
+ * One page of numbers for the owner: what came in and went out over a
+ * period, what is in hand, what is owed both ways, and where the tax stands.
+ * Every figure is read from the ledger, so it agrees with the books.
+ */
+export async function moneySummary(from: string, to: string) {
+  const period: Prisma.LedgerLineWhereInput = { transaction: { date: { gte: dayDate(from)!, lte: dayDate(to)! } } };
+  const [income, expense, cash, dues, advances, payable, outputGst, inputGst, tcs, staffOwed, months] = await Promise.all([
+    netPaise({ ...period, accountCode: { in: INCOME } }, false),
+    netPaise({ ...period, accountCode: { in: EXPENSES } }),
+    netPaise({ accountCode: { in: CASH } }),
+    netPaise({ accountCode: RECEIVABLE }),
+    netPaise({ accountCode: ADVANCES }, false),
+    netPaise({ accountCode: PAYABLE }, false),
+    netPaise({ accountCode: OUTPUT_GST }, false),
+    netPaise({ accountCode: INPUT_GST }),
+    netPaise({ accountCode: TCS_PAYABLE }, false),
+    netPaise({ accountCode: STAFF_OWED }, false),
+    monthlySeries(from, to),
+  ]);
+
+  // The trips that made the most in the period, by what was billed less what it cost.
+  const tripRows = await prisma.ledgerLine.groupBy({
+    by: ['tripId'],
+    where: { ...period, tripId: { not: null }, accountCode: { in: [...INCOME, ...TRIP_COSTS] } },
+    _sum: { debit: true, credit: true },
+  });
+  const tripIds = tripRows.map(r => r.tripId!).filter(Boolean);
+  const trips = tripIds.length ? await prisma.trip.findMany({ where: { id: { in: tripIds } }, select: { id: true, tourName: true, destination: true } }) : [];
+  const tripName = new Map(trips.map(t => [t.id, t.tourName ?? t.destination]));
+  const byTrip = await Promise.all(tripIds.map(async id => {
+    const [billed, cost] = await Promise.all([
+      netPaise({ ...period, accountCode: { in: INCOME }, OR: [{ tripId: id }, { transaction: { tripId: id } }] }, false),
+      netPaise({ ...period, accountCode: { in: TRIP_COSTS }, OR: [{ tripId: id }, { transaction: { tripId: id } }] }),
+    ]);
+    return { tripId: id, label: tripName.get(id) ?? id, billed: toRupees(billed), cost: toRupees(cost), margin: toRupees(billed - cost) };
+  }));
+
+  return {
+    from, to,
+    income: toRupees(income), expense: toRupees(expense), profit: toRupees(income - expense),
+    cashInHand: toRupees(cash),
+    owedToUs: toRupees(Math.max(0, dues)), receivedNotBilled: toRupees(Math.max(0, advances)),
+    owedBySupplier: toRupees(Math.max(0, payable)), owedToStaff: toRupees(Math.max(0, staffOwed)),
+    tax: { outputGst: toRupees(outputGst), inputGst: toRupees(inputGst), netGst: toRupees(outputGst - inputGst), tcsPayable: toRupees(tcs) },
+    months: months.map(m => ({ month: m.month, income: toRupees(m.incomePaise), expense: toRupees(m.expensePaise), profit: toRupees(m.incomePaise - m.expensePaise) })),
+    topTrips: byTrip.sort((a, b) => b.margin - a.margin).slice(0, 8),
   };
 }

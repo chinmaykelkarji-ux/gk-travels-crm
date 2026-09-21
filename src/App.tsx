@@ -63,6 +63,7 @@ const ReceiptsPage        = lazy(() => import('@/features/receipts/pages/Receipt
 const PayablesPage        = lazy(() => import('@/features/payables/pages/PayablesPage'));
 const ExpensesPage        = lazy(() => import('@/features/expenses/pages/ExpensesPage'));
 const TaxRatesPage        = lazy(() => import('@/features/tax/pages/TaxRulesPage'));
+const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -345,6 +346,7 @@ export default function App() {
                 <Route path="/receivables"           element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><Receivables /></RoleGuard>} />
                 <Route path="/daily-ops"             element={<DailyOps />} />
                 <Route path="/today"                 element={<TodayPage />} />
+                <Route path="/money"                 element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><MoneyPage /></RoleGuard>} />
                 <Route path="/books"                 element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><BooksPage /></RoleGuard>} />
                 <Route path="/receipts"              element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><ReceiptsPage /></RoleGuard>} />
                 <Route path="/payables"              element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><PayablesPage /></RoleGuard>} />
