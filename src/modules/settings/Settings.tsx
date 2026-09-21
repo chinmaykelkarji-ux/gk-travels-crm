@@ -4,6 +4,7 @@ import {
   Users, Plus, Edit2, KeyRound, Shield, CheckCircle, XCircle,
   Building2, Save, FileSpreadsheet,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import ImportExportTab from './ImportExport';
 import { useStore } from '@/store';
 import { useAuth } from '@/backend/auth/AuthContext';
@@ -671,6 +672,13 @@ export default function Settings() {
       <div className="flex items-center gap-3">
         <h2 className="text-base font-bold text-gray-900 font-display">Settings</h2>
       </div>
+
+      {/* The v2 settings screens live on their own pages. */}
+      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link to="/settings/task-rules" className="text-indigo-700 hover:underline">Task rules</Link>
+        <Link to="/settings/tax-rates" className="text-indigo-700 hover:underline">Tax rates</Link>
+        <Link to="/settings/ai" className="text-indigo-700 hover:underline">Document intelligence</Link>
+      </nav>
 
       {/* User Management calls /api/users, which is ADMIN-only. Landing a
           non-admin on it by default shows an empty panel and a console 403,

@@ -117,6 +117,32 @@ describe.skipIf(!hasTestDb)('documents v2', () => {
     expect(await prisma.document.count()).toBe(1);
   });
 
+  it('says honestly what the machine can do today, to anyone who may see documents, and never shows a key', async () => {
+    const saved = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    const ai = await import('../../server/src/ai/index.js');
+    ai.resetAiProvider();
+    try {
+      const r = await as('OPERATIONS').get('/api/v2/ai/status');
+      expect(r.status).toBe(200);
+      expect(r.body.extraction).toMatchObject({ provider: 'claude', configured: false });
+      expect(r.body.extraction.hint).toContain('ANTHROPIC_API_KEY');
+      expect(r.body.storage.configured).toBe(true);       // local disk in tests
+      expect(r.body.ready).toBe(false);
+      expect(JSON.stringify(r.body)).not.toContain('sk-');
+
+      process.env.ANTHROPIC_API_KEY = 'test-key-not-used';
+      ai.resetAiProvider();
+      const on = await as('ACCOUNTS').get('/api/v2/ai/status');
+      expect(on.body).toMatchObject({ ready: true, extraction: { configured: true } });
+      expect(on.body.extraction.model).toMatch(/^claude-/);
+      expect(JSON.stringify(on.body)).not.toContain('test-key-not-used');
+    } finally {
+      if (saved === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved;
+      ai.resetAiProvider();
+    }
+  });
+
   it('reports "not configured" cleanly when no provider is available', async () => {
     const storage = await import('../../server/src/core/storage.js');
     const savedEnv = process.env.NODE_ENV;

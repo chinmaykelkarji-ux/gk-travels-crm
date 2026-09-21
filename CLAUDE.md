@@ -74,6 +74,7 @@ The integration suite refuses any non-local host and any database name without `
 - Branch for Phase 3 onward: `claude/travelos-phase-3-41f57b` (fast-forward of `claude/travelos-operating-system-581b62`, which holds Phases 0–2 up to `25d07f7b`). Nothing merges to `main`.
 - **Phase 0** audit ☑ · **Phase 1** platform core ☑ · **Phase 2** core CRM + sales ☑ (see `docs/travelos/PROGRESS.md`).
 - **Phase 3 — travel operations ☑** (3.0 identity protection · 3.1 masters + import · 3.2 hotel/vehicle/activity records · 3.3 tickets + classic import · 3.4 trip control centre · 3.5 itinerary v2 · 3.6 task engine · 3.7 driver view). Module detail in `docs/travelos/PROGRESS.md`.
-- **Phase 4 — finance ☑** (4.0 ledger · 4.1 customer receipts · 4.2 supplier bills · 4.3 expenses · 4.4 tax rates · 4.5 invoices in the books · 4.6 receivables + trip profit · 4.7 money page · 4.8 late money raises tasks). Module detail in `docs/travelos/PROGRESS.md`. The owner tested Phase 3 and said continue on 2026-09-20; **Phase 4 is at its checkpoint, waiting for the owner's manual test**.
-- Phases 5–9: not started. The owner tests manually at the end of each checkpoint.
+- **Phase 4 — finance ☑** (4.0 ledger · 4.1 customer receipts · 4.2 supplier bills · 4.3 expenses · 4.4 tax rates · 4.5 invoices in the books · 4.6 receivables + trip profit · 4.7 money page · 4.8 late money raises tasks). Module detail in `docs/travelos/PROGRESS.md`.
+- **Phase 5 — document intelligence: in progress** (5.0 AI provider interface + honest status ☑). The owner tested Phase 4 and said continue on 2026-09-21.
+- Phases 6–9: not started. The owner tests manually at the end of each checkpoint.
 - Task engine and driver view facts worth knowing: trip writes call `tripChanged()` (hooks: readiness, tasks); rule timings live in `task_rules`; a DRIVER session is fenced in `middleware/auth.ts`.
