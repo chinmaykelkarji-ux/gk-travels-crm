@@ -27,6 +27,7 @@ const MONEY_ACCOUNT: Record<ReceiptMode, string> = {
   CASH: '1000', UPI: '1010', BANK_TRANSFER: '1010', CHEQUE: '1010', CARD: '1020', GATEWAY: '1020', OTHER: '1030',
 };
 const ADVANCES = '2100';
+const RECEIVABLE = '1100';
 
 const INCLUDE = {
   contract: { select: { id: true, contractNumber: true, partyName: true, tripId: true, customerId: true, totalAmount: true } },
@@ -97,6 +98,16 @@ async function resolveRefs(db: DbClient, input: ReceiptInput) {
   return { contractId, tripId, customerId };
 }
 
+/** What is still owed on invoices already issued to this customer (or trip). */
+async function openDuesPaise(db: DbClient, refs: { tripId?: string | null; customerId?: string | null }): Promise<number> {
+  const where: Prisma.LedgerLineWhereInput = {
+    accountCode: RECEIVABLE,
+    ...(refs.tripId ? { OR: [{ tripId: refs.tripId }, { transaction: { tripId: refs.tripId } }] } : refs.customerId ? { OR: [{ customerId: refs.customerId }, { transaction: { customerId: refs.customerId } }] } : { id: '__none__' }),
+  };
+  const sums = await db.ledgerLine.aggregate({ where, _sum: { debit: true, credit: true } });
+  return Math.max(0, toPaise(Number(sums._sum.debit ?? 0)) - toPaise(Number(sums._sum.credit ?? 0)));
+}
+
 export async function createReceipt(input: ReceiptInput, actorId?: string | null) {
   const id = await prisma.$transaction(async tx => {
     const refs = await resolveRefs(tx, input);
@@ -112,9 +123,17 @@ export async function createReceipt(input: ReceiptInput, actorId?: string | null
     const who = refs.customerId ? await tx.customer.findUnique({ where: { id: refs.customerId }, select: { name: true } }) : null;
     const label = `${input.kind === 'REFUND' ? 'Refund to' : 'Received from'} ${who?.name ?? 'customer'}${refs.contractId ? ` (${refs.contractId})` : refs.tripId ? ` (${refs.tripId})` : ''}`;
     const money = MONEY_ACCOUNT[input.mode];
+    // Money pays off invoices already issued first; whatever is left is an advance.
+    const duesPaise = input.kind === 'REFUND' ? 0 : await openDuesPaise(tx, refs);
+    const againstDues = toRupees(Math.min(duesPaise, amountPaise));
+    const asAdvance = toRupees(amountPaise - toPaise(againstDues));
     const lines = input.kind === 'REFUND'
       ? [{ code: ADVANCES, debit: input.amount, description: label }, { code: money, credit: input.amount, description: RECEIPT_MODE_LABEL[input.mode] }]
-      : [{ code: money, debit: input.amount, description: RECEIPT_MODE_LABEL[input.mode] }, { code: ADVANCES, credit: input.amount, description: label }];
+      : [
+          { code: money, debit: input.amount, description: RECEIPT_MODE_LABEL[input.mode] },
+          ...(againstDues > 0 ? [{ code: RECEIVABLE, credit: againstDues, description: `${label} · against what is owed` }] : []),
+          ...(asAdvance > 0 ? [{ code: ADVANCES, credit: asAdvance, description: label }] : []),
+        ];
     const entry = await postEntry(tx, {
       date: input.receivedAt, narration: `${receiptId}: ${label}${input.reference ? ` · ${input.reference}` : ''}`,
       sourceType: input.kind === 'REFUND' ? 'refund' : 'receipt', sourceId: receiptId, ...refs, lines,

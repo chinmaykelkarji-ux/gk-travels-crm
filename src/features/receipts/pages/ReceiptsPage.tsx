@@ -12,10 +12,12 @@ import { RECEIPT_MODE_LABEL, ReceiptMode } from '@/shared/contracts/receipts';
 import { receiptsApi, type Receipt } from '../api';
 import { useDayBook, useReceipts, useReceiptMutation } from '../hooks';
 import { ReceiptForm } from '../components/ReceiptForm';
+import { ReceivablesTab } from '@/features/finance/components/ReceivablesTab';
 
 /** Money in and out, day by day: what was collected today and everything before it. */
 export default function ReceiptsPage() {
   const { can } = usePermissions();
+  const [tab, setTab] = useState<'money' | 'owed'>('money');
   const [day] = useState(istToday());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -54,7 +56,16 @@ export default function ReceiptsPage() {
           </div>
         ) : undefined} />
 
+      <nav className="px-5 flex gap-1 border-b border-slate-200 bg-white" role="tablist">
+        {([['money', 'Money in'], ['owed', 'Owed to us']] as const).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${tab === id ? 'border-indigo-600 text-slate-900 font-medium' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
+        ))}
+      </nav>
+
       <div className="px-5 py-4 space-y-4">
+        {tab === 'owed' && <ReceivablesTab />}
+        {tab === 'money' && <>
         <section className="bg-white border border-slate-200 rounded-md p-4">
           <h2 className="text-sm font-medium text-slate-800">Today, {fmtDate(day)}</h2>
           {book.isPending ? <p className="text-sm text-slate-500 mt-1">Loading…</p> : (
@@ -78,6 +89,7 @@ export default function ReceiptsPage() {
 
         <DataTable columns={cols} rows={list.data?.items ?? []} rowKey={r => r.id} loading={list.isPending} dense
           emptyTitle="No receipts yet" emptyHint="Record money as it comes in, or import what the classic screens already hold." />
+        </>}
       </div>
 
       <Drawer open={adding} onOpenChange={setAdding} title="Record money">

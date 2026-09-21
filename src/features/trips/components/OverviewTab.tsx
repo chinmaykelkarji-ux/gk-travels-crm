@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { KeyValue, Money, StatusPill } from '@/design-system';
 import { fmtDate } from '@/shared/utils/date';
+import { TripProfitCard } from '@/features/finance/components/TripProfitCard';
 import type { TripWorkspace } from '../api';
 
 /** At a glance: what blocks the trip, the money, the parties and open tasks. */
@@ -35,6 +36,7 @@ export function OverviewTab({ ws }: { ws: TripWorkspace }) {
           ] : []),
         ]} />
       </section>
+      {ws.money.grossMargin !== undefined && <div className="lg:col-span-3"><TripProfitCard tripId={ws.trip.id} /></div>}
       <section className="bg-white border border-slate-200 rounded-md p-4 lg:col-span-2">
         <h2 className="text-sm font-medium text-slate-800 mb-3">Parties</h2>
         {ws.parties.length === 0 ? <p className="text-sm text-slate-500">No booking yet — this trip was created by hand.</p> : (
