@@ -55,7 +55,8 @@ describe('id generators', () => {
   });
 
   it('uid values are unique across a burst', () => {
-    const ids = new Set(Array.from({ length: 500 }, () => uid()));
-    expect(ids.size).toBe(500);
+    // These become primary keys, so a burst inside one millisecond must not collide.
+    const ids = new Set(Array.from({ length: 5_000 }, () => uid()));
+    expect(ids.size).toBe(5_000);
   });
 });

@@ -76,7 +76,8 @@ const QuoteFieldsBase = z.object({
   children:       z.coerce.number().int().min(0).max(500).optional(),
   infants:        z.coerce.number().int().min(0).max(100).optional(),
   gstMode:        GstModeZ.default('EXCLUDED'),
-  gstRate:        z.coerce.number().min(0).max(100).default(5),
+  /** Left out: the rate from the organisation's tax rules on the day applies. */
+  gstRate:        z.coerce.number().min(0).max(100).optional(),
   discountAmount: money.default(0),
   notes:          optionalText(2000),
   termsConditions: optionalText(5000),

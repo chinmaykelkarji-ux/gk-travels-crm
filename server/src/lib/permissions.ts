@@ -46,6 +46,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'suppliers:read',
     'masters:read', 'masters:write', 'rates:write',
     'operations:read', 'operations:write',
+    'expenses:read',
     'ai:use',
   ],
 
@@ -59,6 +60,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'payments:read', 'payments:write',
     'gst:read', 'gst:write',
     'finance:read', 'finance:write',
+    'expenses:read', 'expenses:write',
     'credit-notes:read', 'credit-notes:write',
     'debit-notes:read', 'debit-notes:write',
     'commissions:read', 'commissions:write',
@@ -77,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'masters:read', 'masters:write',
     'operations:read', 'operations:write',
     'trip-services:read', 'trip-services:status',
+    'expenses:read', 'expenses:write',
     'vouchers:write',
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',

@@ -49,8 +49,24 @@ export function nextPayId(prefix: 'PAY' | 'SP', existingIds: string[]): string {
   return `${prefix}-${String(seq).padStart(3, '0')}`;
 }
 
+// Five random characters collide often enough to matter: these ids become
+// primary keys (invoices, activity rows), so uid() adds a per-process counter
+// — unique within one process even inside the same millisecond — on top of
+// proper randomness, which covers several processes.
+let uidSeq = 0;
+
+function randomChunk(): string {
+  const g = globalThis as { crypto?: { getRandomValues?: (a: Uint8Array) => Uint8Array } };
+  if (g.crypto?.getRandomValues) {
+    const bytes = g.crypto.getRandomValues(new Uint8Array(6));
+    return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('');
+  }
+  return `${Math.random().toString(36).slice(2, 8)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function uid(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  uidSeq = (uidSeq + 1) % 1_679_616; // four base-36 characters
+  return `${Date.now().toString(36)}-${uidSeq.toString(36).padStart(4, '0')}${randomChunk()}`;
 }
 
 export function reminderUid(): string {

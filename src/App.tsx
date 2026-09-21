@@ -61,6 +61,8 @@ const DriverPage          = lazy(() => import('@/features/driver/pages/DriverPag
 const BooksPage           = lazy(() => import('@/features/ledger/pages/BooksPage'));
 const ReceiptsPage        = lazy(() => import('@/features/receipts/pages/ReceiptsPage'));
 const PayablesPage        = lazy(() => import('@/features/payables/pages/PayablesPage'));
+const ExpensesPage        = lazy(() => import('@/features/expenses/pages/ExpensesPage'));
+const TaxRatesPage        = lazy(() => import('@/features/tax/pages/TaxRulesPage'));
 const Operations     = lazy(() => import('@/modules/operations/Operations'));
 const Vendors        = lazy(() => import('@/modules/vendors/Vendors'));
 const VendorDetail   = lazy(() => import('@/modules/vendors/VendorDetail'));
@@ -346,7 +348,9 @@ export default function App() {
                 <Route path="/books"                 element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><BooksPage /></RoleGuard>} />
                 <Route path="/receipts"              element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><ReceiptsPage /></RoleGuard>} />
                 <Route path="/payables"              element={<RoleGuard allowed={['ADMIN', 'ACCOUNTS']}><PayablesPage /></RoleGuard>} />
+                <Route path="/spending"              element={<ExpensesPage />} />
                 <Route path="/settings/task-rules"   element={<TaskRulesPage />} />
+                <Route path="/settings/tax-rates"    element={<TaxRatesPage />} />
                 <Route path="/settings"              element={<Settings />} />
                 <Route path="/users"                 element={<RoleGuard allowed={['ADMIN']}><UserManagement /></RoleGuard>} />
                 <Route path="*"                      element={<Navigate to="/" replace />} />

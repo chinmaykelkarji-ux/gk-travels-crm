@@ -11,7 +11,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
 import { nextDisplayId } from '../../core/numbering.js';
-import { getOrgSettings } from '../../core/settings.js';
+import { rateFor } from '../tax/service.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { canSeeCommercials } from '../../lib/redact.js';
 import { deriveTicketStatus, fareTotals, parseRailStatus, type PassengerStatus, type TicketStatus } from '../../../../src/shared/calc/tickets.js';
@@ -151,7 +151,7 @@ export async function createTicket(input: TicketInput, role: string | undefined,
   if (input.vendorId && !(await prisma.vendor.findUnique({ where: { id: input.vendorId }, select: { id: true } }))) throw new AppError('VALIDATION_ERROR', 400, 'Vendor not found', { vendorId: 'Unknown vendor' });
   const pax = await resolvePassengers(prisma, input.passengers);
   const commercial = canSeeCommercials(role);
-  const gstPct = input.serviceFeeGstPct ?? (await getOrgSettings()).taxes.ticketServiceFeeGstPct;
+  const gstPct = input.serviceFeeGstPct ?? (await rateFor('GST_TICKET_SERVICE_FEE'));
   const fare = { baseFare: input.baseFare, taxes: input.taxes, otherCharges: input.otherCharges, serviceFee: commercial ? input.serviceFee : 0, serviceFeeGstPct: gstPct };
   const totals = fareTotals(fare);
 

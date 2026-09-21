@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
   Map, FileCheck, BarChart2, LogOut, Receipt, UsersRound, CalendarClock,
-  FileMinus, FilePlus, Percent, Gauge, MessageSquare, FileSpreadsheet, Inbox, Hotel, Bus, Landmark, TrainFront, ListChecks, BookOpen, HandCoins, Wallet,
+  FileMinus, FilePlus, Percent, Gauge, MessageSquare, FileSpreadsheet, Inbox, Hotel, Bus, Landmark, TrainFront, ListChecks, BookOpen, HandCoins, Wallet, Coins,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
@@ -80,6 +80,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: '/books',        label: 'Books',        icon: BookOpen,  permission: 'finance:read' },
       { path: '/receipts',     label: 'Receipts',     icon: HandCoins, permission: 'payments:read' },
       { path: '/payables',     label: 'Supplier money', icon: Wallet,  permission: 'finance:read' },
+      { path: '/spending',     label: 'Spending',     icon: Coins,     permission: 'expenses:read' },
       { path: '/invoices',     label: 'Invoices',     icon: Receipt,   permission: 'invoices:read' },
       { path: '/receivables',  label: 'Receivables',  icon: IndianRupee, permission: 'payments:read' },
       { path: '/credit-notes', label: 'Credit Notes', icon: FileMinus, permission: 'credit-notes:read' },

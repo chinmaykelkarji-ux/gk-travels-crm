@@ -62,7 +62,10 @@ export default function BooksPage() {
   return (
     <div className="min-h-full bg-slate-50">
       <PageHeader title="Books" subtitle="Every rupee in and out, in double entry. Posted entries are never edited — a mistake is reversed."
-        actions={canPost ? <Button size="sm" onClick={() => setOpen('new')}><Plus className="w-4 h-4 mr-1" />Journal entry</Button> : undefined} />
+        actions={<div className="flex items-center gap-2">
+          <Link to="/settings/tax-rates" className="text-xs text-slate-500 hover:text-slate-800">Tax rates</Link>
+          {canPost && <Button size="sm" onClick={() => setOpen('new')}><Plus className="w-4 h-4 mr-1" />Journal entry</Button>}
+        </div>} />
       <nav className="px-5 flex gap-1 border-b border-slate-200 bg-white" role="tablist">
         {TABS.map(t => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setParams(p => { p.set('tab', t.id); return p; }, { replace: true })}

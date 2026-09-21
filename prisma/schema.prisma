@@ -52,6 +52,9 @@ model Organization {
   customerReceipts      CustomerReceipt[]
   vendorBills           VendorBill[]
   vendorBillPayments    VendorPaymentV2[]
+  expenses              Expense[]
+  staffReimbursements   StaffReimbursement[]
+  taxRules              TaxRule[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -98,23 +101,25 @@ model Organization {
 }
 
 model User {
-  organizationId    String       @default("org_gktravels")
-  organization      Organization @relation(fields: [organizationId], references: [id])
-  id                String       @id @default(cuid())
-  email             String       @unique
+  organizationId    String               @default("org_gktravels")
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  id                String               @id @default(cuid())
+  email             String               @unique
   passwordHash      String
   name              String
-  role              Role         @default(ADMIN)
-  isActive          Boolean      @default(true)
+  role              Role                 @default(ADMIN)
+  isActive          Boolean              @default(true)
   lastLoginAt       DateTime?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
   sessions          Session[]
-  assignedLeads     Lead[]       @relation("LeadAssignee")
-  assignedEnquiries Enquiry[]    @relation("EnquiryAssignee")
-  assignedTasks     Task[]       @relation("TaskAssignee")
+  assignedLeads     Lead[]               @relation("LeadAssignee")
+  assignedEnquiries Enquiry[]            @relation("EnquiryAssignee")
+  assignedTasks     Task[]               @relation("TaskAssignee")
   driverProfile     Driver?
-  opsTrips          Trip[]       @relation("TripOpsOwner")
+  opsTrips          Trip[]               @relation("TripOpsOwner")
+  expensesPaid      Expense[]            @relation("ExpensePaidBy")
+  reimbursements    StaffReimbursement[] @relation("StaffReimbursed")
 
   @@index([organizationId])
   @@map("users")
@@ -470,6 +475,7 @@ model Trip {
   receipts           CustomerReceipt[]
   vendorBills        VendorBill[]
   vendorPaymentsV2   VendorPaymentV2[]
+  expenses           Expense[]
 
   @@index([organizationId])
   @@index([status])
@@ -797,6 +803,7 @@ model Vendor {
   ledgerEntries      LedgerTransaction[]
   bills              VendorBill[]
   billPayments       VendorPaymentV2[]
+  expenses           Expense[]
 
   @@index([organizationId])
   @@index([type])
@@ -1858,6 +1865,7 @@ model BookingContract {
   ledgerEntries      LedgerTransaction[]
   receipts           CustomerReceipt[]
   vendorBills        VendorBill[]
+  expenses           Expense[]
 
   @@unique([organizationId, contractNumber])
   @@index([organizationId])
@@ -2337,6 +2345,89 @@ model ActivityBooking {
   @@index([tripId])
   @@index([organizationId, date])
   @@map("activity_bookings")
+}
+
+// A rate the business charges, with the day it starts. Tax rates are
+// configuration, never constants in code: a change is a new row, and the
+// old one stays so past invoices still explain themselves.
+model TaxRule {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  /// Catalogue code from calc/tax.ts, e.g. GST_TOUR_PACKAGE.
+  code           String
+  rate           Decimal      @db.Decimal(5, 2)
+  /// Yearly limit per customer before it applies (TCS); zero for GST.
+  threshold      Decimal      @default(0) @db.Decimal(12, 2)
+  enabled        Boolean      @default(true)
+  effectiveFrom  DateTime     @db.Date
+  effectiveTo    DateTime?    @db.Date
+  note           String?
+  updatedById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, code, effectiveFrom])
+  @@index([organizationId, code])
+  @@map("tax_rules")
+}
+
+// Money spent directly (fuel, tolls, food on the road, tips, office costs)
+// rather than against a supplier bill. paidBy STAFF means someone paid from
+// their own pocket and is owed it back until a StaffReimbursement settles it.
+model Expense {
+  id                  String           @id
+  organizationId      String           @default("org_gktravels")
+  organization        Organization     @relation(fields: [organizationId], references: [id])
+  date                DateTime         @db.Date
+  category            String
+  amount              Decimal          @db.Decimal(12, 2)
+  gstAmount           Decimal          @default(0) @db.Decimal(12, 2)
+  paidBy              String
+  paidByUserId        String?
+  paidByUser          User?            @relation("ExpensePaidBy", fields: [paidByUserId], references: [id], onDelete: SetNull)
+  tripId              String?
+  trip                Trip?            @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  contractId          String?
+  contract            BookingContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  vendorId            String?
+  vendor              Vendor?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  description         String
+  notes               String?
+  documentId          String?
+  status              String           @default("POSTED")
+  ledgerTransactionId String?          @unique
+  cancelledAt         DateTime?
+  cancelReason        String?
+  createdById         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([organizationId, date])
+  @@index([tripId])
+  @@index([paidByUserId])
+  @@index([category])
+  @@map("expenses")
+}
+
+model StaffReimbursement {
+  id                  String       @id
+  organizationId      String       @default("org_gktravels")
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  userId              String
+  user                User         @relation("StaffReimbursed", fields: [userId], references: [id])
+  amount              Decimal      @db.Decimal(12, 2)
+  mode                String
+  paidAt              DateTime     @db.Date
+  reference           String?
+  status              String       @default("POSTED")
+  ledgerTransactionId String?      @unique
+  createdById         String?
+  createdAt           DateTime     @default(now())
+
+  @@index([organizationId, paidAt])
+  @@index([userId])
+  @@map("staff_reimbursements")
 }
 
 // What a supplier has charged (hotel, transporter, consolidator, activity

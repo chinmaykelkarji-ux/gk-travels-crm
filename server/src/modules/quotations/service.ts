@@ -11,6 +11,7 @@ import { audit } from '../../core/audit.js';
 import { nextDisplayId } from '../../core/numbering.js';
 import { AppError, forbidden, notFound, stateConflict } from '../../core/errors.js';
 import { computeQuote, customerSafeTotals, type ItemInput as CalcItem, type QuoteTotals } from '../../../../src/shared/calc/quotation.js';
+import { rateFor } from '../tax/service.js';
 import { QUOTE_TRANSITIONS, EDITABLE_STATUSES, type QuoteCreate, type QuoteUpdate, type QuoteListQuery, type QuoteStatus } from '../../../../src/shared/contracts/quotations.js';
 import { markEnquiryQuoted } from '../sales/enquiries.service.js';
 
@@ -139,12 +140,15 @@ export async function createQuote(input: QuoteCreate, actorId?: string | null) {
   if (!enquiry || enquiry.deletedAt) throw new AppError('VALIDATION_ERROR', 400, 'Enquiry not found', { enquiryId: 'Unknown enquiry' });
   if (enquiry.status === 'LOST') throw stateConflict('Reopen the enquiry before quoting it');
 
+  // The GST rate comes from the organisation's tax rules unless one was given.
+  const gstRate = input.gstRate ?? (await rateFor('GST_TOUR_PACKAGE'));
+
   return prisma.$transaction(async tx => {
     const quoteNumber = await nextDisplayId(tx, 'Q', { displayPrefix: 'GK-Q' });
     const { enquiryId, items: _i, optionGroups: _g, parties: _p, validUntil, ...fields } = input;
     const q = await tx.salesQuote.create({
       data: {
-        enquiryId, customerId: enquiry.customerId, quoteNumber, ...fields,
+        enquiryId, customerId: enquiry.customerId, quoteNumber, ...fields, gstRate,
         adults: input.adults ?? enquiry.adults, children: input.children ?? enquiry.children, infants: input.infants ?? enquiry.infants,
         validUntil: toDate(validUntil) ?? new Date(Date.now() + 7 * 86_400_000),
         termsConditions: fields.termsConditions ?? process.env.DEFAULT_TERMS ?? null,
