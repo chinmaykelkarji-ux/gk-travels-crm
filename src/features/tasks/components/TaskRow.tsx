@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Clock, Cog, UserPlus } from 'lucide-react';
+import { Check, Clock, Cog, Copy, UserPlus } from 'lucide-react';
 import { StatusPill, type Tone } from '@/design-system';
 import { Button } from '@/shared/components/ui/button';
 import { toast } from '@/shared/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import { addDays, istDay, istClock } from '@/shared/calc/istTime';
+import { draftFrom } from '@/shared/calc/taskRules';
 import { tasksApi, type TaskView } from '../api';
 import { useTaskMutation } from '../hooks';
 
@@ -16,6 +17,8 @@ function recordLink(t: TaskView): { to: string; label: string } | null {
   if (t.entityType === 'lead' && t.entityId) return { to: '/leads', label: 'Leads' };
   if (t.entityType === 'sales_quote' && t.entityId) return { to: `/quotes/${t.entityId}`, label: 'Quotation' };
   if (t.entityType === 'ticket' && t.entityId) return { to: `/tickets/${t.entityId}`, label: 'Ticket' };
+  if (t.entityType === 'invoice' && t.entityId) return { to: `/invoices/${t.entityId}`, label: 'Invoice' };
+  if (t.entityType === 'vendor_bill') return { to: '/payables', label: 'Supplier money' };
   if (!t.tripId) return null;
   const tab = ({ hotel_booking: 'hotels', vehicle_assignment: 'transport', activity_booking: 'activities', traveller: 'travellers' } as Record<string, string>)[t.entityType ?? ''];
   return { to: `/trips/${t.tripId}${tab ? `?tab=${tab}` : ''}`, label: t.trip?.label ?? t.tripId };
@@ -31,9 +34,19 @@ function dueText(iso: string | null | undefined, today: string): string {
 /** One open task with its quick actions: done, snooze, take it. */
 export function TaskRow({ t, today, meId, canWrite }: { t: TaskView; today: string; meId: string | null; canWrite: boolean }) {
   const [closing, setClosing] = useState(false);
+  const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
   const update = useTaskMutation((b: Parameters<typeof tasksApi.update>[1]) => tasksApi.update(t.id, b));
   const act = (b: Parameters<typeof tasksApi.update>[1], ok: string) => update.mutate(b, { onSuccess: () => { toast.success(ok); setClosing(false); }, onError: e => toast.error('Not saved', (e as ApiError).message) });
+  const draft = draftFrom(t.description);
+  const copyDraft = async () => {
+    try {
+      await navigator.clipboard.writeText(draft!);
+      toast.success('Message copied', 'Read it once, then send it from WhatsApp or e-mail.');
+    } catch {
+      toast.error('Could not copy', 'Select the text above and copy it by hand.');
+    }
+  };
   const link = recordLink(t);
   const overdue = t.bucket === 'OVERDUE';
   const tomorrow9 = `${addDays(today, 1)}T09:00`;
@@ -46,7 +59,21 @@ export function TaskRow({ t, today, meId, canWrite }: { t: TaskView; today: stri
           <StatusPill tone={PRIORITY_TONE[t.priority] ?? 'neutral'}>{t.priority}</StatusPill>
           {t.ruleName && <span className="inline-flex items-center gap-1 text-[11px] text-slate-500" title="Raised by a task rule; it closes itself when the record no longer needs it"><Cog className="w-3 h-3" />{t.ruleName}</span>}
         </div>
-        {t.description && <p className="text-sm text-slate-600 mt-0.5 line-clamp-2">{t.description}</p>}
+        {t.description && (
+          <div className="mt-0.5">
+            <p className={`text-sm text-slate-600 whitespace-pre-wrap ${open ? '' : 'line-clamp-2'}`}>{t.description}</p>
+            {(draft || t.description.length > 120) && (
+              <div className="flex flex-wrap gap-3 mt-1">
+                <button type="button" className="text-xs text-indigo-600 hover:underline" onClick={() => setOpen(o => !o)}>{open ? 'Show less' : 'Show more'}</button>
+                {draft && (
+                  <button type="button" className="text-xs text-indigo-600 hover:underline inline-flex items-center gap-1" onClick={copyDraft}>
+                    <Copy className="w-3 h-3" />Copy the message
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-x-3">
           <span className={overdue ? 'text-red-600 font-medium' : undefined}><Clock className="inline w-3 h-3 mr-0.5 -mt-0.5" />{overdue ? 'was due ' : 'due '}{dueText(t.effectiveDue ?? t.dueAt, today)}{t.snoozedUntil ? ' (snoozed)' : ''}</span>
           {link && <Link to={link.to} className="text-indigo-600 hover:underline">{link.label}</Link>}

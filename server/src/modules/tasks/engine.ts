@@ -17,10 +17,12 @@ import { auditMany, type AuditInput } from '../../core/audit.js';
 import { istDay, istToday, addDays, toIstLocal } from '../../../../src/shared/calc/istTime.js';
 import { travellerDisplayName } from '../../../../src/shared/calc/travellers.js';
 import {
-  effectiveRules, evaluateSalesRules, evaluateTripRules, RULE_BY_CODE, SALES_RULES, TRIP_RULES,
-  type DesiredTask, type RuleCode, type RuleSettings, type TripFacts,
+  effectiveRules, evaluateMoneyRules, evaluateSalesRules, evaluateTripRules, MONEY_RULES, RULE_BY_CODE, SALES_RULES, TRIP_RULES,
+  type DesiredTask, type MoneyFacts, type RuleCode, type RuleSettings, type TripFacts,
 } from '../../../../src/shared/calc/taskRules.js';
 import { registerTripChangeHook } from '../operations/hooks.js';
+import { receivables } from '../finance/service.js';
+import { listBills } from '../payables/service.js';
 
 export const OPEN_TASK = ['pending', 'in_progress'];
 
@@ -151,6 +153,39 @@ export async function recalcSales(db: DbClient, now = new Date()): Promise<Apply
   return applyDesired(db, desired, { codes: SALES_RULES }, now);
 }
 
+/**
+ * The money facts the rules need, read from the same models the Money
+ * screens use: invoices still unpaid (aged) and supplier bills still open.
+ * A task can therefore never disagree with the books.
+ */
+export async function moneyFacts(now = new Date()): Promise<MoneyFacts> {
+  const [owed, bills, company] = await Promise.all([
+    receivables(istToday(now)),
+    listBills({ status: 'OPEN', page: 1, pageSize: 500 }),
+    prisma.companySettings.findFirst({ select: { companyName: true, phone: true } }),
+  ]);
+  return {
+    invoices: owed.customers.flatMap(c => c.invoices.map(i => ({
+      id: i.id, number: i.number, customerId: c.customerId, customerName: c.customerName,
+      dueDate: i.dueDate, date: i.date, outstanding: i.outstanding, daysOverdue: i.daysOverdue,
+    }))),
+    bills: bills.items.map(b => ({
+      id: b.id, billNumber: b.billNumber, vendorId: b.vendorId, vendorName: b.vendor?.name ?? b.vendorId,
+      dueDate: b.dueDate, outstanding: b.outstanding, daysOverdue: b.daysOverdue,
+    })),
+    companyName: company?.companyName ?? 'GK Travels',
+    companyPhone: company?.phone ?? null,
+  };
+}
+
+/** Money that is late, in either direction. Reading the books takes a
+ * while, so only the write to the tasks table is in a transaction. */
+export async function recalcMoney(now = new Date()): Promise<ApplyResult> {
+  const [rules, facts] = await Promise.all([loadRuleSettings(prisma), moneyFacts(now)]);
+  const desired = evaluateMoneyRules(facts, rules, now);
+  return prisma.$transaction(tx => applyDesired(tx, desired, { codes: MONEY_RULES }, now), { timeout: 20_000 });
+}
+
 /** Every trip that can need or hold rule tasks, then the sales pipeline. */
 export async function sweep(now = new Date()) {
   const recent = addDays(istToday(now), -31);
@@ -163,8 +198,8 @@ export async function sweep(now = new Date()) {
     const r = await prisma.$transaction(tx => recalcTrip(tx, t.id, now));
     total.created += r.created; total.updated += r.updated; total.closed += r.closed; total.reopened += r.reopened;
   }
-  const s = await prisma.$transaction(tx => recalcSales(tx, now));
-  total.created += s.created; total.updated += s.updated; total.closed += s.closed; total.reopened += s.reopened;
+  const rest = [await prisma.$transaction(tx => recalcSales(tx, now)), await recalcMoney(now)];
+  for (const r of rest) { total.created += r.created; total.updated += r.updated; total.closed += r.closed; total.reopened += r.reopened; }
   return total;
 }
 

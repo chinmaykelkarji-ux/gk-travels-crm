@@ -12,8 +12,8 @@ export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 const p = (req: AuthRequest, k = 'id') => String(req.params[k]);
 
-tasksRouter.get('/', requirePermission('tasks:read'), validate({ query: TaskListQuery }), async (req: AuthRequest, res) => { res.json(await svc.listTasks(valid<unknown, TaskListQuery>(res).query, req.userId)); });
-tasksRouter.get('/today', requirePermission('tasks:read'), validate({ query: TodayQuery }), async (req: AuthRequest, res) => { res.json(await svc.today(valid<unknown, TodayQuery>(res).query, req.userId)); });
+tasksRouter.get('/', requirePermission('tasks:read'), validate({ query: TaskListQuery }), async (req: AuthRequest, res) => { res.json(await svc.listTasks(valid<unknown, TaskListQuery>(res).query, req.userId, req.userRole)); });
+tasksRouter.get('/today', requirePermission('tasks:read'), validate({ query: TodayQuery }), async (req: AuthRequest, res) => { res.json(await svc.today(valid<unknown, TodayQuery>(res).query, req.userId, new Date(), req.userRole)); });
 tasksRouter.post('/', requirePermission('tasks:write'), validate({ body: TaskCreate }), async (req: AuthRequest, res) => { res.status(201).json(await svc.createTask(valid<TaskCreate>(res).body, req.userId)); });
 tasksRouter.patch('/:id', requirePermission('tasks:write'), validate({ body: TaskUpdate }), async (req: AuthRequest, res) => { res.json(await svc.updateTask(p(req), valid<TaskUpdate>(res).body, req.userId)); });
 

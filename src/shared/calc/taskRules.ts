@@ -17,12 +17,13 @@ export type RuleCode =
   | 'WEB_CHECKIN' | 'GROUP_SEATS' | 'TATKAL_OPENS' | 'TRAIN_WL_CHECK' | 'TRAIN_CHART'
   | 'PASSPORT_VALIDITY' | 'VISA_CHECK'
   | 'HOTEL_CONFIRMATION' | 'VEHICLE_CONFIRMATION' | 'DRIVER_DETAILS' | 'ACTIVITY_CONFIRMATION'
-  | 'BALANCE_DUE' | 'LEAD_FOLLOW_UP' | 'QUOTE_FOLLOW_UP' | 'POST_TRIP_FEEDBACK';
+  | 'BALANCE_DUE' | 'LEAD_FOLLOW_UP' | 'QUOTE_FOLLOW_UP' | 'POST_TRIP_FEEDBACK'
+  | 'INVOICE_OVERDUE' | 'SUPPLIER_BILL_DUE';
 export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';
 export type RuleCategory = 'Tickets' | 'Documents' | 'Suppliers' | 'Money' | 'Sales' | 'After the trip';
 
 export interface RuleParamDef { key: string; label: string; unit: 'hours' | 'days' | 'minutes' | 'months' | 'travellers' | 'hour of day'; min: number; max: number; default: number }
-export interface RuleDef { code: RuleCode; name: string; category: RuleCategory; description: string; priority: TaskPriority; scope: 'TRIP' | 'SALES'; params: RuleParamDef[]; note?: string }
+export interface RuleDef { code: RuleCode; name: string; category: RuleCategory; description: string; priority: TaskPriority; scope: 'TRIP' | 'SALES' | 'MONEY'; params: RuleParamDef[]; note?: string }
 
 const hourOfDay = (def: number, label = 'At (hour of day, IST)'): RuleParamDef => ({ key: 'atHour', label, unit: 'hour of day', min: 0, max: 23, default: def });
 
@@ -74,6 +75,12 @@ export const RULES: RuleDef[] = [
   { code: 'QUOTE_FOLLOW_UP', name: 'Quotation follow-up', category: 'Sales', scope: 'SALES', priority: 'medium',
     description: 'Quotations sent (or viewed) with no answer after a few days.',
     params: [{ key: 'daysAfter', label: 'Days after sending', unit: 'days', min: 1, max: 30, default: 2 }, hourOfDay(11)] },
+  { code: 'INVOICE_OVERDUE', name: 'Invoice not paid', category: 'Money', scope: 'MONEY', priority: 'high',
+    description: 'For every invoice still unpaid after its due date, a task with a polite reminder ready to send.',
+    params: [{ key: 'daysAfterDue', label: 'Days after the due date', unit: 'days', min: 0, max: 60, default: 1 }, hourOfDay(10)] },
+  { code: 'SUPPLIER_BILL_DUE', name: 'Supplier bill to pay', category: 'Money', scope: 'MONEY', priority: 'high',
+    description: 'A reminder to pay each supplier bill before its date, so nothing is paid late.',
+    params: [{ key: 'daysBefore', label: 'Days before the bill is due', unit: 'days', min: 0, max: 30, default: 2 }, hourOfDay(10)] },
   { code: 'POST_TRIP_FEEDBACK', name: 'Feedback after the trip', category: 'After the trip', scope: 'TRIP', priority: 'low',
     description: 'A call to the customer after a completed trip.',
     params: [{ key: 'daysAfter', label: 'Days after return', unit: 'days', min: 0, max: 30, default: 1 }, hourOfDay(11)] },
@@ -81,6 +88,7 @@ export const RULES: RuleDef[] = [
 export const RULE_BY_CODE = new Map(RULES.map(r => [r.code, r]));
 export const TRIP_RULES = RULES.filter(r => r.scope === 'TRIP').map(r => r.code);
 export const SALES_RULES = RULES.filter(r => r.scope === 'SALES').map(r => r.code);
+export const MONEY_RULES = RULES.filter(r => r.scope === 'MONEY').map(r => r.code);
 
 export type RuleSettings = Partial<Record<RuleCode, { enabled: boolean; params: Record<string, number> }>>;
 
@@ -313,4 +321,88 @@ export function sortByUrgency<T extends UrgencyInput>(tasks: T[], now: Date): (T
     .sort((a, b) => BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket)
       || (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)
       || (a.effectiveDue ?? '~').localeCompare(b.effectiveDue ?? '~'));
+}
+
+// ── Money that is late ────────────────────────────────────────
+
+export interface MoneyFacts {
+  invoices: { id: string; number: string; customerId: string | null; customerName: string; dueDate: string | null; date: string; outstanding: number; daysOverdue: number }[];
+  bills: { id: string; billNumber: string; vendorId: string; vendorName: string; dueDate: string | null; outstanding: number; daysOverdue: number }[];
+  /** Who to chase from, for the reminder text. */
+  companyName: string;
+  companyPhone?: string | null;
+}
+
+const inrText = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-10-25 becomes 25 Oct 2026, because a customer reads this. */
+const dayText = (d: string) => { const [y, m, dd] = d.split('-'); return `${Number(dd)} ${MONTH_SHORT[Number(m) - 1]} ${y}`; };
+
+/** The line that separates the facts from the message a person can send. */
+export const DRAFT_MARKER = 'Ready to send:';
+
+/** The sendable part of a task's details, if it carries one. */
+export function draftFrom(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const i = description.indexOf(DRAFT_MARKER + '\n');
+  return i < 0 ? null : description.slice(i + DRAFT_MARKER.length + 1).trim() || null;
+}
+
+/**
+ * A polite reminder the office can send as it is. Nothing is sent from
+ * here — the text sits on the task for a person to check and send.
+ */
+export function paymentReminderText(i: { customerName: string; amount: number; number: string; dueDate: string | null; daysOverdue: number; companyName: string; companyPhone?: string | null }): string {
+  const when = i.dueDate ? ` on ${dayText(i.dueDate)}` : '';
+  const late = i.daysOverdue > 0 ? ` It is ${i.daysOverdue} day${i.daysOverdue === 1 ? '' : 's'} past the date.` : '';
+  return [
+    `Namaste ${i.customerName} Ji,`,
+    '',
+    `A gentle reminder about ${inrText(i.amount)} pending on our bill ${i.number}, which was due${when}.${late}`,
+    'If it has already been sent, please ignore this message and do share the details so we can mark it.',
+    '',
+    `Thank you,`,
+    `${i.companyName}${i.companyPhone ? ` · ${i.companyPhone}` : ''}`,
+  ].join('\n');
+}
+
+/** Tasks for money that is late, in either direction. */
+export function evaluateMoneyRules(f: MoneyFacts, rules: ReturnType<typeof effectiveRules>, now: Date): DesiredTask[] {
+  const out: DesiredTask[] = [];
+  const today = istDay(now)!;
+
+  if (rules.INVOICE_OVERDUE.enabled) {
+    const after = rules.INVOICE_OVERDUE.params.daysAfterDue;
+    for (const inv of f.invoices) {
+      if (inv.outstanding <= 0 || inv.daysOverdue < after) continue;
+      const due = inv.dueDate ?? inv.date;
+      out.push({
+        ruleCode: 'INVOICE_OVERDUE', key: `INVOICE_OVERDUE:${inv.id}`, priority: inv.daysOverdue > 30 ? 'urgent' : 'high',
+        tripId: null, customerId: inv.customerId, entityType: 'invoice', entityId: inv.id,
+        title: `Collect ${inrText(inv.outstanding)} from ${inv.customerName} — bill ${inv.number} (${inv.daysOverdue} day${inv.daysOverdue === 1 ? '' : 's'} late)`,
+        description: `${inrText(inv.outstanding)} of bill ${inv.number} was due on ${dayText(due)}.
+
+${DRAFT_MARKER}
+${paymentReminderText({ customerName: inv.customerName, amount: inv.outstanding, number: inv.number, dueDate: inv.dueDate, daysOverdue: inv.daysOverdue, companyName: f.companyName, companyPhone: f.companyPhone })}`,
+        dueAt: at(addDays(due, after), rules.INVOICE_OVERDUE.params.atHour), keepDue: true,
+      });
+    }
+  }
+
+  if (rules.SUPPLIER_BILL_DUE.enabled) {
+    const before = rules.SUPPLIER_BILL_DUE.params.daysBefore;
+    for (const b of f.bills) {
+      if (b.outstanding <= 0 || !b.dueDate) continue;
+      if (today < addDays(b.dueDate, -before)) continue;
+      out.push({
+        ruleCode: 'SUPPLIER_BILL_DUE', key: `SUPPLIER_BILL_DUE:${b.id}`, priority: b.daysOverdue > 0 ? 'urgent' : 'high',
+        tripId: null, customerId: null, entityType: 'vendor_bill', entityId: b.id,
+        title: `Pay ${b.vendorName} ${inrText(b.outstanding)} — bill ${b.billNumber}${b.daysOverdue > 0 ? ` (${b.daysOverdue} day${b.daysOverdue === 1 ? '' : 's'} late)` : ''}`,
+        description: `${inrText(b.outstanding)} is left on ${b.vendorName}'s bill ${b.billNumber}, due ${dayText(b.dueDate)}.`,
+        dueAt: at(addDays(b.dueDate, -before), rules.SUPPLIER_BILL_DUE.params.atHour),
+      });
+    }
+  }
+  return out;
 }

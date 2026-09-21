@@ -6,16 +6,17 @@
 // ============================================================
 
 import { randomUUID } from 'node:crypto';
-import type { Prisma, Task } from '@prisma/client';
+import type { Prisma, Role, Task } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
 import { istDay, istToday } from '../../../../src/shared/calc/istTime.js';
 import {
-  BUCKET_LABEL, effectiveRules, RULE_BY_CODE, RULES, sortByUrgency, validateRuleParams,
+  BUCKET_LABEL, effectiveRules, MONEY_RULES, RULE_BY_CODE, RULES, sortByUrgency, validateRuleParams,
   type RuleCode, type RuleSettings, type UrgencyBucket,
 } from '../../../../src/shared/calc/taskRules.js';
 import type { TaskCreate, TaskListQuery, TaskRuleUpdate, TaskUpdate, TodayQuery } from '../../../../src/shared/contracts/tasks.js';
+import { hasPermission } from '../../lib/permissions.js';
 import { OPEN_TASK, sweep } from './engine.js';
 
 const INCLUDE = { trip: { select: { id: true, tourName: true, destination: true, stage: true } } } satisfies Prisma.TaskInclude;
@@ -34,8 +35,21 @@ function taskDto(t: Row) {
 }
 export type TaskDto = ReturnType<typeof taskDto>;
 
-export async function listTasks(q: TaskListQuery, userId: string | undefined) {
+/**
+ * Money tasks name what a customer owes and what a supplier costs, and they
+ * point at screens only the accounts can open, so they need the same
+ * `finance:read` every money screen needs. Other roles simply never see them.
+ */
+function moneyFence(role?: string): Prisma.TaskWhereInput {
+  if (!role || hasPermission(role as Role, 'finance:read')) return {};
+  // `notIn` alone would also drop every task with no rule at all, so the
+  // manual ones are named explicitly; `AND` keeps the caller's own `OR` free.
+  return { AND: [{ OR: [{ ruleCode: null }, { ruleCode: { notIn: MONEY_RULES } }] }] };
+}
+
+export async function listTasks(q: TaskListQuery, userId: string | undefined, role?: string) {
   const where: Prisma.TaskWhereInput = {
+    ...moneyFence(role),
     ...(q.status === 'open' ? { status: { in: OPEN_TASK } } : q.status === 'done' ? { status: { in: ['completed', 'cancelled'] } } : {}),
     ...(q.mine ? { assignedToUserId: userId ?? '__none__' } : {}),
     ...(q.tripId ? { tripId: q.tripId } : {}),
@@ -49,9 +63,9 @@ export async function listTasks(q: TaskListQuery, userId: string | undefined) {
 }
 
 /** Open tasks due within a week (and everything overdue or undated), most urgent first, in buckets. */
-export async function today(q: TodayQuery, userId: string | undefined, now = new Date()) {
+export async function today(q: TodayQuery, userId: string | undefined, now = new Date(), role?: string) {
   const rows = await prisma.task.findMany({
-    where: { status: { in: OPEN_TASK }, ...(q.mine ? { assignedToUserId: userId ?? '__none__' } : {}) },
+    where: { status: { in: OPEN_TASK }, ...moneyFence(role), ...(q.mine ? { assignedToUserId: userId ?? '__none__' } : {}) },
     include: INCLUDE, take: 1000,
   });
   const sorted = sortByUrgency(rows.map(r => ({ ...taskDto(r) })), now).filter(t => t.bucket !== 'LATER');

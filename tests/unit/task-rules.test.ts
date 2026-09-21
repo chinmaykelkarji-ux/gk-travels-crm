@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  effectiveRules, evaluateSalesRules, evaluateTripRules, RULES, sortByUrgency, urgencyBucket, validateRuleParams,
-  type TripFacts,
+  draftFrom, effectiveRules, evaluateMoneyRules, evaluateSalesRules, evaluateTripRules, RULES, sortByUrgency, urgencyBucket, validateRuleParams,
+  type MoneyFacts, type TripFacts,
 } from '../../src/shared/calc/taskRules';
 
 // 2026-11-01 09:00 IST
@@ -126,6 +126,52 @@ describe('sales rules', () => {
     expect(out.map(d => d.key)).toEqual(['LEAD_FOLLOW_UP:L1:2026-11-02', `QUOTE_FOLLOW_UP:q1:${ist('2026-10-30T16:00')}`]);
     expect(out[0]).toMatchObject({ dueAt: ist('2026-11-02T10:00'), assignedToUserId: 'u1' });
     expect(out[1].dueAt).toBe(ist('2026-11-01T11:00'));
+  });
+});
+
+describe('money rules', () => {
+  const money = (over: Partial<MoneyFacts> = {}): MoneyFacts => ({ invoices: [], bills: [], companyName: 'GK Travels', companyPhone: '0831 2420000', ...over });
+  const invoice = (over: Partial<MoneyFacts['invoices'][number]> = {}) => ({
+    id: 'INV-1', number: 'GK/26-27/0004', customerId: 'CUS-1', customerName: 'Shri Patil',
+    date: '2026-10-01', dueDate: '2026-10-25', outstanding: 45000, daysOverdue: 7, ...over,
+  });
+  const bill = (over: Partial<MoneyFacts['bills'][number]> = {}) => ({
+    id: 'BILL-1', billNumber: 'HB/778', vendorId: 'VEN-1', vendorName: 'Hotel Ganga Darshan',
+    dueDate: '2026-11-03', outstanding: 12000, daysOverdue: 0, ...over,
+  });
+
+  it('an unpaid invoice becomes a task carrying a polite message a person can send', () => {
+    const out = evaluateMoneyRules(money({ invoices: [invoice()] }), defaults, NOW);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ ruleCode: 'INVOICE_OVERDUE', key: 'INVOICE_OVERDUE:INV-1', priority: 'high', entityType: 'invoice', entityId: 'INV-1', customerId: 'CUS-1', keepDue: true });
+    expect(out[0].title).toContain('₹45,000');
+    expect(out[0].dueAt).toBe(ist('2026-10-26T10:00'));
+    const draft = draftFrom(out[0].description)!;
+    expect(draft.startsWith('Namaste Shri Patil Ji,')).toBe(true);
+    expect(draft).toContain('₹45,000 pending on our bill GK/26-27/0004, which was due on 25 Oct 2026.');
+    expect(draft).toContain('It is 7 days past the date.');
+    expect(draft.endsWith('GK Travels · 0831 2420000')).toBe(true);
+  });
+
+  it('nothing in the grace days, nothing once it is paid, and long overdue money is urgent', () => {
+    expect(evaluateMoneyRules(money({ invoices: [invoice({ daysOverdue: 0 })] }), defaults, NOW)).toEqual([]);
+    expect(evaluateMoneyRules(money({ invoices: [invoice({ outstanding: 0 })] }), defaults, NOW)).toEqual([]);
+    expect(evaluateMoneyRules(money({ invoices: [invoice({ daysOverdue: 45 })] }), defaults, NOW)[0].priority).toBe('urgent');
+    expect(evaluateMoneyRules(money({ invoices: [invoice()] }), effectiveRules({ INVOICE_OVERDUE: { enabled: false, params: {} } }), NOW)).toEqual([]);
+  });
+
+  it('supplier bills come up a couple of days before they fall due, and turn urgent when late', () => {
+    const out = evaluateMoneyRules(money({ bills: [bill()] }), defaults, NOW);
+    expect(out[0]).toMatchObject({ ruleCode: 'SUPPLIER_BILL_DUE', key: 'SUPPLIER_BILL_DUE:BILL-1', priority: 'high', entityType: 'vendor_bill', entityId: 'BILL-1', customerId: null });
+    expect(out[0].title).toContain('Pay Hotel Ganga Darshan ₹12,000');
+    expect(out[0].dueAt).toBe(ist('2026-11-01T10:00'));
+    expect(draftFrom(out[0].description)).toBeNull();
+    expect(evaluateMoneyRules(money({ bills: [bill({ dueDate: '2026-11-20' })] }), defaults, NOW)).toEqual([]);
+    expect(evaluateMoneyRules(money({ bills: [bill({ dueDate: null })] }), defaults, NOW)).toEqual([]);
+    expect(evaluateMoneyRules(money({ bills: [bill({ outstanding: 0 })] }), defaults, NOW)).toEqual([]);
+    const late = evaluateMoneyRules(money({ bills: [bill({ dueDate: '2026-10-28', daysOverdue: 4 })] }), defaults, NOW)[0];
+    expect(late.priority).toBe('urgent');
+    expect(late.title).toContain('4 days late');
   });
 });
 
