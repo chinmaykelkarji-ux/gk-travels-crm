@@ -23,12 +23,16 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export interface PresignedUpload   { url: string; method: 'PUT'; headers: Record<string, string>; expiresAt: string }
 export interface PresignedDownload { url: string; expiresAt: string }
+export type Disposition = 'inline' | 'attachment';
 export interface ObjectInfo        { sizeBytes: number; contentType?: string | null; sha256?: string | null }
 
 export interface StorageProvider {
   readonly kind: 'local' | 's3';
   presignUpload(key: string, contentType: string, maxBytes: number): Promise<PresignedUpload>;
-  presignDownload(key: string, fileName: string, ttlSeconds?: number): Promise<PresignedDownload>;
+  /** `inline` is for showing a document in the app; everything else downloads. */
+  presignDownload(key: string, fileName: string, ttlSeconds?: number, disposition?: Disposition): Promise<PresignedDownload>;
+  /** The bytes themselves, for server-side work such as reading a document. */
+  read(key: string): Promise<Buffer>;
   head(key: string): Promise<ObjectInfo | null>;
   delete(key: string): Promise<void>;
 }
@@ -85,10 +89,10 @@ class LocalStorageProvider implements StorageProvider {
     };
   }
 
-  async presignDownload(key: string, fileName: string, ttlSeconds = DOWNLOAD_TTL_SECONDS): Promise<PresignedDownload> {
+  async presignDownload(key: string, fileName: string, ttlSeconds = DOWNLOAD_TTL_SECONDS, disposition: Disposition = 'attachment'): Promise<PresignedDownload> {
     const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
     return {
-      url: `/api/v2/storage/local/${key}?op=get&exp=${exp}&sig=${signLocal(key, 'get', exp)}&name=${encodeURIComponent(fileName)}`,
+      url: `/api/v2/storage/local/${key}?op=get&exp=${exp}&sig=${signLocal(key, 'get', exp)}&name=${encodeURIComponent(fileName)}&disp=${disposition}`,
       expiresAt: new Date(exp * 1000).toISOString(),
     };
   }
@@ -105,6 +109,10 @@ class LocalStorageProvider implements StorageProvider {
     } catch {
       return null;
     }
+  }
+
+  async read(key: string): Promise<Buffer> {
+    return fs.readFile(localPathFor(key));
   }
 
   async delete(key: string): Promise<void> {
@@ -134,10 +142,10 @@ class S3StorageProvider implements StorageProvider {
     return { url, method: 'PUT', headers: { 'content-type': contentType, 'x-max-bytes': String(maxBytes) }, expiresAt: new Date(Date.now() + UPLOAD_TTL_SECONDS * 1000).toISOString() };
   }
 
-  async presignDownload(key: string, fileName: string, ttlSeconds = DOWNLOAD_TTL_SECONDS): Promise<PresignedDownload> {
+  async presignDownload(key: string, fileName: string, ttlSeconds = DOWNLOAD_TTL_SECONDS, disposition: Disposition = 'attachment'): Promise<PresignedDownload> {
     const safeName = fileName.replace(/["\r\n]/g, '_');
     const url = await getSignedUrl(this.client, new GetObjectCommand({
-      Bucket: this.bucket, Key: key, ResponseContentDisposition: `attachment; filename="${safeName}"`,
+      Bucket: this.bucket, Key: key, ResponseContentDisposition: `${disposition}; filename="${safeName}"`,
     }), { expiresIn: ttlSeconds });
     return { url, expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString() };
   }
@@ -149,6 +157,13 @@ class S3StorageProvider implements StorageProvider {
     } catch {
       return null;
     }
+  }
+
+  async read(key: string): Promise<Buffer> {
+    const r = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const body = r.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+    if (!body?.transformToByteArray) throw new Error(`Could not read ${key} from storage`);
+    return Buffer.from(await body.transformToByteArray());
   }
 
   async delete(key: string): Promise<void> {

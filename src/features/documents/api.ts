@@ -58,5 +58,5 @@ export const documentsApi = {
   removeLink: (id: string, linkId: string) => api.delete<{ ok: true }>(`/v2/documents/${id}/links/${linkId}`),
 
   /** A link that lives for a minute — never stored, never shared. */
-  downloadUrl: (id: string) => api.get<{ url: string; expiresAt: string }>(`/v2/documents/${id}/download`),
+  downloadUrl: (id: string, inline = false) => api.get<{ url: string; expiresAt: string }>(`/v2/documents/${id}/download`, { inline }),
 };

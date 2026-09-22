@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Settings2 } from 'lucide-react';
+import { Plus, ScanLine, Settings2 } from 'lucide-react';
 import { PageHeader, EmptyState, Drawer } from '@/design-system';
 import { Button } from '@/shared/components/ui/button';
 import { usePermissions } from '@/shared/hooks/usePermissions';
@@ -9,12 +9,14 @@ import type { ApiError } from '@/lib/api';
 import { useToday } from '../hooks';
 import { TaskRow } from '../components/TaskRow';
 import { NewTaskForm } from '../components/NewTaskForm';
+import { usePendingReviews } from '@/features/extraction/hooks';
 
 const BUCKET_STYLE: Record<string, string> = { OVERDUE: 'text-red-700', NOW: 'text-amber-700', TODAY: 'text-slate-800', TOMORROW: 'text-slate-700', THIS_WEEK: 'text-slate-600', NO_DATE: 'text-slate-500' };
 
 /** Everything that needs doing, most urgent first. Rule tasks close themselves when the record is sorted. */
 export default function TodayPage() {
   const { can } = usePermissions();
+  const toCheck = (usePendingReviews().data?.items ?? []).filter(x => x.status === 'READY').length;
   const { user } = useAuth();
   const [mine, setMine] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -34,6 +36,12 @@ export default function TodayPage() {
           <Link to="/settings/task-rules" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"><Settings2 className="w-3.5 h-3.5" />Rules</Link>
         </div>} />
       <div className="px-5 py-4 space-y-4 max-w-5xl">
+        {toCheck > 0 && (
+          <Link to="/documents/review" className="block rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 hover:bg-amber-100">
+            <ScanLine className="inline w-4 h-4 mr-1.5 -mt-0.5" />
+            {toCheck} document{toCheck === 1 ? '' : 's'} read and waiting for you to check{toCheck === 1 ? 'it' : 'them'} — nothing is saved until you do
+          </Link>
+        )}
         {q.isPending && <p className="text-sm text-slate-500">Loading…</p>}
         {q.isError && <EmptyState title="Could not load tasks" description={(q.error as ApiError).message} />}
         {q.data && total === 0 && <div className="bg-white border border-slate-200 rounded-md"><EmptyState title="Nothing due" description={mine ? 'No open tasks assigned to you for the next 7 days.' : 'No open tasks for the next 7 days.'} /></div>}

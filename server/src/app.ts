@@ -65,6 +65,7 @@ import expensesRouter        from './routes/v2/expenses.js';
 import taxRulesRouter        from './routes/v2/tax.js';
 import financeRouter         from './routes/v2/finance.js';
 import aiV2Router           from './routes/v2/ai.js';
+import extractionRouter, { documentReadRouter } from './routes/v2/extraction.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
 import { getStorage }        from './core/storage.js';
@@ -152,7 +153,9 @@ app.use('/api/ai',            aiRouter);
 
 // ── v2 (server-authoritative modules; see docs/travelos/02-target-architecture.md) ──
 app.use('/api/v2/me',         meV2Router);
+app.use('/api/v2/documents',  documentReadRouter);
 app.use('/api/v2/documents',  documentsV2Router);
+app.use('/api/v2/extractions', extractionRouter);
 app.use('/api/v2/ai',         aiV2Router);
 app.use('/api/v2/customers',  customersV2Router);
 app.use('/api/v2/travellers', travellersRouter);

@@ -76,6 +76,7 @@ model Organization {
   jobs                   Job[]
   documents              Document[]
   documentLinks          DocumentLink[]
+  documentExtractions    DocumentExtraction[]
   customerRelationships  CustomerRelationship[]
   tripTravellers         TripTraveller[]
   salesQuoteOptionGroups SalesQuoteOptionGroup[]
@@ -236,6 +237,7 @@ model Document {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   links             DocumentLink[]
+  extractions       DocumentExtraction[]
   tickets           Ticket[]
 
   @@index([organizationId, status])
@@ -258,6 +260,50 @@ model DocumentLink {
   @@unique([documentId, entityType, entityId])
   @@index([organizationId, entityType, entityId])
   @@map("document_links")
+}
+
+/// What a model read out of a document, and the proposal a person approves.
+/// Nothing here is ever written to a record on its own (hard rule 8).
+model DocumentExtraction {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  documentId     String
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// QUEUED | READING | READY | APPLIED | REJECTED | FAILED
+  status         String       @default("QUEUED")
+  /// The resumable cursor: classify | extract | match | done.
+  step           String       @default("classify")
+  /// What the classifier decided this document is, and how sure it was.
+  kind           String?
+  kindConfidence String?
+  kindReason     String?
+  provider       String
+  model          String
+  /// Every field the model answered, as { value, confidence }.
+  fields         Json?
+  /// Trip / supplier candidates with their scores and the reason in words.
+  matches        Json?
+  /// The record that would be created, in the shape the form would fill.
+  proposal       Json?
+  tripId         String?
+  vendorId       String?
+  /// What approval created, so the document and the record point at each other.
+  appliedKind    String?
+  appliedId      String?
+  error          String?
+  inputTokens    Int?
+  outputTokens   Int?
+  latencyMs      Int?
+  requestedById  String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, status])
+  @@index([documentId])
+  @@map("document_extractions")
 }
 
 model Customer {

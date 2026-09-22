@@ -21,7 +21,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma, type DbClient } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
 import { AppError, notFound, notConfigured, stateConflict } from '../../core/errors.js';
-import { getStorage, newStorageKey } from '../../core/storage.js';
+import { getStorage, newStorageKey, type Disposition } from '../../core/storage.js';
 import { currentOrganizationId } from '../../core/requestContext.js';
 import {
   ALLOWED_MIME, IDENTITY_TYPES, MAX_DOCUMENT_BYTES,
@@ -165,12 +165,12 @@ export async function getDocument(id: string) {
   return { ...doc, versions };
 }
 
-export async function downloadLink(id: string) {
+export async function downloadLink(id: string, disposition: Disposition = 'attachment') {
   const storage = storageOrFail();
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc) throw notFound('Document');
   if (doc.status === 'PENDING_UPLOAD') throw stateConflict('The file has not been uploaded yet');
-  const link = await storage.presignDownload(doc.storageKey, doc.fileName);
+  const link = await storage.presignDownload(doc.storageKey, doc.fileName, undefined, disposition);
   await audit(prisma, {
     action: 'document_downloaded', entityType: 'document', entityId: doc.id,
     description: `Download link issued for "${doc.fileName}"`, metadata: { expiresAt: link.expiresAt },

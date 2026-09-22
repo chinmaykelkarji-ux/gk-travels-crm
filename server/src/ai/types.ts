@@ -41,7 +41,7 @@ export interface ExtractRequest<T> {
   /** The question asked of this document. */
   question: string;
   /** The shape the answer must take; also validates what comes back. */
-  schema: z.ZodTypeAny;
+  schema: z.ZodType<T>;
   files?: AiFilePart[];
   text?: string;
   maxTokens?: number;

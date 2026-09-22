@@ -16,6 +16,8 @@ import {
 import { documentsApi, type DocumentRow } from '../api';
 import { openDocument, useDocument, useDocumentMutation, useDocuments } from '../hooks';
 import { UploadForm } from '../components/UploadForm';
+import { ReadingPanel } from '@/features/extraction/components/ReadingPanel';
+import { usePendingReviews } from '@/features/extraction/hooks';
 
 const STATUS_TONE: Record<DocStatus, 'neutral' | 'info' | 'success' | 'warning' | 'danger'> = {
   PENDING_UPLOAD: 'warning', UPLOADED: 'neutral', PROCESSING: 'info', EXTRACTED: 'info', NEEDS_REVIEW: 'warning', LINKED: 'success', FAILED: 'danger',
@@ -107,6 +109,8 @@ function Details({ id, onGone }: { id: string; onGone: () => void }) {
         </dl>
       )}
 
+      <ReadingPanel documentId={d.id} documentType={d.type} />
+
       <section>
         <h3 className="text-xs uppercase tracking-wide text-slate-500 mb-1">Attached to</h3>
         {d.links.length === 0 ? <p className="text-sm text-slate-500">Nothing yet.</p> : (
@@ -157,6 +161,7 @@ export default function DocumentsPage() {
   const [expiring, setExpiring] = useState(false);
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const toCheck = (usePendingReviews().data?.items ?? []).filter(x => x.status === 'READY').length;
 
   const list = useDocuments({
     type: (type || undefined) as DocType | undefined,
@@ -193,6 +198,8 @@ export default function DocumentsPage() {
       <PageHeader title="Documents" subtitle="Every ticket, confirmation, bill and identity copy the office keeps — with the record it belongs to"
         actions={
           <div className="flex items-center gap-2">
+            {toCheck > 0 && <Link to="/documents/review" className="text-xs font-medium text-amber-700 hover:underline">{toCheck} to check</Link>}
+            <Link to="/documents/review" className="text-xs text-slate-500 hover:text-slate-800">Reading queue</Link>
             <Link to="/settings/ai" className="text-xs text-slate-500 hover:text-slate-800">Document intelligence</Link>
             {can('documents:write') && <Button size="sm" onClick={() => setAdding(true)}><FileUp className="w-4 h-4 mr-1" />Keep a document</Button>}
           </div>

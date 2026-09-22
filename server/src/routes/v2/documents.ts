@@ -51,7 +51,9 @@ router.get('/:id', requirePermission('documents:read'), async (req: AuthRequest,
 });
 
 router.get('/:id/download', requirePermission('documents:read'), async (req: AuthRequest, res) => {
-  res.json(await svc.downloadLink(p(req)));
+  // `?inline=true` is for showing the document beside its proposal; the
+  // default still downloads, and either link lives for a minute.
+  res.json(await svc.downloadLink(p(req), req.query.inline === 'true' ? 'inline' : 'attachment'));
 });
 
 router.patch('/:id', requirePermission('documents:write'), validate({ body: DocumentUpdate }), async (req: AuthRequest, res) => {

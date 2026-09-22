@@ -12,6 +12,8 @@ import { AppError } from '../../core/errors.js';
 const router = Router();
 const MAX_LOCAL_UPLOAD = 25 * 1024 * 1024;
 
+const INLINE_TYPES: Record<string, string> = { '.pdf': 'application/pdf', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
 // Express 5 wildcards ("/*key") capture the segments as an array.
 function keyOf(params: Record<string, unknown>): string {
   const k = params.key;
@@ -43,8 +45,13 @@ router.get('/*key', async (req, res) => {
   const file = localPathFor(key);
   try { await fs.access(file); } catch { throw new AppError('NOT_FOUND', 404, 'Object not found'); }
   const name = typeof req.query.name === 'string' ? req.query.name.replace(/["\r\n]/g, '_') : path.basename(key);
-  res.setHeader('content-disposition', `attachment; filename="${name}"`);
-  res.setHeader('content-type', 'application/octet-stream');
+  // Only a PDF or a picture is ever shown inside the app; anything else
+  // downloads, so a stored file can never be rendered as script by the browser.
+  const type = INLINE_TYPES[path.extname(name).toLowerCase()];
+  const inline = req.query.disp === 'inline' && !!type;
+  res.setHeader('content-disposition', `${inline ? 'inline' : 'attachment'}; filename="${name}"`);
+  res.setHeader('content-type', inline ? type : 'application/octet-stream');
+  res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('cache-control', 'private, no-store');
   createReadStream(file).pipe(res);
 });

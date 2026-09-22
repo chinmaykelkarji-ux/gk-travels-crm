@@ -18,6 +18,8 @@
 //   tasks.sweep      — every 15 min per organisation: the task engine
 //                      re-evaluates every open trip and the sales pipeline
 //                      (time-based rules; records without trip hooks)
+//   documents.extract — on demand: reads one document, one step per tick
+//                      (classify → extract → match), then waits for a person
 // ============================================================
 
 import { registerJobHandler, registerRecurringJob } from '../core/jobs.js';
@@ -27,13 +29,31 @@ import { encryptLegacyIdentityBatch } from '../core/identity.js';
 import { importLegacyBookings } from '../modules/tickets/legacyImport.js';
 import { sweep as sweepTasks } from '../modules/tasks/engine.js';
 import { importLegacyPayments } from '../modules/receipts/legacyImport.js';
+import { advanceExtraction } from '../modules/extraction/service.js';
+import { enqueueJob } from '../core/jobs.js';
 
 registerJobHandler('scheduler.rules', async () => runSchedulerRules());
 registerJobHandler('outbox.dispatch', async () => processOutboxBatch());
 registerJobHandler('identity.encrypt-legacy', async () => encryptLegacyIdentityBatch());
 registerJobHandler('legacy.bookings-import', async () => importLegacyBookings(null));
 registerJobHandler('tasks.sweep', async () => sweepTasks());
-registerJobHandler('legacy.payments-import', async () => importLegacyPayments());
+registerJobHandler('legacy.payments-import', async () => importLegacyPayments());
+
+// Reading a document is a state machine: each step commits, so a tick that
+// runs out of time resumes at the step it was on rather than starting again.
+registerJobHandler('documents.extract', async (payload, ctx) => {
+  const extractionId = String(payload.extractionId);
+  let steps = 0;
+  for (;;) {
+    const r = await advanceExtraction(extractionId);
+    steps++;
+    if (r.done) return { steps, step: r.step };
+    if (Date.now() > ctx.deadline - 8_000) {
+      await enqueueJob({ type: 'documents.extract', payload: { extractionId }, idempotencyKey: `extract:${extractionId}:${r.step}` });
+      return { steps, continuedAt: r.step };
+    }
+  }
+});
 
 registerRecurringJob({ type: 'scheduler.rules', everyMs: 15 * 60 * 1000 });
 registerRecurringJob({ type: 'outbox.dispatch', everyMs: 60 * 1000, priority: 5 });
