@@ -17,6 +17,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "seed:users": "tsx server/src/scripts/seedUsers.ts",
+    "eval:extraction": "tsx server/src/scripts/evalExtraction.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
