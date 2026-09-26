@@ -7,6 +7,8 @@
 
 import { prisma } from '../../lib/prisma.js';
 import { formatInr, toPaise } from '../../../../src/shared/calc/money.js';
+import { istToday } from '../../../../src/shared/calc/istTime.js';
+import { allocatePayments } from '../../../../src/shared/calc/schedule.js';
 import { formatPhone } from '../../../../src/shared/calc/phone.js';
 import { travellerDisplayName } from '../../../../src/shared/calc/travellers.js';
 
@@ -27,6 +29,24 @@ const day = (d: string | Date | null | undefined) => {
 };
 const when = (d: Date | null | undefined) => d ? d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : null;
 const inr = (n: unknown) => (n === null || n === undefined ? null : formatInr(toPaise(Number(n))));
+
+/**
+ * When the money on a trip is due: the first instalment not yet fully paid
+ * across its booking contracts (money received is applied in order), or the
+ * departure date when there is no schedule.
+ */
+async function nextDueDate(tripId: string, departure: string | null): Promise<string | null> {
+  const contracts = await prisma.bookingContract.findMany({
+    where: { tripId, status: { not: 'CANCELLED' } },
+    select: { schedule: { orderBy: { seq: 'asc' }, select: { seq: true, label: true, dueDate: true, amount: true } }, receipts: { where: { status: 'POSTED', kind: 'RECEIPT' }, select: { amount: true } } },
+  });
+  const today = istToday();
+  const open = contracts.flatMap(c => allocatePayments(
+    c.schedule.map(i => ({ seq: i.seq, label: i.label, dueDate: i.dueDate.toISOString().slice(0, 10), amount: Number(i.amount) })),
+    c.receipts.reduce((s, r) => s + Number(r.amount), 0), today,
+  ).filter(i => i.status !== 'PAID').map(i => i.dueDate)).sort();
+  return day(open[0] ?? departure);
+}
 
 export async function templateValues(ctx: MessageContext): Promise<{ values: Record<string, string>; to: { phone: string | null; email: string | null; name: string | null } }> {
   const v: Record<string, string | null | undefined> = {};
@@ -50,6 +70,7 @@ export async function templateValues(ctx: MessageContext): Promise<{ values: Rec
       amount_due: Number(trip.balanceDue ?? 0) > 0 ? inr(trip.balanceDue) : null,
       pickup_point: trip.pickupPoints[0]?.name, pickup_time: when(trip.pickupPoints[0]?.pickupAt),
     });
+    v.due_date = await nextDueDate(trip.id, trip.departure);
     const duty = trip.vehicleAssignments[0];
     if (duty) {
       v.driver_name = duty.driver?.name ?? duty.driverName;

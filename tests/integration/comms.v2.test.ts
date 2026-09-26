@@ -50,6 +50,12 @@ describe.skipIf(!hasTestDb)('communications', () => {
     expect(p.body).toMatchObject({ to: 'ramesh@example.com', subject: 'Booking confirmed — Kashi Yatra', missing: [], cannotSend: null });
     expect(p.body.text).toBe('Namaste Ramesh Patil Ji,\nYour Kashi Yatra (GK-2026-0001) is confirmed, departing 12 Nov 2026 and returning 18 Nov 2026. Thank you for travelling with us.\n— GK Travels, 08312400000');
 
+    // A payment reminder sent by hand knows when the money is due: here, no schedule, so the departure.
+    await prisma.trip.update({ where: { id: 'GK-2026-0001' }, data: { balanceDue: 45_000 } });
+    const pay = await as('BOOKING').post('/api/v2/communications/preview', send({ templateKey: 'payment_reminder', channel: 'EMAIL' }));
+    expect(pay.body).toMatchObject({ missing: [] });
+    expect(pay.body.text).toContain('₹45,000 is due by 12 Nov 2026 for Kashi Yatra');
+
     const gap = await as('BOOKING').post('/api/v2/communications/preview', send({ templateKey: 'departure_reminder' }));
     expect(gap.body.missing.sort()).toEqual(['pickup_point', 'pickup_time']);
     const refused = await as('BOOKING').post('/api/v2/communications/send', send({ templateKey: 'departure_reminder', channel: 'EMAIL' }));
