@@ -23,7 +23,7 @@ const ROUTE_META: Record<string, { title: string; subtitle: string }> = {
   '/settings':     { title: 'Settings',     subtitle: 'Company · Integrations · Users'            },
 };
 
-const V2_PREFIXES = ['/customers', '/travellers', '/leads', '/enquiries', '/quotes', '/contracts', '/suppliers', '/hotels', '/fleet', '/activities', '/tickets', '/trips', '/today', '/settings/task-rules', '/settings/tax-rates', '/settings/ai', '/settings/templates', '/settings/messaging', '/settings/automations', '/reports', '/settings/roles', '/copilot', '/documents', '/books', '/receipts', '/payables', '/spending', '/money'];
+const V2_PREFIXES = ['/customers', '/travellers', '/leads', '/enquiries', '/quotes', '/contracts', '/suppliers', '/hotels', '/fleet', '/activities', '/tickets', '/trips', '/today', '/settings/task-rules', '/settings/tax-rates', '/settings/ai', '/settings/templates', '/settings/messaging', '/settings/automations', '/reports', '/settings/roles', '/settings/api-keys', '/copilot', '/documents', '/books', '/receipts', '/payables', '/spending', '/money'];
 
 interface HeaderProps {
   onMenuToggle:  () => void;

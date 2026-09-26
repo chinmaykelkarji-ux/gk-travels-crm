@@ -71,6 +71,7 @@ const AutomationsPage     = lazy(() => import('@/features/automation/pages/Autom
 const PortalPage          = lazy(() => import('@/portal/PortalPage'));
 const ReportsPage         = lazy(() => import('@/features/reports/pages/ReportsPage'));
 const RolesPage           = lazy(() => import('@/features/roles/pages/RolesPage'));
+const ApiKeysPage         = lazy(() => import('@/features/apiKeys/ApiKeysPage'));
 const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const DocumentReviewPage  = lazy(() => import('@/features/extraction/pages/ReviewPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
@@ -373,6 +374,7 @@ export default function App() {
                 <Route path="/settings/automations"  element={<AutomationsPage />} />
                 <Route path="/reports"               element={<ReportsPage />} />
                 <Route path="/settings/roles"        element={<RoleGuard allowed={['ADMIN']}><RolesPage /></RoleGuard>} />
+                <Route path="/settings/api-keys"     element={<RoleGuard allowed={['ADMIN']}><ApiKeysPage /></RoleGuard>} />
                 <Route path="/documents/review"      element={<DocumentReviewPage />} />
                 <Route path="/documents"             element={<DocumentsPage />} />
                 <Route path="/settings"              element={<Settings />} />

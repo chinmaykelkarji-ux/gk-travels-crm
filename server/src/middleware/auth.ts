@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { isPrincipalKey, loadPrincipal } from '../core/principals.js';
+import { authenticateKey } from '../modules/apiKeys/service.js';
 import jwt from 'jsonwebtoken';
 import { setContextUser, DEFAULT_ORGANIZATION_ID } from '../core/requestContext.js';
 import { validateSession } from '../core/sessions.js';
@@ -88,6 +89,10 @@ const DRIVER_ALLOWED = [/^\/api\/v2\/driver(\/|\?|$)/, /^\/api\/v2\/me(\?|$)/, /
 // On failure: clears the stale cookie and returns 401.
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  // Another system with an API key: read-only, /api/v2 only, as the principal apikey:<id>.
+  const bearer = req.get('authorization');
+  if (bearer?.startsWith('Bearer tos_')) { await apiKeyAuth(req, res, next, bearer.slice(7)); return; }
+
   const token = (req.cookies as Record<string, string | undefined>)[COOKIE_NAME];
 
   if (!token) {
@@ -136,6 +141,23 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   req.organizationId = session.organizationId;
   req.sessionId      = payload.sid;
   setContextUser({ userId: payload.id, userRole: payload.role, organizationId: session.organizationId });
+  next();
+}
+
+async function apiKeyAuth(req: AuthRequest, res: Response, next: NextFunction, presented: string): Promise<void> {
+  const key = await authenticateKey(presented);
+  if (!key) { res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Unknown, revoked or lapsed API key' } }); return; }
+  if (req.method !== 'GET' || !req.originalUrl.startsWith('/api/v2/')) {
+    res.status(403).json({ error: { code: 'FORBIDDEN', message: 'API keys are read-only and reach /api/v2 only' } });
+    return;
+  }
+  const principal = `apikey:${key.id}`;
+  if (!(await loadPrincipal(principal))) { res.status(401).json({ error: { code: 'UNAUTHENTICATED', message: 'Unknown, revoked or lapsed API key' } }); return; }
+  req.userId = principal;
+  req.userName = key.name;
+  req.userRole = principal;
+  req.organizationId = key.organizationId;
+  setContextUser({ userId: principal, userRole: principal, organizationId: key.organizationId });
   next();
 }
 
