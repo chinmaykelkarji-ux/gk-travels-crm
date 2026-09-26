@@ -61,7 +61,8 @@ router.post('/login', loginLimiter, async (req, res) => {
       id:    user.id,
       email: user.email,
       name:  user.name,
-      role:  user.role,
+      // A custom role is carried as its key; permissions are looked up from it (core/principals.ts).
+      role:  user.customRoleId ? `custom:${user.customRoleId}` : user.role,
       orgId: user.organizationId,
       sid,
     });

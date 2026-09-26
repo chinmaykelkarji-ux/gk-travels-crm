@@ -8,6 +8,7 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.js';
 import { ROLE_PERMISSIONS } from '../../lib/permissions.js';
 import { currentOrganizationId } from '../../core/requestContext.js';
 import { unauthorized } from '../../core/errors.js';
+import { isPrincipalKey, permissionsOf } from '../../core/principals.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -15,7 +16,7 @@ router.use(requireAuth);
 router.get('/', async (req: AuthRequest, res) => {
   const user = await prisma.user.findUnique({
     where:  { id: req.userId as string },
-    select: { id: true, email: true, name: true, role: true, isActive: true, organizationId: true, lastLoginAt: true },
+    select: { id: true, email: true, name: true, role: true, isActive: true, organizationId: true, lastLoginAt: true, customRole: { select: { id: true, name: true } } },
   });
   if (!user || !user.isActive) throw unauthorized('Account not found or deactivated');
 
@@ -25,7 +26,9 @@ router.get('/', async (req: AuthRequest, res) => {
   });
 
   const role = user.role as UserRole;
-  const permissions = role === 'ADMIN' ? ['*'] : ROLE_PERMISSIONS[role] ?? [];
+  // A custom role's own list (loaded by requireAuth), otherwise the system role's.
+  const principal = isPrincipalKey(req.userRole) ? permissionsOf(req.userRole) : null;
+  const permissions = principal ? [...principal].sort() : role === 'ADMIN' ? ['*'] : ROLE_PERMISSIONS[role] ?? [];
 
   res.json({
     user,

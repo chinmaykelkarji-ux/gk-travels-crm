@@ -61,6 +61,8 @@ model Organization {
   automationRuns        AutomationRun[]
   portalAccesses        PortalAccess[]
   feedbacks             Feedback[]
+  accessRoles           AccessRole[]
+  apiKeys               ApiKey[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -116,6 +118,8 @@ model User {
   email             String               @unique
   passwordHash      String
   name              String
+  customRoleId      String?
+  customRole        AccessRole?          @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
   role              Role                 @default(ADMIN)
   isActive          Boolean              @default(true)
   lastLoginAt       DateTime?
@@ -224,26 +228,26 @@ enum DocumentStatus {
 }
 
 model Document {
-  id                String         @id @default(cuid())
-  organizationId    String         @default("org_gktravels")
-  organization      Organization   @relation(fields: [organizationId], references: [id])
-  type              DocumentType   @default(OTHER)
-  status            DocumentStatus @default(PENDING_UPLOAD)
+  id                String               @id @default(cuid())
+  organizationId    String               @default("org_gktravels")
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  type              DocumentType         @default(OTHER)
+  status            DocumentStatus       @default(PENDING_UPLOAD)
   title             String
   fileName          String
   mimeType          String
   sizeBytes         Int
   sha256            String?
-  storageKey        String         @unique
+  storageKey        String               @unique
   uploadedById      String?
   uploadedAt        DateTime?
   expiresAt         DateTime?
-  version           Int            @default(1)
+  version           Int                  @default(1)
   previousVersionId String?
-  customerVisible   Boolean        @default(false)
+  customerVisible   Boolean              @default(false)
   notes             String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
   links             DocumentLink[]
   extractions       DocumentExtraction[]
   tickets           Ticket[]
@@ -311,12 +315,8 @@ model DocumentExtraction {
 
   @@index([organizationId, status])
   @@index([documentId])
-
   @@map("document_extractions")
-
 }
-
-
 
 /// One conversation with the copilot, kept so it can be continued and read back.
 model AiSession {
@@ -3121,4 +3121,48 @@ model Feedback {
   @@unique([organizationId, tripId, customerId])
   @@index([organizationId, tripId])
   @@map("feedback")
+}
+
+// A role the owner made (Phase 9.1): a base role (for the classic screens'
+// guards and for redaction defaults) and the exact permissions it grants.
+// The four system roles stay in code (lib/permissions.ts); a user with a
+// custom role acts as the key `custom:<id>` wherever permissions are checked.
+model AccessRole {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  description    String?
+  baseRole       Role
+  permissions    Json
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  users          User[]
+
+  @@unique([organizationId, name])
+  @@map("access_roles")
+}
+
+// A key another system uses to read TravelOS (Phase 9.2). Read-only: only
+// GET requests, only the permissions it was given. Only the SHA-256 of the
+// secret is kept; the key is shown once.
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  prefix         String       @unique
+  secretHash     String
+  permissions    Json
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  lastUsedAt     DateTime?
+  useCount       Int          @default(0)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("api_keys")
 }

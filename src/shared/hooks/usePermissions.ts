@@ -8,6 +8,8 @@
 
 import { useAuth } from '@/backend/auth/AuthContext';
 import type { UserRole } from '@/backend/auth/types';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ADMIN: ['*', 'users:read', 'users:write', 'ai:use'],
@@ -97,13 +99,20 @@ export function hasPermission(role: UserRole | null | undefined, permission: str
   return perms.includes('*') || perms.includes(permission);
 }
 
+/** The server's own list for this session (custom roles live there); the map above until it arrives. */
+function useServerPermissions(enabled: boolean): string[] | null {
+  const q = useQuery({ queryKey: ['me', 'permissions'], queryFn: () => api.get<{ permissions: string[] }>('/v2/me'), enabled, staleTime: 60_000 });
+  return q.data?.permissions ?? null;
+}
+
 export function usePermissions() {
   const { user } = useAuth();
   const role = user?.role ?? null;
+  const server = useServerPermissions(Boolean(user) && role !== 'DRIVER');
 
   return {
     role,
-    can: (permission: string) => hasPermission(role, permission),
+    can: (permission: string) => (server ? server.includes('*') || server.includes(permission) : hasPermission(role, permission)),
     isAdmin:      role === 'ADMIN',
     isBooking:    role === 'BOOKING',
     isAccounts:   role === 'ACCOUNTS',

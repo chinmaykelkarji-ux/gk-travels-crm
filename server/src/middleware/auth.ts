@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { isPrincipalKey, loadPrincipal } from '../core/principals.js';
 import jwt from 'jsonwebtoken';
 import { setContextUser, DEFAULT_ORGANIZATION_ID } from '../core/requestContext.js';
 import { validateSession } from '../core/sessions.js';
@@ -114,6 +115,12 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   if (!session || session.userId !== payload.id) {
     reject(res, 'Session expired. Please sign in again.');
     return;
+  }
+
+  // A custom role: its permissions come from the database; a deleted role ends the session.
+  if (isPrincipalKey(payload.role)) {
+    const p = await loadPrincipal(payload.role);
+    if (!p || p.organizationId !== session.organizationId) { reject(res, 'Your role has changed. Please sign in again.'); return; }
   }
 
   // A driver login reaches only the driver view, its own profile and sign-out.

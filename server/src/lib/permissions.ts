@@ -31,6 +31,7 @@
 import type { Response, NextFunction, RequestHandler } from 'express';
 import type { Role as UserRole } from '@prisma/client';
 import type { AuthRequest } from '../middleware/auth.js';
+import { isPrincipalKey, permissionsOf } from '../core/principals.js';
 
 export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ADMIN: ['*', 'users:read', 'users:write', 'ai:use'],
@@ -99,9 +100,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
 
 // ── hasPermission ──────────────────────────────────────────
 
-export function hasPermission(role: UserRole, permission: string): boolean {
+export function hasPermission(role: UserRole | string, permission: string): boolean {
+  // A custom role or an API key: exactly the permissions stored for it (core/principals.ts).
+  if (isPrincipalKey(role)) return permissionsOf(role)?.has(permission) ?? false;
   if (role === 'ADMIN') return true;
-  const perms = ROLE_PERMISSIONS[role] ?? [];
+  const perms = ROLE_PERMISSIONS[role as UserRole] ?? [];
   return perms.includes('*') || perms.includes(permission);
 }
 
