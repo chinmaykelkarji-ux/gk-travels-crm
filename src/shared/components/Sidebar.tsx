@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, FolderOpen, Ticket, UserCircle,
   IndianRupee, Activity, Settings, X, Plane, Building2,
   Map, FileCheck, BarChart2, LogOut, Receipt, UsersRound, CalendarClock,
-  FileMinus, FilePlus, Percent, Gauge, MessageSquare, FileSpreadsheet, Inbox, Hotel, Bus, Landmark, TrainFront, ListChecks, BookOpen, Paperclip, HandCoins, Wallet, Coins, TrendingUp,
+  FileMinus, FilePlus, Percent, Gauge, MessageSquare, FileSpreadsheet, Inbox, Hotel, Bus, Landmark, TrainFront, ListChecks, BookOpen, Paperclip, HandCoins, Wallet, Coins, TrendingUp, Bot,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useStore, selectors } from '@/store';
@@ -29,6 +29,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:read' },
       { path: '/today', label: 'Today', icon: ListChecks, permission: 'tasks:read' },
+      { path: '/copilot', label: 'Ask TravelOS', icon: Bot, permission: 'copilot:use' },
     ],
   },
   {
