@@ -69,6 +69,7 @@ const TemplatesPage       = lazy(() => import('@/features/templates/pages/Templa
 const MessagingStatusPage = lazy(() => import('@/features/comms/pages/MessagingStatusPage'));
 const AutomationsPage     = lazy(() => import('@/features/automation/pages/AutomationsPage'));
 const PortalPage          = lazy(() => import('@/portal/PortalPage'));
+const ReportsPage         = lazy(() => import('@/features/reports/pages/ReportsPage'));
 const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const DocumentReviewPage  = lazy(() => import('@/features/extraction/pages/ReviewPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
@@ -369,6 +370,7 @@ export default function App() {
                 <Route path="/settings/templates"    element={<TemplatesPage />} />
                 <Route path="/settings/messaging"    element={<MessagingStatusPage />} />
                 <Route path="/settings/automations"  element={<AutomationsPage />} />
+                <Route path="/reports"               element={<ReportsPage />} />
                 <Route path="/documents/review"      element={<DocumentReviewPage />} />
                 <Route path="/documents"             element={<DocumentsPage />} />
                 <Route path="/settings"              element={<Settings />} />

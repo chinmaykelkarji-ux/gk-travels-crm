@@ -30,6 +30,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard, permission: 'dashboard:read' },
       { path: '/today', label: 'Today', icon: ListChecks, permission: 'tasks:read' },
       { path: '/copilot', label: 'Ask TravelOS', icon: Bot, permission: 'copilot:use' },
+      { path: '/reports', label: 'Reports', icon: BarChart2, permission: 'insights:read' },
     ],
   },
   {
