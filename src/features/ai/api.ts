@@ -4,6 +4,7 @@ export interface AiFeatureStatus { provider: string; model: string; configured: 
 export interface AiStatus {
   extraction: AiFeatureStatus;
   prose: AiFeatureStatus;
+  copilot: AiFeatureStatus;
   storage: { configured: boolean; hint: string | null };
   ready: boolean;
 }

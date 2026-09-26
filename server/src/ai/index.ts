@@ -41,6 +41,8 @@ export function aiProvider(task: AiTask = 'extraction'): AiProvider {
     const gemini = new GeminiProvider();
     if (gemini.isConfigured()) provider = gemini;
   }
+  // Gemini cannot hold a conversation with tools; the copilot uses Claude.
+  if (task === 'chat' && !provider.supports('chat')) provider = new ClaudeProvider();
   cached = { key, provider };
   return provider;
 }
@@ -59,10 +61,13 @@ export interface AiFeatureStatus {
 export interface AiStatus {
   extraction: AiFeatureStatus;
   prose: AiFeatureStatus;
+  copilot: AiFeatureStatus;
   storage: { configured: boolean; hint: string | null };
   /** True only when a document can actually be read end to end today. */
   ready: boolean;
 }
+
+const WHAT: Record<AiTask, string> = { extraction: 'document reading', prose: 'wording', chat: 'the copilot' };
 
 const HINT: Record<string, string> = {
   claude:   'Set ANTHROPIC_API_KEY on the server to let TravelOS read documents.',
@@ -78,17 +83,20 @@ function statusOf(p: AiProvider, task: AiTask): AiFeatureStatus {
     configured,
     hint: configured ? null
       : p.supports(task) ? (HINT[p.name] ?? 'This provider is not configured on the server.')
-      : `${p.name} does not do ${task === 'extraction' ? 'document reading' : 'wording'}.`,
+      : `${p.name} does not do ${WHAT[task]}.`,
   };
 }
 
 export function aiStatus(): AiStatus {
   const extraction = statusOf(aiProvider('extraction'), 'extraction');
   const prose = statusOf(aiProvider('prose'), 'prose');
+  const copilot = statusOf(aiProvider('chat'), 'chat');
+  if (!copilot.configured && copilot.provider === 'claude') copilot.hint = 'Set ANTHROPIC_API_KEY on the server to turn on the copilot.';
   const storage = isStorageConfigured();
   return {
     extraction,
     prose,
+    copilot,
     storage: { configured: storage, hint: storage ? null : 'Document storage is not configured (R2 bucket or local disk).' },
     ready: extraction.configured && storage,
   };

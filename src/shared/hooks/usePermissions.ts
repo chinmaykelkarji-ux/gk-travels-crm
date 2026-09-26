@@ -28,7 +28,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'masters:read', 'masters:write', 'rates:write',
     'operations:read', 'operations:write',
     'expenses:read',
-    'ai:use',
+    'ai:use', 'copilot:use',
   ],
 
   ACCOUNTS: [
@@ -47,6 +47,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'commissions:read', 'commissions:write',
     'documents:read', 'documents:write',
     'reports:read',
+    'copilot:use',
     'masters:read',
     'operations:read',
   ],
@@ -65,6 +66,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',
     'documents:read', 'documents:write',
+    'copilot:use',
   ],
   // Driver view only (/driver): their own confirmed duties and status updates.
   DRIVER: [

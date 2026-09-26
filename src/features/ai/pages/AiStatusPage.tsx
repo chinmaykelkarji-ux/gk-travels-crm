@@ -42,6 +42,8 @@ export default function AiStatusPage() {
                   what="Tickets, hotel confirmations and supplier bills are read into fields for you to check. Nothing is saved until a person approves it." />
                 <Row title="Wording" s={q.data.prose}
                   what="Itinerary text and message drafts, written over facts already in TravelOS — never invented." />
+                <Row title="Copilot" s={q.data.copilot}
+                  what="Answers staff questions from the same screens they could open themselves. It only looks; it never changes anything on its own." />
                 <Row title="Document storage" s={{ provider: 'storage', model: 'files', configured: q.data.storage.configured, hint: q.data.storage.hint }}
                   what="Where the original file is kept. Documents with identity numbers stay in the private bucket, behind short-lived links." />
               </ul>

@@ -63,10 +63,9 @@ export const TOOLS: CopilotTool<never>[] = [
         q: i.q ?? undefined, from: i.from ?? undefined, to: i.to ?? undefined,
         includeClosed: i.includeClosed ?? false, page: 1, pageSize: 20,
       } as never);
-      const rows = (page as { items: Record<string, unknown>[]; total: number });
       return {
-        total: rows.total,
-        trips: few(rows.items).map(t => ({
+        total: page.total,
+        trips: few(page.items).map(t => ({
           id: t.id, name: t.tourName ?? t.destination, destination: t.destination, stage: t.stage,
           departure: t.departure, returnDate: t.returnDate, pax: t.pax, customer: t.customer,
         })),
@@ -79,29 +78,30 @@ export const TOOLS: CopilotTool<never>[] = [
     kind: 'read', permission: 'trips:read',
     input: z.object({ tripId: z.string().max(64).describe('The trip id, e.g. GK-2026-0007') }) as never,
     run: async (i: { tripId: string }, ctx) => {
-      const ws = await trips.getWorkspace(i.tripId, ctx.role) as {
-        trip: Record<string, unknown>;
-        readiness?: { open?: { label: string }[]; ready?: boolean };
-        hotelBookings?: { status: string }[]; vehicleAssignments?: { status: string }[];
-        activityBookings?: { status: string }[]; tickets?: { status: string; pnr: string | null }[];
-        travellers?: unknown[];
-      };
-      const count = (rows: { status: string }[] | undefined, status: string) => (rows ?? []).filter(r => r.status === status).length;
+      const ws = await trips.getWorkspace(i.tripId, ctx.role);
+      const status = (rows: { status: string }[], done: string[]) => ({
+        total: rows.filter(r => r.status !== 'CANCELLED').length,
+        confirmed: rows.filter(r => done.includes(r.status)).length,
+      });
       return {
         trip: {
-          id: ws.trip.id, name: ws.trip.tourName ?? ws.trip.destination, stage: ws.trip.stage,
-          departure: ws.trip.departure, returnDate: ws.trip.returnDate, pax: ws.trip.pax,
-          customer: ws.trip.customer, balanceDue: ws.trip.balanceDue,
+          id: ws.trip.id, name: ws.trip.tourName ?? ws.trip.destination, destination: ws.trip.destination,
+          stage: ws.trip.stageLabel ?? ws.trip.stage, departure: ws.trip.departure, returnDate: ws.trip.returnDate,
+          pax: ws.trip.pax, customer: ws.trip.customer, customerId: ws.trip.customerId,
         },
-        ready: ws.readiness?.ready ?? null,
-        stillOpen: (ws.readiness?.open ?? []).map(o => o.label),
+        // The same checks the trip screen shows: "must fix" blocks the next stage.
+        stillOpen: ws.readiness.checks.map(c => ({
+          severity: c.severity === 'block' ? 'must fix' : 'to note', what: c.message, items: few(c.items ?? [], 5),
+        })),
         counts: {
-          travellers: (ws.travellers ?? []).length,
-          hotels: { total: (ws.hotelBookings ?? []).length, confirmed: count(ws.hotelBookings, 'CONFIRMED') },
-          transport: { total: (ws.vehicleAssignments ?? []).length, confirmed: count(ws.vehicleAssignments, 'CONFIRMED') },
-          activities: { total: (ws.activityBookings ?? []).length, confirmed: count(ws.activityBookings, 'CONFIRMED') },
-          tickets: { total: (ws.tickets ?? []).length, confirmed: count(ws.tickets, 'CONFIRMED') },
+          travellers: ws.travellers.length,
+          hotels: status(ws.hotels, ['CONFIRMED']),
+          transport: status(ws.vehicles, ['CONFIRMED', 'COMPLETED']),
+          activities: status(ws.activities, ['CONFIRMED']),
+          tickets: status(ws.tickets, ['CONFIRMED']),
         },
+        money: { totalPayable: ws.money.totalPayable, received: ws.money.paid, stillToCollect: ws.money.balance },
+        openTasks: ws.tasks.length,
       };
     },
   },
@@ -111,7 +111,7 @@ export const TOOLS: CopilotTool<never>[] = [
     kind: 'read', permission: 'customers:read',
     input: z.object({ q: z.string().min(2).max(120).describe('Name, phone or email') }) as never,
     run: async (i: { q: string }) => {
-      const page = await customers.listCustomers({ q: i.q, page: 1, pageSize: 10 } as never) as unknown as { items: Record<string, unknown>[]; total: number };
+      const page = await customers.listCustomers({ q: i.q, page: 1, pageSize: 10 } as never);
       return {
         total: page.total,
         customers: few(page.items).map(c => ({ id: c.id, name: c.name, phone: c.phone, city: c.city, trips: c.tripCount ?? null })),
@@ -124,13 +124,14 @@ export const TOOLS: CopilotTool<never>[] = [
     kind: 'read', permission: 'customers:read',
     input: z.object({ customerId: z.string().max(64).describe('The customer id, e.g. CUS-2026-0001') }) as never,
     run: async (i: { customerId: string }, ctx) => {
-      const c = await customers.getCustomer360(i.customerId) as {
-        customer: Record<string, unknown>; trips?: Record<string, unknown>[]; finance?: Record<string, unknown>;
-      };
+      const c = await customers.getCustomer360(i.customerId);
       return {
         customer: { id: c.customer.id, name: c.customer.name, phone: c.customer.phone, city: c.customer.city },
-        trips: few(c.trips ?? []).map(t => ({ id: t.id, name: t.tourName ?? t.destination, departure: t.departure, stage: t.stage })),
-        money: canSeeCommercials(ctx.role) ? c.finance ?? null : 'not yours to see',
+        tripCount: c.stats.tripCount,
+        trips: few(c.trips).map(t => ({ id: t.id, destination: t.destination, departure: t.departure, returnDate: t.returnDate, status: t.status, pax: t.pax })),
+        money: canSeeCommercials(ctx.role)
+          ? { invoiced: c.stats.invoiced, received: c.stats.received, outstanding: c.stats.outstanding, lifetimeValue: c.stats.lifetimeValue }
+          : 'not theirs to see',
       };
     },
   },
@@ -140,9 +141,7 @@ export const TOOLS: CopilotTool<never>[] = [
     kind: 'read', permission: 'tasks:read',
     input: z.object({ mine: z.boolean().nullable().describe('true for only the asker\'s own tasks') }) as never,
     run: async (i: { mine: boolean | null }, ctx) => {
-      const t = await tasks.today({ mine: i.mine ?? false } as never, ctx.userId, new Date(), ctx.role) as {
-        counts: Record<string, number>; buckets: { bucket: string; tasks: { title: string; dueAt: string | null; priority: string; trip?: { id: string } | null }[] }[];
-      };
+      const t = await tasks.today({ mine: i.mine ?? false } as never, ctx.userId, new Date(), ctx.role);
       return {
         counts: t.counts,
         urgent: few(t.buckets.flatMap(b => b.tasks.map(x => ({ bucket: b.bucket, title: x.title, due: x.dueAt, priority: x.priority, tripId: x.trip?.id ?? null }))), 10),
@@ -196,15 +195,11 @@ export const TOOLS: CopilotTool<never>[] = [
     kind: 'read', permission: 'finance:read',
     input: none as never,
     run: async () => {
-      const aging = await payables.payablesAging() as unknown as {
-        outstanding: number; overdue: number;
-        vendors?: { vendor: string; outstanding: number; overdue: number }[];
-        bills?: { billNumber: string; vendor?: { name: string } | null; dueDate: string | null; outstanding: number; daysOverdue: number }[];
-      };
+      const aging = await payables.payablesAging();
       return {
-        outstanding: aging.outstanding, overdue: aging.overdue,
-        suppliers: few(aging.vendors ?? []).map(v => ({ supplier: v.vendor, outstanding: v.outstanding, overdue: v.overdue })),
-        bills: few(aging.bills ?? []).map(b => ({ bill: b.billNumber, supplier: b.vendor?.name ?? null, due: b.dueDate, outstanding: b.outstanding, daysLate: b.daysOverdue })),
+        outstanding: aging.total, overdue: aging.overdue, advancesNotYetApplied: aging.unappliedAdvances,
+        suppliers: few(aging.vendors).map(v => ({ supplier: v.vendor, bills: v.bills, outstanding: v.outstanding, overdue: v.overdue })),
+        bills: few(aging.bills).map(b => ({ bill: b.billNumber, supplier: b.vendor?.name ?? null, due: b.dueDate, outstanding: b.outstanding, daysLate: b.daysOverdue })),
       };
     },
   },
@@ -223,12 +218,12 @@ export const TOOLS: CopilotTool<never>[] = [
         ...(i.tripId ? { entityType: 'trip' as const, entityId: i.tripId } : {}),
         expiringBefore: i.expiringWithinDays ? addDays(istToday(), i.expiringWithinDays) : undefined,
         includeSuperseded: false, page: 1, pageSize: 20,
-      } as never) as { items: Record<string, unknown>[]; total: number };
+      } as never);
       return {
         total: page.total,
         documents: few(page.items).map(d => ({
           id: d.id, title: d.title, kind: d.type, state: d.status, validUntil: d.expiresAt,
-          attachedTo: (d.links as { entityType: string; entityId: string }[] ?? []).map(l => `${l.entityType}:${l.entityId}`),
+          attachedTo: (d.links ?? []).map(l => `${l.entityType}:${l.entityId}`),
         })),
       };
     },

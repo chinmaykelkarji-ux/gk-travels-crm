@@ -37,6 +37,16 @@ export function recordingKey(task: string, question: string, files: { data: Buff
   return `${task.replace(/[^a-zA-Z0-9._-]/g, '_')}-${h.digest('hex').slice(0, 16)}`;
 }
 
+/** JSON with keys in a fixed order: a conversation read back from JSONB keeps its meaning, not its key order. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).filter(k => o[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
 /**
  * A chat step is keyed by the conversation so far, so replaying a whole
  * exchange gives back exactly the steps the real model took.
@@ -44,7 +54,7 @@ export function recordingKey(task: string, question: string, files: { data: Buff
 export function chatKey(task: string, turns: AiTurn[], toolNames: string[]): string {
   const h = createHash('sha256');
   h.update(task).update('|').update(toolNames.slice().sort().join(','));
-  for (const t of turns) h.update('|').update(JSON.stringify(t));
+  for (const t of turns) h.update('|').update(canonicalJson(t));
   return `chat-${task.replace(/[^a-zA-Z0-9._-]/g, '_')}-${h.digest('hex').slice(0, 16)}`;
 }
 
