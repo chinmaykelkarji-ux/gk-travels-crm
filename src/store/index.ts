@@ -1,8 +1,8 @@
 ﻿// ============================================================
-// GK TRAVELS CRM â€” ZUSTAND STORE
+// GK TRAVELS CRM — ZUSTAND STORE
 //
 // Architecture:
-//   - In-memory store (no localStorage â€” data lives in PostgreSQL)
+//   - In-memory store (no localStorage — data lives in PostgreSQL)
 //   - On init: fetchAll() loads all data from Express API
 //   - Mutations: update store immediately (optimistic) + fire API async
 //   - All financial calculations happen in actions, never in UI
@@ -40,7 +40,7 @@ import { toast } from '@/shared/hooks/useToast';
 // immediately, then the API call fires asynchronously. If the API
 // call fails (401, network error, DB constraint, etc.) the data
 // exists in the in-memory store but was NOT written to PostgreSQL
-// â€” it will disappear on the next page refresh.
+// — it will disappear on the next page refresh.
 //
 // This helper is attached to every fire-and-forget API call so
 // failures are surfaced as a visible toast instead of silently
@@ -357,7 +357,7 @@ export const useStore = create<GKStore>()(
             {
               id:    uid(),
               date:  now,
-              event: `Trip created â€” ${data.destination}`,
+              event: `Trip created — ${data.destination}`,
               type:  'system',
             },
           ],
@@ -546,7 +546,7 @@ export const useStore = create<GKStore>()(
 
         const leadEntry = makeActivityEntry(
           'lead_created',
-          `Lead ${id} created â€” ${lead.name} (${lead.source})`,
+          `Lead ${id} created — ${lead.name} (${lead.source})`,
           'lead',
           id,
           now,
@@ -568,7 +568,7 @@ export const useStore = create<GKStore>()(
       },
 
       deleteLead(id) {
-        // Pure state removal â€” callers are responsible for the API call
+        // Pure state removal — callers are responsible for the API call
         // so they can handle errors and show toasts before committing the state change.
         set((s: GKStore) => ({ leads: s.leads.filter(l => l.id !== id) }));
       },
@@ -878,7 +878,7 @@ export const useStore = create<GKStore>()(
 
         get().logActivity(
           'payment_recorded',
-          `${isCustomer ? 'Customer' : 'Supplier'} payment â‚¹${payment.amount} recorded`,
+          `${isCustomer ? 'Customer' : 'Supplier'} payment ₹${payment.amount} recorded`,
           'payment',
           payment.tripId || payment.bookingId || id,
         );
@@ -983,7 +983,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'web_checkin', priority: 'urgent',
-              message: `Web check-in for ${trip.customer} â€” ${daysLeft === 0 ? 'today' : 'tomorrow'} (${trip.departure})`,
+              message: `Web check-in for ${trip.customer} — ${daysLeft === 0 ? 'today' : 'tomorrow'} (${trip.departure})`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -991,14 +991,14 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'balance_payment', priority: 'urgent',
-              message: `Balance â‚¹${trip.balanceDue} due from ${trip.customer} â€” departing in ${daysLeft}d`,
+              message: `Balance ₹${trip.balanceDue} due from ${trip.customer} — departing in ${daysLeft}d`,
               dueDate: trip.departure, sent: false,
             });
           } else if (daysLeft > 3 && daysLeft <= 7 && (trip.balanceDue ?? 0) > 0) {
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'balance_payment', priority: 'high',
-              message: `Balance â‚¹${trip.balanceDue} pending â€” ${trip.customer} (${trip.destination})`,
+              message: `Balance ₹${trip.balanceDue} pending — ${trip.customer} (${trip.destination})`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -1006,7 +1006,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'visa_followup', priority: 'medium',
-              message: `Follow up visa status for ${trip.customer} â€” ${trip.destination}`,
+              message: `Follow up visa status for ${trip.customer} — ${trip.destination}`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -1014,7 +1014,7 @@ export const useStore = create<GKStore>()(
             newReminders.push({
               id: reminderUid(), tripId: trip.id,
               type: 'final_documents', priority: 'high',
-              message: `Send final documents to ${trip.customer} â€” departing in ${daysLeft}d to ${trip.destination}`,
+              message: `Send final documents to ${trip.customer} — departing in ${daysLeft}d to ${trip.destination}`,
               dueDate: trip.departure, sent: false,
             });
           }
@@ -1113,7 +1113,7 @@ export const useStore = create<GKStore>()(
           vendors:        s.vendors.filter(v => v.id !== id),
           vendorPayments: s.vendorPayments.filter(p => p.vendorId !== id),
         }));
-        // No fire-and-forget â€” callers handle the API call before calling this
+        // No fire-and-forget — callers handle the API call before calling this
       },
 
       // â•â• Vendor Payment Actions â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1159,7 +1159,7 @@ export const useStore = create<GKStore>()(
       },
 
       deleteVendorPayment(id) {
-        // State-only â€” callers own the API call
+        // State-only — callers own the API call
         set((s: GKStore) => ({ vendorPayments: s.vendorPayments.filter(p => p.id !== id) }));
       },
 
@@ -1938,7 +1938,7 @@ export const useStore = create<GKStore>()(
               get().refreshAllReminders();
             }, 0);
 
-            return; // success â€” exit retry loop
+            return; // success — exit retry loop
           } catch (err) {
             const status = (err as { response?: { status?: number } })?.response?.status;
             // Don't retry auth errors — the apiClient interceptor already
