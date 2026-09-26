@@ -55,6 +55,7 @@ model Organization {
   expenses              Expense[]
   staffReimbursements   StaffReimbursement[]
   taxRules              TaxRule[]
+  messageTemplates      MessageTemplate[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -2939,4 +2940,33 @@ model TripPickupPoint {
   @@index([tripId])
   @@index([organizationId])
   @@map("trip_pickup_points")
+}
+
+// A message the office sends again and again, with {{placeholders}} filled
+// from the record it is sent about. System templates are seeded per
+// organisation and can be edited or switched off, never deleted.
+// WhatsApp outside a conversation needs a template Meta has approved:
+// `metaTemplateName` / `metaLanguage` name it, and the placeholders are sent
+// as its parameters in the order they appear in the body.
+model MessageTemplate {
+  id               String       @id @default(cuid())
+  organizationId   String       @default("org_gktravels")
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  key              String
+  channel          String
+  name             String
+  purpose          String?
+  subject          String?
+  body             String
+  metaTemplateName String?
+  metaLanguage     String       @default("en")
+  isSystem         Boolean      @default(false)
+  enabled          Boolean      @default(true)
+  updatedById      String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([organizationId, key, channel])
+  @@index([organizationId])
+  @@map("message_templates")
 }

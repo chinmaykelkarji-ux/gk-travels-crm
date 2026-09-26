@@ -65,6 +65,7 @@ const ExpensesPage        = lazy(() => import('@/features/expenses/pages/Expense
 const TaxRatesPage        = lazy(() => import('@/features/tax/pages/TaxRulesPage'));
 const AiStatusPage        = lazy(() => import('@/features/ai/pages/AiStatusPage'));
 const CopilotPage         = lazy(() => import('@/features/copilot/pages/CopilotPage'));
+const TemplatesPage       = lazy(() => import('@/features/templates/pages/TemplatesPage'));
 const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const DocumentReviewPage  = lazy(() => import('@/features/extraction/pages/ReviewPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
@@ -359,6 +360,7 @@ export default function App() {
                 <Route path="/settings/tax-rates"    element={<TaxRatesPage />} />
                 <Route path="/settings/ai"           element={<AiStatusPage />} />
                 <Route path="/copilot/:sessionId?"   element={<CopilotPage />} />
+                <Route path="/settings/templates"    element={<TemplatesPage />} />
                 <Route path="/documents/review"      element={<DocumentReviewPage />} />
                 <Route path="/documents"             element={<DocumentsPage />} />
                 <Route path="/settings"              element={<Settings />} />
