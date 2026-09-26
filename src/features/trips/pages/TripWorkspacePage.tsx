@@ -14,10 +14,11 @@ import { TransportTab } from '../components/TransportTab';
 import { ActivitiesTab } from '../components/ActivitiesTab';
 import { TicketsTab, DocumentsTab, TimelineTab } from '../components/MoreTabs';
 import { ItineraryTab } from '@/features/itineraries/components/ItineraryTab';
+import { MessagesPanel } from '@/features/comms/components/MessagesPanel';
 
 const TABS = [
   { id: 'overview', label: 'Overview' }, { id: 'travellers', label: 'Travellers' }, { id: 'tickets', label: 'Tickets' }, { id: 'hotels', label: 'Hotels' },
-  { id: 'transport', label: 'Transport' }, { id: 'activities', label: 'Activities' }, { id: 'itinerary', label: 'Itinerary' }, { id: 'documents', label: 'Documents' }, { id: 'timeline', label: 'Timeline' },
+  { id: 'transport', label: 'Transport' }, { id: 'activities', label: 'Activities' }, { id: 'itinerary', label: 'Itinerary' }, { id: 'documents', label: 'Documents' }, { id: 'messages', label: 'Messages' }, { id: 'timeline', label: 'Timeline' },
 ] as const;
 type TabId = typeof TABS[number]['id'];
 
@@ -62,6 +63,7 @@ export default function TripWorkspacePage() {
         {tab === 'activities' && <ActivitiesTab ws={ws} canWrite={canWrite} />}
         {tab === 'itinerary' && <ItineraryTab tripId={t.id} canWrite={canWrite} />}
         {tab === 'documents' && <DocumentsTab ws={ws} canWrite={can('documents:write')} />}
+        {tab === 'messages' && <MessagesPanel tripId={t.id} />}
         {tab === 'timeline' && <TimelineTab ws={ws} />}
       </div>
     </div>

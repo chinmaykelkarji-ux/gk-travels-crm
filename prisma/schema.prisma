@@ -834,21 +834,52 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+/// One message to or from a customer, supplier or traveller — the single log
+/// per record (Phase 7.2). Older rows (type/recipient/subject only) record a
+/// message a person opened in their own WhatsApp or mail (`via` APP).
 model Communication {
-  organizationId String       @default("org_gktravels")
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  id             String       @id @default(cuid())
-  type           String
-  recipient      String
-  subject        String?
-  entityType     String
-  entityId       String
-  userId         String?
-  createdAt      DateTime     @default(now())
+  organizationId    String       @default("org_gktravels")
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  id                String       @id @default(cuid())
+  type              String
+  recipient         String
+  subject           String?
+  entityType        String
+  entityId          String
+  userId            String?
+  createdAt         DateTime     @default(now())
+  /// WHATSAPP | EMAIL
+  channel           String?
+  /// APP: opened by a person in their own app · TRAVELOS: sent by TravelOS
+  via               String       @default("APP")
+  direction         String       @default("OUT")
+  /// LOGGED (opened in an app) · QUEUED · SENDING · SENT · DELIVERED · READ · FAILED
+  status            String       @default("LOGGED")
+  statusReason      String?
+  templateKey       String?
+  body              String?
+  /// The values the placeholders were filled with, in body order — what Meta receives.
+  params            Json?
+  customerId        String?
+  tripId            String?
+  /// HUMAN | AUTOMATION | AI
+  source            String       @default("HUMAN")
+  providerMessageId String?
+  attempts          Int          @default(0)
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+  automationRunId   String?
+  updatedAt         DateTime     @default(now()) @updatedAt
 
   @@index([organizationId])
   @@index([entityType, entityId])
   @@index([type])
+  @@index([organizationId, tripId])
+  @@index([organizationId, customerId])
+  @@index([providerMessageId])
+  @@index([organizationId, status])
   @@map("communications")
 }
 

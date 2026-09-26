@@ -18,6 +18,8 @@
 //   tasks.sweep      — every 15 min per organisation: the task engine
 //                      re-evaluates every open trip and the sales pipeline
 //                      (time-based rules; records without trip hooks)
+//   comms.send       — on demand: one attempt to send a queued message
+//                      (WhatsApp Cloud API / SMTP); retries only what can help
 //   documents.extract — on demand: reads one document, one step per tick
 //                      (classify → extract → match), then waits for a person
 // ============================================================
@@ -31,14 +33,16 @@ import { sweep as sweepTasks } from '../modules/tasks/engine.js';
 import { importLegacyPayments } from '../modules/receipts/legacyImport.js';
 import { advanceExtraction } from '../modules/extraction/service.js';
 import { enqueueJob } from '../core/jobs.js';
+import { deliver as deliverMessage } from '../modules/comms/service.js';
 
 registerJobHandler('scheduler.rules', async () => runSchedulerRules());
 registerJobHandler('outbox.dispatch', async () => processOutboxBatch());
 registerJobHandler('identity.encrypt-legacy', async () => encryptLegacyIdentityBatch());
 registerJobHandler('legacy.bookings-import', async () => importLegacyBookings(null));
 registerJobHandler('tasks.sweep', async () => sweepTasks());
-registerJobHandler('legacy.payments-import', async () => importLegacyPayments());
-
+registerJobHandler('legacy.payments-import', async () => importLegacyPayments());
+registerJobHandler('comms.send', async payload => deliverMessage(String(payload.communicationId)));
+
 // Reading a document is a state machine: each step commits, so a tick that
 // runs out of time resumes at the step it was on rather than starting again.
 registerJobHandler('documents.extract', async (payload, ctx) => {

@@ -69,6 +69,7 @@ import copilotRouter         from './routes/v2/copilot.js';
 import insightsRouter        from './routes/v2/insights.js';
 import templatesRouter       from './routes/v2/templates.js';
 import commsV2Router         from './routes/v2/communications.js';
+import webhooksRouter        from './routes/webhooks.js';
 import extractionRouter, { documentReadRouter } from './routes/v2/extraction.js';
 import storageLocalRouter    from './routes/v2/storageLocal.js';
 import jobsRouter            from './routes/jobs.js';
@@ -102,7 +103,11 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
-app.use(express.json({ limit: '2mb' }));
+// Webhooks are verified against the exact bytes the sender signed.
+app.use(express.json({
+  limit: '2mb',
+  verify: (req, _res, buf) => { if (req.url?.startsWith('/api/webhooks/')) (req as unknown as { rawBody?: Buffer }).rawBody = Buffer.from(buf); },
+}));
 
 // Request id + actor context for every request (core/requestContext.ts).
 app.use(requestContextMiddleware);
@@ -165,6 +170,7 @@ app.use('/api/v2/copilot',    copilotRouter);
 app.use('/api/v2/insights',   insightsRouter);
 app.use('/api/v2/templates',  templatesRouter);
 app.use('/api/v2/communications', commsV2Router);
+app.use('/api/webhooks',      webhooksRouter);
 app.use('/api/v2/customers',  customersV2Router);
 app.use('/api/v2/travellers', travellersRouter);
 app.use('/api/v2/trips/:tripId/travellers', tripTravellersRouter);
