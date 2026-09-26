@@ -67,6 +67,7 @@ const AiStatusPage        = lazy(() => import('@/features/ai/pages/AiStatusPage'
 const CopilotPage         = lazy(() => import('@/features/copilot/pages/CopilotPage'));
 const TemplatesPage       = lazy(() => import('@/features/templates/pages/TemplatesPage'));
 const MessagingStatusPage = lazy(() => import('@/features/comms/pages/MessagingStatusPage'));
+const AutomationsPage     = lazy(() => import('@/features/automation/pages/AutomationsPage'));
 const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const DocumentReviewPage  = lazy(() => import('@/features/extraction/pages/ReviewPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
@@ -363,6 +364,7 @@ export default function App() {
                 <Route path="/copilot/:sessionId?"   element={<CopilotPage />} />
                 <Route path="/settings/templates"    element={<TemplatesPage />} />
                 <Route path="/settings/messaging"    element={<MessagingStatusPage />} />
+                <Route path="/settings/automations"  element={<AutomationsPage />} />
                 <Route path="/documents/review"      element={<DocumentReviewPage />} />
                 <Route path="/documents"             element={<DocumentsPage />} />
                 <Route path="/settings"              element={<Settings />} />

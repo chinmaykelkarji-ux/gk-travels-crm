@@ -1,11 +1,14 @@
 // ============================================================
 // Built-in job handlers. Importing this module registers them.
 //
-//   scheduler.rules  — every 15 min per organisation: payment reminders
-//                      (7/3/1 days), supplier confirmation alerts, departure
-//                      reminders → outbox events (idempotent per rule/day)
-//   outbox.dispatch  — every minute per organisation: deliver pending outbox
-//                      events (WhatsApp/email adapters; logged to message_logs)
+//   automation.sweep — every 15 min per organisation: the automation rules
+//                      the owner switched on (payment / departure reminders,
+//                      supplier not confirmed, waitlisted tickets, …), each
+//                      event acted on once and recorded as a run
+//   outbox.dispatch  — every minute per organisation: closes anything left in
+//                      the classic outbox, unsent, with the reason (retired)
+//   scheduler.rules  — retired (replaced by automation.sweep); a job still
+//                      queued under this name finishes without doing anything
 //   identity.encrypt-legacy — every 15 min per organisation: seal identity
 //                      numbers written in clear before encryption existed
 //                      (a no-op once none are left)
@@ -25,8 +28,8 @@
 // ============================================================
 
 import { registerJobHandler, registerRecurringJob } from '../core/jobs.js';
-import { runSchedulerRules } from '../workers/schedulerWorker.js';
-import { processOutboxBatch } from '../workers/outboxWorker.js';
+import { retireLegacyOutbox } from '../workers/outboxWorker.js';
+import { sweep as sweepAutomations } from '../modules/automation/service.js';
 import { encryptLegacyIdentityBatch } from '../core/identity.js';
 import { importLegacyBookings } from '../modules/tickets/legacyImport.js';
 import { sweep as sweepTasks } from '../modules/tasks/engine.js';
@@ -36,8 +39,9 @@ import { enqueueJob } from '../core/jobs.js';
 import { deliver as deliverMessage } from '../modules/comms/service.js';
 import '../modules/notifications/hooks.js';
 
-registerJobHandler('scheduler.rules', async () => runSchedulerRules());
-registerJobHandler('outbox.dispatch', async () => processOutboxBatch());
+registerJobHandler('scheduler.rules', async () => ({ retired: 'Replaced by automation.sweep (Phase 7.4)' }));
+registerJobHandler('automation.sweep', async () => sweepAutomations());
+registerJobHandler('outbox.dispatch', async () => retireLegacyOutbox());
 registerJobHandler('identity.encrypt-legacy', async () => encryptLegacyIdentityBatch());
 registerJobHandler('legacy.bookings-import', async () => importLegacyBookings(null));
 registerJobHandler('tasks.sweep', async () => sweepTasks());
@@ -60,11 +64,11 @@ registerJobHandler('documents.extract', async (payload, ctx) => {
   }
 });
 
-registerRecurringJob({ type: 'scheduler.rules', everyMs: 15 * 60 * 1000 });
+registerRecurringJob({ type: 'automation.sweep', everyMs: 15 * 60 * 1000, priority: 4 });
 registerRecurringJob({ type: 'outbox.dispatch', everyMs: 60 * 1000, priority: 5 });
 registerRecurringJob({ type: 'identity.encrypt-legacy', everyMs: 15 * 60 * 1000, priority: 1 });
 registerRecurringJob({ type: 'legacy.bookings-import', everyMs: 60 * 60 * 1000, priority: 0 });
 registerRecurringJob({ type: 'tasks.sweep', everyMs: 15 * 60 * 1000, priority: 3 });
 registerRecurringJob({ type: 'legacy.payments-import', everyMs: 60 * 60 * 1000, priority: 0 });
 
-export const BUILT_IN_JOB_TYPES = ['scheduler.rules', 'outbox.dispatch', 'identity.encrypt-legacy', 'legacy.bookings-import', 'tasks.sweep', 'legacy.payments-import'] as const;
+export const BUILT_IN_JOB_TYPES = ['automation.sweep', 'outbox.dispatch', 'identity.encrypt-legacy', 'legacy.bookings-import', 'tasks.sweep', 'legacy.payments-import'] as const;

@@ -127,7 +127,7 @@ describe.skipIf(!hasTestDb)('job runner', () => {
     expect(bJobs[0].result).toEqual({ customers: 2 });
   });
 
-  it('recurring system jobs are enqueued once per window per organisation and produce outbox events', async () => {
+  it('recurring system jobs are enqueued once per window per organisation; automations stay quiet until switched on', async () => {
     await seedCustomer();
     // A trip departing in 3 days with a balance → payment reminder rule fires.
     const in3 = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -135,22 +135,21 @@ describe.skipIf(!hasTestDb)('job runner', () => {
 
     const activeOrgs = await prisma.organization.count({ where: { isActive: true } });
     const first = await jobs!.runTick({ budgetMs: 15_000 });
-    expect(first.systemJobsEnqueued).toBe(activeOrgs * 6); // scheduler.rules + outbox.dispatch + identity.encrypt-legacy + legacy.bookings-import + tasks.sweep + legacy.payments-import per organisation
+    expect(first.systemJobsEnqueued).toBe(activeOrgs * 6); // automation.sweep + outbox.dispatch + identity.encrypt-legacy + legacy.bookings-import + tasks.sweep + legacy.payments-import per organisation
     const second = await jobs!.runTick({ budgetMs: 15_000 });
     expect(second.systemJobsEnqueued).toBe(0);          // same windows → no duplicates
 
-    const sched = await prisma.job.findFirstOrThrow({ where: { type: 'scheduler.rules' } });
+    const sched = await prisma.job.findFirstOrThrow({ where: { type: 'automation.sweep' } });
     expect(sched.status).toBe('SUCCEEDED');
-    expect(sched.result).toMatchObject({ paymentReminders: 1 });
+    // The payment reminder rule messages customers, so it starts switched off: nothing is sent.
+    expect(sched.result).toMatchObject({ events: 0 });
     // The task engine's sweep raised the balance task for the same trip.
     const sweepJob = await prisma.job.findFirstOrThrow({ where: { type: 'tasks.sweep' } });
     expect(sweepJob.status).toBe('SUCCEEDED');
     expect(await prisma.task.count({ where: { tripId: 'GK-2026-0001', ruleCode: 'BALANCE_DUE' } })).toBe(1);
-    const events = await prisma.outboxEvent.findMany();
-    expect(events.map(e => e.eventType)).toContain('PAYMENT_REMINDER_WHATSAPP');
-    // Dispatch ran too: WhatsApp is not configured, so delivery is logged as FAILED, never thrown.
-    const logs = await prisma.messageLog.findMany();
-    expect(logs.length).toBeGreaterThanOrEqual(0);
+    // The classic scheduler no longer writes outbox events, and nothing was queued to send.
+    expect(await prisma.outboxEvent.count()).toBe(0);
+    expect(await prisma.communication.count()).toBe(0);
   });
 
   describe('POST /api/jobs/tick', () => {
@@ -160,7 +159,7 @@ describe.skipIf(!hasTestDb)('job runner', () => {
       const ok = await request(app!).post('/api/jobs/tick').set('Authorization', `Bearer ${process.env.CRON_SECRET}`);
       expect(ok.status).toBe(200);
       expect(ok.body.ok).toBe(true);
-      expect(ok.body.handlers).toContain('scheduler.rules');
+      expect(ok.body.handlers).toContain('automation.sweep');
     });
 
     it('is 503 when no secret is configured', async () => {

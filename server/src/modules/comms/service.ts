@@ -32,10 +32,10 @@ import { templateValues } from './values.js';
 export const MAX_SEND_ATTEMPTS = 3;
 const ORDER: Record<string, number> = { QUEUED: 0, SENDING: 1, SENT: 2, DELIVERED: 3, READ: 4 };
 
-async function prepare(input: CommSend) {
+async function prepare(input: CommSend, extra?: Record<string, string>) {
   const template = await activeTemplate(input.templateKey, input.channel as TemplateChannel);
   if (!template) throw notFound(`An active ${input.channel === 'WHATSAPP' ? 'WhatsApp' : 'email'} template "${input.templateKey}"`);
-  const { values, to } = await templateValues(input);
+  const { values, to } = await templateValues({ ...input, extra });
   const r = renderTemplate(template, values);
   const recipient = input.to ?? (input.channel === 'WHATSAPP' ? to.phone : to.email);
   const status = channelStatus();
@@ -57,9 +57,9 @@ export async function previewMessage(input: CommSend): Promise<CommPreview> {
 }
 
 /** Queues a message for TravelOS to send. Refuses rather than sending anything incomplete. */
-export async function sendMessage(input: CommSend, actorId: string | null, source: 'HUMAN' | 'AUTOMATION' = 'HUMAN', automationRunId: string | null = null) {
+export async function sendMessage(input: CommSend, actorId: string | null, source: 'HUMAN' | 'AUTOMATION' = 'HUMAN', automationRunId: string | null = null, extra?: Record<string, string>) {
   if (!channelConfigured(input.channel)) throw notConfigured(input.channel === 'WHATSAPP' ? 'WhatsApp' : 'Email');
-  const { template, rendered, recipient, preview } = await prepare(input);
+  const { template, rendered, recipient, preview } = await prepare(input, extra);
   if (rendered.missing.length) {
     throw new AppError('VALIDATION_ERROR', 400, `Cannot send: TravelOS does not have ${rendered.missing.map(m => `{{${m}}}`).join(', ')} for this message`, { missing: rendered.missing.join(',') });
   }

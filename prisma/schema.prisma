@@ -57,6 +57,8 @@ model Organization {
   taxRules              TaxRule[]
   messageTemplates      MessageTemplate[]
   notifications         Notification[]
+  automationRules       AutomationRule[]
+  automationRuns        AutomationRun[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -3023,4 +3025,51 @@ model Notification {
   @@unique([organizationId, userId, dedupeKey])
   @@index([organizationId, userId, readAt])
   @@map("notifications")
+}
+
+// An automation the owner can see and switch: a trigger from the catalogue
+// (calc/automation.ts) and what to do. Only events after `enabledAt` are
+// acted on.
+model AutomationRule {
+  id             String          @id @default(cuid())
+  organizationId String          @default("org_gktravels")
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  key            String
+  trigger        String
+  name           String
+  params         Json            @default("{}")
+  actions        Json
+  enabled        Boolean         @default(false)
+  enabledAt      DateTime?
+  isSystem       Boolean         @default(true)
+  updatedById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  runs           AutomationRun[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+  @@map("automation_rules")
+}
+
+// One time a rule acted on one event, with what each action did. The
+// (rule, eventKey) pair is unique, so an event is never acted on twice.
+model AutomationRun {
+  id             String         @id @default(cuid())
+  organizationId String         @default("org_gktravels")
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  ruleId         String
+  rule           AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  eventKey       String
+  entityType     String?
+  entityId       String?
+  /// DONE · SKIPPED · FAILED
+  status         String
+  summary        String
+  outcomes       Json
+  createdAt      DateTime       @default(now())
+
+  @@unique([ruleId, eventKey])
+  @@index([organizationId, ruleId, createdAt])
+  @@map("automation_runs")
 }
