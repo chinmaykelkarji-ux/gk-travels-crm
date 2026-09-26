@@ -1,5 +1,5 @@
 # ============================================================
-# Run TravelOS on this PC — local database only.
+# Run TravelOS on this PC - local database only.
 #
 #   .\scripts\run-local.ps1          start it
 #   .\scripts\run-local.ps1 -Demo    start it and add GK sample data
@@ -62,6 +62,6 @@ if ($Demo) {
   Start-Process powershell -ArgumentList '-NoExit', '-Command', "Set-Location '$PWD'; node scripts/demo-data.mjs"
 }
 
-Write-Host "5/5  Starting TravelOS — open http://localhost:3000" -ForegroundColor Green
+Write-Host "5/5  Starting TravelOS - open http://localhost:3000" -ForegroundColor Green
 Write-Host "     Sign in: owner@gktravels.local / Owner@12345   (Ctrl+C to stop)" -ForegroundColor Green
 npm run dev
