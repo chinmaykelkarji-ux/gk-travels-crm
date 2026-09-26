@@ -82,6 +82,7 @@ function statusOf(p: AiProvider, task: AiTask): AiFeatureStatus {
     model: p.model,
     configured,
     hint: configured ? null
+      : task === 'prose' ? 'Set GEMINI_API_KEY (or ANTHROPIC_API_KEY) on the server to let TravelOS write wording.'
       : p.supports(task) ? (HINT[p.name] ?? 'This provider is not configured on the server.')
       : `${p.name} does not do ${WHAT[task]}.`,
   };
