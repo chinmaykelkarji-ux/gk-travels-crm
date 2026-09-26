@@ -21,3 +21,17 @@ export function useAsk() {
     },
   });
 }
+
+/** Approving or rejecting refreshes the conversation, and whatever the approval created. */
+export function useDecide() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (a: { id: string; approve: boolean; text?: string }) =>
+      a.approve ? copilotApi.approve(a.id, a.text ? { text: a.text } : {}) : copilotApi.reject(a.id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: copilotKeys.all });
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+}

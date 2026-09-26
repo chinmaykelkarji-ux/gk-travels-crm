@@ -83,7 +83,7 @@ export default function CopilotPage() {
 
   return (
     <div className="min-h-full bg-slate-50 flex flex-col">
-      <PageHeader title="Ask TravelOS" subtitle="Answers from your own screens. It only looks — it never changes anything."
+      <PageHeader title="Ask TravelOS" subtitle="Answers from your own screens. It can propose a task, follow-up, trip change or message — nothing is saved until you approve it."
         actions={<div className="flex items-center gap-2">
           <Button size="sm" variant="outline" className="lg:hidden" onClick={() => setShowSessions(s => !s)} aria-expanded={showSessions}>
             <History className="w-4 h-4 mr-1" />Past

@@ -304,10 +304,14 @@ model DocumentExtraction {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, status])
-  @@index([documentId])
-  @@map("document_extractions")
-}
-
+  @@index([documentId])
+
+  @@map("document_extractions")
+
+}
+
+
+
 /// One conversation with the copilot, kept so it can be continued and read back.
 model AiSession {
   id             String       @id @default(cuid())
@@ -349,6 +353,14 @@ model AiAction {
   requestedById  String?
   approvedById   String?
   approvedAt     DateTime?
+  /// The model's id for this call, so a proposal can be shown under the answer that made it.
+  callId         String?
+  /// DONE for a read · PROPOSED → APPROVED or REJECTED for a write (APPROVING while it is being saved).
+  status         String       @default("DONE")
+  /// What an approved proposal created: { type, id, label, link }.
+  result         Json?
+  rejectedById   String?
+  rejectedAt     DateTime?
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, sessionId])

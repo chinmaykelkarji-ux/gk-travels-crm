@@ -8,7 +8,7 @@
 // ============================================================
 
 import type { AiToolCall, AiTurn } from '../../ai/types.js';
-import { toolLabel, type CopilotLook, type CopilotMessage } from '../../../../src/shared/contracts/copilot.js';
+import { toolLabel, type CopilotLook, type CopilotMessage, type CopilotProposal } from '../../../../src/shared/contracts/copilot.js';
 
 /** The words that make a look recognisable: which trip, which search. */
 function detailOf(call: AiToolCall): string | null {
@@ -26,13 +26,17 @@ export function failureOf(output: unknown): string | null {
   return null;
 }
 
-export function lookOf(call: AiToolCall, output: unknown): CopilotLook {
+export function lookOf(call: AiToolCall, output: unknown, proposal?: CopilotProposal): CopilotLook {
   const detail = detailOf(call);
   const note = failureOf(output);
-  return { tool: call.name, label: detail ? `${toolLabel(call.name)} · ${detail}` : toolLabel(call.name), ok: note === null, note };
+  return {
+    tool: call.name, label: detail ? `${toolLabel(call.name)} · ${detail}` : toolLabel(call.name), ok: note === null, note,
+    ...(proposal ? { proposal } : {}),
+  };
 }
 
-export function transcript(turns: AiTurn[]): CopilotMessage[] {
+/** `proposals` (by call id) puts each proposal under the answer that made it. */
+export function transcript(turns: AiTurn[], proposals: Map<string, CopilotProposal> = new Map()): CopilotMessage[] {
   const out: CopilotMessage[] = [];
   let looked: CopilotLook[] = [];
   const calls = new Map<string, AiToolCall>();
@@ -42,7 +46,7 @@ export function transcript(turns: AiTurn[]): CopilotMessage[] {
       out.push({ role: 'user', text: turn.content });
     } else if (turn.role === 'tool') {
       const call = calls.get(turn.callId) ?? { id: turn.callId, name: turn.name, input: {} };
-      looked.push(lookOf(call, turn.output));
+      looked.push(lookOf(call, turn.output, proposals.get(turn.callId)));
     } else {
       for (const c of turn.toolCalls ?? []) calls.set(c.id, c);
       // Only a turn with no further tool calls is the answer a person reads.

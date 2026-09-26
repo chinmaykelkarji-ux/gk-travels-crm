@@ -140,8 +140,9 @@ describe.skipIf(!hasTestDb)('the copilot', () => {
       search_customers: { q: 'Ramesh' }, get_customer: { customerId: 'CUS-2026-0001' }, get_open_tasks: { mine: null },
       get_money_summary: { from: null, to: null }, get_receivables: {}, get_trip_profit: { tripId: 'GK-2026-0001' },
       get_supplier_dues: {}, find_documents: { q: null, tripId: null, expiringWithinDays: 180 }, get_documents_to_check: {},
+      search_enquiries: { q: null, includeClosed: null },
     };
-    expect(Object.keys(inputs).sort()).toEqual(tools!.TOOLS.map(t => t.name).sort());
+    expect(Object.keys(inputs).sort()).toEqual(tools!.TOOLS.filter(t => t.kind === 'read').map(t => t.name).sort());
     for (const [name, input] of Object.entries(inputs)) {
       const r = await copilot!.toolOutcome({ id: name, name, input }, { userId: USER_IDS.ADMIN, role: 'ADMIN' });
       expect(r.error, `${name}: ${JSON.stringify(r.output)}`).toBeNull();
@@ -247,5 +248,154 @@ describe.skipIf(!hasTestDb)('the copilot', () => {
     const r = await as('ADMIN').post('/api/v2/copilot/ask', { message: 'Something never recorded' });
     expect(r.status).toBe(502);
     expect(r.body.error.message).toMatch(/could not answer/);
+  });
+
+  // ── 6.2: proposals ───────────────────────────────────────────
+
+  const proposalOf = (body: { answer: { looked: { proposal?: { id: string; status: string; summary: string; preview: Record<string, unknown> } }[] } }, i = 0) => body.answer.looked[i].proposal!;
+
+  it('a task is only proposed; it exists once the person approves, as theirs, and only once', async () => {
+    const question = 'Remind me to call the Kashi hotel tomorrow';
+    const tasksBefore = await prisma.task.count();
+    await script('BOOKING', question, [
+      { calls: [{ name: 'create_task', input: { title: 'Call the Kashi hotel about room allotment', details: null, priority: 'high', due: day(1), tripId: 'GK-2026-0001' } }] },
+      { answer: 'I have proposed a task for tomorrow on GK-2026-0001. Please check it and approve it below.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: question });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const p = proposalOf(r.body);
+    expect(p).toMatchObject({ status: 'PROPOSED', summary: expect.stringContaining('Call the Kashi hotel') });
+    expect(p.preview).toMatchObject({ task: { title: 'Call the Kashi hotel about room allotment', priority: 'high', tripId: 'GK-2026-0001' } });
+    // Proposed, not saved.
+    expect(await prisma.task.count()).toBe(tasksBefore);
+
+    // Somebody else cannot see or approve it.
+    expect((await as('ADMIN').post(`/api/v2/copilot/proposals/${p.id}/approve`, {})).status).toBe(404);
+
+    const ok = await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/approve`, {});
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body).toMatchObject({ status: 'APPROVED', result: { type: 'task', link: '/trips/GK-2026-0001' } });
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: ok.body.result.id } });
+    expect(task).toMatchObject({ title: 'Call the Kashi hotel about room allotment', tripId: 'GK-2026-0001', priority: 'high', source: 'MANUAL' });
+
+    const action = await prisma.aiAction.findUniqueOrThrow({ where: { id: p.id } });
+    expect(action).toMatchObject({ kind: 'write', status: 'APPROVED', approvedById: USER_IDS.BOOKING, requestedById: USER_IDS.BOOKING });
+    expect(action.approvedAt).toBeInstanceOf(Date);
+    const created = await prisma.activityLog.findFirstOrThrow({ where: { action: 'task_created', entityId: task.id } });
+    expect(created).toMatchObject({ userId: USER_IDS.BOOKING, source: 'HUMAN' });
+    const approved = await prisma.activityLog.findFirstOrThrow({ where: { action: 'copilot_proposal_approved' } });
+    expect(approved).toMatchObject({ entityType: 'task', entityId: task.id, userId: USER_IDS.BOOKING, source: 'HUMAN' });
+    expect(approved.metadata).toMatchObject({ aiActionId: p.id, tool: 'create_task' });
+
+    // Once only.
+    expect((await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/approve`, {})).status).toBe(409);
+    expect((await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/reject`)).status).toBe(409);
+    expect(await prisma.task.count({ where: { title: task.title } })).toBe(1);
+
+    // The conversation shows it as approved, under the answer that proposed it.
+    const one = await as('BOOKING').get(`/api/v2/copilot/sessions/${r.body.sessionId}`);
+    expect(one.body.transcript[1].looked[0].proposal).toMatchObject({ id: p.id, status: 'APPROVED' });
+  });
+
+  it('a trip change that is rejected changes nothing', async () => {
+    const question = 'Move the Kashi trip one day later';
+    await script('BOOKING', question, [
+      { calls: [{ name: 'propose_trip_update', input: { tripId: 'GK-2026-0001', tourName: null, departure: day(6), returnDate: day(11), noteToAdd: 'Moved a day later at the group\'s request' } }] },
+      { answer: 'I have proposed moving GK-2026-0001 by one day. Please approve it below.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: question });
+    const p = proposalOf(r.body);
+    expect(p.preview.changes).toEqual([
+      { field: 'Departure', from: day(5), to: day(6) },
+      { field: 'Return', from: day(10), to: day(11) },
+      expect.objectContaining({ field: 'Note added', from: null }),
+    ]);
+    const no = await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/reject`);
+    expect(no.status).toBe(200);
+    expect(no.body).toMatchObject({ status: 'REJECTED', result: null });
+    expect(await prisma.trip.findUniqueOrThrow({ where: { id: 'GK-2026-0001' } })).toMatchObject({ departure: day(5), returnDate: day(10) });
+    expect(await prisma.aiAction.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ status: 'REJECTED', rejectedById: USER_IDS.BOOKING, approvedById: null });
+    expect(await prisma.activityLog.count({ where: { action: 'copilot_proposal_rejected', entityId: p.id } })).toBe(1);
+    expect((await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/approve`, {})).status).toBe(409);
+  });
+
+  it('an approved trip change goes through the ordinary trip update, with its audit', async () => {
+    await script('BOOKING', 'Add a note', [
+      { calls: [{ name: 'propose_trip_update', input: { tripId: 'GK-2026-0001', tourName: 'Kashi Yatra 2026', departure: null, returnDate: null, noteToAdd: 'Group wants a Ganga aarti evening' } }] },
+      { answer: 'Proposed. Please approve it below.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: 'Add a note' });
+    const ok = await as('BOOKING').post(`/api/v2/copilot/proposals/${proposalOf(r.body).id}/approve`, {});
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { id: 'GK-2026-0001' } });
+    expect(trip.tourName).toBe('Kashi Yatra 2026');
+    expect(trip.notes).toMatch(/\[\d{4}-\d{2}-\d{2}\] Group wants a Ganga aarti evening$/);
+    expect(await prisma.activityLog.findFirstOrThrow({ where: { action: 'trip_updated', entityId: 'GK-2026-0001' } })).toMatchObject({ userId: USER_IDS.BOOKING });
+  });
+
+  it('approving re-checks the permission: a proposal cannot be approved by a role that lacks it', async () => {
+    await script('BOOKING', 'Rename', [
+      { calls: [{ name: 'propose_trip_update', input: { tripId: 'GK-2026-0001', tourName: 'Renamed', departure: null, returnDate: null, noteToAdd: null } }] },
+      { answer: 'Proposed.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: 'Rename' });
+    const id = proposalOf(r.body).id;
+    const proposals = await import('../../server/src/modules/copilot/proposals.js');
+    // The same person, if their role no longer includes trips:write.
+    await expect(proposals.approveProposal(id, { userId: USER_IDS.BOOKING, role: 'OPERATIONS' })).rejects.toMatchObject({ status: 403 });
+    expect((await prisma.trip.findUniqueOrThrow({ where: { id: 'GK-2026-0001' } })).tourName).toBe('Kashi Yatra');
+    expect((await prisma.aiAction.findUniqueOrThrow({ where: { id } })).status).toBe('PROPOSED');
+  });
+
+  it('a drafted message is never sent: approving hands back a link for the person to send', async () => {
+    const text = 'Namaste Shri Ramesh Patil Ji, your Kashi Yatra (GK-2026-0001) departs soon.';
+    await script('BOOKING', 'Draft a reminder to Ramesh', [
+      { calls: [{ name: 'draft_message', input: { customerId: 'CUS-2026-0001', channel: 'whatsapp', subject: null, text } }] },
+      { answer: 'Here is a draft. Please check the wording and approve it below; TravelOS will not send it.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: 'Draft a reminder to Ramesh' });
+    const p = proposalOf(r.body);
+    expect(p.preview).toMatchObject({ message: { to: 'Ramesh Patil', channel: 'whatsapp', text }, canOpen: true, note: 'Nothing is sent by TravelOS.' });
+    const edited = `${text} Please carry your Aadhaar card.`;
+    const ok = await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/approve`, { text: edited });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.result).toMatchObject({ type: 'message_draft', id: null, external: true });
+    expect(ok.body.result.link).toBe(`https://wa.me/919999900001?text=${encodeURIComponent(edited)}`);
+    const action = await prisma.aiAction.findUniqueOrThrow({ where: { id: p.id } });
+    expect(action.result).toMatchObject({ editedInput: { text: edited } });
+    expect(action.input).toMatchObject({ text });   // what the model proposed stays on record
+    expect(await prisma.outboxEvent.count()).toBe(0);
+    expect(await prisma.activityLog.findFirstOrThrow({ where: { action: 'copilot_proposal_approved' } })).toMatchObject({ entityType: 'customer', entityId: 'CUS-2026-0001' });
+  });
+
+  it('a follow-up on an enquiry is proposed, then created by the enquiry service', async () => {
+    const enq = await as('BOOKING').post('/api/v2/enquiries', { customerId: 'CUS-2026-0001', source: 'WHATSAPP', destination: 'Rameshwaram', adults: 4 });
+    expect(enq.status, JSON.stringify(enq.body)).toBe(201);
+    const found = await copilot!.toolOutcome({ id: 'x', name: 'search_enquiries', input: { q: 'Rameshwaram', includeClosed: null } }, { userId: USER_IDS.BOOKING, role: 'BOOKING' });
+    expect(found.output).toMatchObject({ total: 1, enquiries: [{ id: enq.body.id, customer: 'Ramesh Patil', destination: 'Rameshwaram' }] });
+    await script('BOOKING', 'Follow up the Rameshwaram enquiry on Monday', [
+      { calls: [{ name: 'create_followup', input: { enquiryId: enq.body.id, dueDate: day(3), note: 'Send the hotel options' } }] },
+      { answer: 'Proposed a follow-up. Please approve it below.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: 'Follow up the Rameshwaram enquiry on Monday' });
+    const p = proposalOf(r.body);
+    expect(p.preview).toMatchObject({ followUp: { customer: 'Ramesh Patil', destination: 'Rameshwaram', dueDate: day(3) } });
+    const ok = await as('BOOKING').post(`/api/v2/copilot/proposals/${p.id}/approve`, {});
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(await prisma.task.findUniqueOrThrow({ where: { id: ok.body.result.id } })).toMatchObject({ dueDate: day(3), customerId: 'CUS-2026-0001' });
+    expect(await prisma.activityLog.count({ where: { action: 'enquiry_follow_up', entityId: enq.body.id } })).toBe(1);
+  });
+
+  it('a proposal that cannot be made is refused and never becomes approvable', async () => {
+    await script('BOOKING', 'Nothing', [
+      { calls: [{ name: 'propose_trip_update', input: { tripId: 'GK-2026-0001', tourName: 'Kashi Yatra', departure: null, returnDate: null, noteToAdd: null } }] },
+      { answer: 'Nothing would change.' },
+    ]);
+    const r = await as('BOOKING').post('/api/v2/copilot/ask', { message: 'Nothing' });
+    expect(r.body.answer.looked[0]).toMatchObject({ ok: false, note: 'Nothing would change on this trip' });
+    expect(r.body.answer.looked[0].proposal).toBeUndefined();
+    const [a] = await prisma.aiAction.findMany({ where: { sessionId: r.body.sessionId } });
+    expect(a).toMatchObject({ status: 'DONE', ok: false, error: 'invalid_input' });
+    expect((await as('BOOKING').post(`/api/v2/copilot/proposals/${a.id}/approve`, {})).status).toBe(409);
   });
 });

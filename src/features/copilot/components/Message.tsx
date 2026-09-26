@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import type { CopilotMessage } from '@/shared/contracts/copilot';
 import { AnswerText } from './AnswerText';
+import { ProposalCard } from './ProposalCard';
 
 /** What it looked at, under the answer — so every figure can be checked on its own screen. */
 function Looked({ looked }: { looked: Extract<CopilotMessage, { role: 'assistant' }>['looked'] }) {
@@ -41,6 +42,7 @@ export function Message({ m }: { m: CopilotMessage }) {
     <div className="flex justify-start">
       <div className="max-w-[92%] sm:max-w-[85%] rounded-lg bg-white border border-slate-200 px-3.5 py-2.5">
         <AnswerText text={m.text} />
+        {m.looked.filter(l => l.proposal).map(l => <ProposalCard key={l.proposal!.id} p={l.proposal!} />)}
         <Looked looked={m.looked} />
       </div>
     </div>

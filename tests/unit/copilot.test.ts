@@ -13,13 +13,30 @@ const FINANCE_TOOLS = ['get_money_summary', 'get_receivables', 'get_supplier_due
 const names = (role: string) => toolsFor(role).map(t => t.name).sort();
 
 describe('the tools a person gets', () => {
-  it('every tool declares a permission that exists in some role, and only reads', () => {
+  it('every tool declares a permission that exists in some role; only the write tools can apply anything', () => {
     const all = new Set(Object.values(ROLE_PERMISSIONS).flat());
     for (const t of TOOLS) {
       expect(all.has(t.permission), `${t.name} needs ${t.permission}`).toBe(true);
-      expect(t.kind).toBe('read');
       expect(TOOL_LABELS[t.name], `${t.name} has a screen label`).toBeTruthy();
+      expect(Boolean(t.apply), `${t.name}: apply only on a write`).toBe(t.kind === 'write');
     }
+    expect(TOOLS.filter(t => t.kind === 'write').map(t => t.name).sort()).toEqual(['create_followup', 'create_task', 'draft_message', 'propose_trip_update']);
+  });
+
+  it('money, invoices, receipts, cancellations and sending are never tools', () => {
+    for (const t of TOOLS) {
+      expect(t.name).not.toMatch(/invoice|receipt|payment|refund|cancel|send|stage/);
+      if (t.kind === 'write') expect(t.permission).not.toMatch(/^(finance|invoices|payments|gst|credit-notes|debit-notes):/);
+    }
+  });
+
+  it('who may propose what: each write tool needs the permission its own screen needs', () => {
+    expect(names('BOOKING')).toEqual(expect.arrayContaining(['create_task', 'create_followup', 'draft_message', 'propose_trip_update']));
+    expect(names('OPERATIONS')).toEqual(expect.arrayContaining(['create_task', 'draft_message']));
+    expect(names('OPERATIONS')).not.toEqual(expect.arrayContaining(['create_followup']));
+    expect(names('OPERATIONS')).not.toContain('propose_trip_update');
+    expect(names('ACCOUNTS')).toContain('create_task');
+    for (const t of ['draft_message', 'propose_trip_update', 'create_followup']) expect(names('ACCOUNTS')).not.toContain(t);
   });
 
   it('the owner gets every tool', () => {
@@ -105,6 +122,13 @@ describe('the rules it is given', () => {
     expect(p).toContain('2026-09-26 (India Standard Time)');
     expect(p).toMatch(/not available to them/);
     expect(p).toMatch(/verify with the CA/);
+    expect(p).toMatch(/only PROPOSE/);
+    expect(p).toMatch(/Never say it is done, saved or sent/);
+  });
+
+  it('tells the model what the person decided about its earlier proposals', () => {
+    const p = copilotInstructions({ userId: 'U', role: 'ADMIN' }, '2026-09-26', ['- Create task “Call hotel”: approved and saved']);
+    expect(p).toContain('the person decided:\n- Create task “Call hotel”: approved and saved');
   });
 
   it('refuses an empty question or a very long one', () => {
@@ -129,6 +153,17 @@ describe('copilot status', () => {
     expect(s.hint).toContain('copilot');
     process.env.ANTHROPIC_API_KEY = 'test-key-not-real'; resetAiProvider();
     expect(aiStatus().copilot).toMatchObject({ provider: 'claude', configured: true, hint: null });
+  });
+});
+
+describe('opening a drafted message in the person\'s own app', () => {
+  it('builds WhatsApp and mail links, and nothing when there is no number or address', async () => {
+    const { whatsappLink, mailtoLink } = await import('../../src/shared/calc/messageLinks');
+    expect(whatsappLink('+91 98765 43210', 'Namaste Ji')).toBe('https://wa.me/919876543210?text=Namaste%20Ji');
+    expect(whatsappLink('098765 43210', 'x')).toBe('https://wa.me/919876543210?text=x');
+    expect(whatsappLink(null, 'x')).toBeNull();
+    expect(mailtoLink('a@b.in', 'Your trip', 'Hi & bye')).toBe('mailto:a@b.in?subject=Your%20trip&body=Hi%20%26%20bye');
+    expect(mailtoLink('not-an-email', null, 'x')).toBeNull();
   });
 });
 

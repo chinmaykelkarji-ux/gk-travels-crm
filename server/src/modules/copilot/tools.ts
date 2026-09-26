@@ -11,8 +11,8 @@
 // off the screen, not whole rows — so an answer can be checked against the
 // screen it came from. Every call is recorded in `ai_actions`.
 //
-// Nothing here writes anything. Write tools arrive in 6.2 and will produce a
-// proposal a person confirms (hard rule 8).
+// Nothing here writes anything. The write tools (writeTools.ts) only propose;
+// a person approves before anything is saved (hard rule 8).
 // ============================================================
 
 import { z } from 'zod';
@@ -28,8 +28,13 @@ import * as payables from '../payables/service.js';
 import * as customers from '../customers/service.js';
 import * as documents from '../documents/service.js';
 import * as extraction from '../extraction/service.js';
+import * as enquiries from '../sales/enquiries.service.js';
+import { WRITE_TOOLS } from './writeTools.js';
 
 export interface ToolContext { userId: string; role: string }
+
+/** What an approved proposal made. `link` opens it; `external` links leave TravelOS (WhatsApp, mail). */
+export interface ProposalResult { type: string; id: string | null; label: string; link: string | null; external?: boolean }
 
 export interface CopilotTool<I = Record<string, unknown>> {
   name: string;
@@ -38,7 +43,10 @@ export interface CopilotTool<I = Record<string, unknown>> {
   kind: 'read' | 'write';
   permission: string;
   input: z.ZodType<I>;
+  /** A read's answer; for a write, the preview of what it would do — nothing is saved. */
   run: (input: I, ctx: ToolContext) => Promise<unknown>;
+  /** Writes only: runs after a person approves, through the ordinary service, as that person. */
+  apply?: (input: I, ctx: ToolContext) => Promise<ProposalResult>;
 }
 
 const none = z.object({});
@@ -47,7 +55,7 @@ const day = z.string().describe('A date as YYYY-MM-DD');
 /** Trims a list to what a person would actually read out. */
 const few = <T>(rows: T[], n = 8) => rows.slice(0, n);
 
-export const TOOLS: CopilotTool<never>[] = [
+const READ_TOOLS: CopilotTool<never>[] = [
   {
     name: 'search_trips',
     description: 'Find tours by name, destination, customer or departure dates. Use it to answer "which trips leave this week", "is there a Kashi tour in November".',
@@ -132,6 +140,25 @@ export const TOOLS: CopilotTool<never>[] = [
         money: canSeeCommercials(ctx.role)
           ? { invoiced: c.stats.invoiced, received: c.stats.received, outstanding: c.stats.outstanding, lifetimeValue: c.stats.lifetimeValue }
           : 'not theirs to see',
+      };
+    },
+  },
+  {
+    name: 'search_enquiries',
+    description: 'Find open sales enquiries by customer name, phone, destination or enquiry number, with their status and travel dates.',
+    kind: 'read', permission: 'enquiries:read',
+    input: z.object({
+      q: z.string().max(120).nullable().describe('Customer, phone, destination or enquiry number; null for the latest open ones'),
+      includeClosed: z.boolean().nullable().describe('true to include won and lost enquiries'),
+    }) as never,
+    run: async (i: { q: string | null; includeClosed: boolean | null }) => {
+      const page = await enquiries.listEnquiries({ q: i.q ?? undefined, includeClosed: i.includeClosed ?? false, page: 1, pageSize: 10 });
+      return {
+        total: page.total,
+        enquiries: few(page.items).map(e => ({
+          id: e.id, number: e.enquiryNumber, customer: e.customer.name, customerId: e.customer.id, destination: e.destination,
+          status: e.status, departure: e.departureDate, assignedTo: e.assignee?.name ?? null,
+        })),
       };
     },
   },
@@ -244,6 +271,8 @@ export const TOOLS: CopilotTool<never>[] = [
     },
   },
 ];
+
+export const TOOLS: CopilotTool<never>[] = [...READ_TOOLS, ...WRITE_TOOLS];
 
 export const TOOL_BY_NAME = new Map(TOOLS.map(t => [t.name, t]));
 

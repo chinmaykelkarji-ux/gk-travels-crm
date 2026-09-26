@@ -11,7 +11,8 @@
 //
 // The model never sees a tool the person could not use, and a tool it asks
 // for anyway is refused here, not in the adapter (architecture H.6). Nothing
-// in this file writes to a business record: every tool is a read.
+// in this file writes to a business record: a write tool only leaves a
+// PROPOSED row, and proposals.ts applies it once the person approves.
 // ============================================================
 
 import type { Prisma } from '@prisma/client';
@@ -23,6 +24,7 @@ import { istToday } from '../../../../src/shared/calc/istTime.js';
 import type { CopilotAnswer, CopilotAsk, CopilotSession, CopilotSessionSummary } from '../../../../src/shared/contracts/copilot.js';
 import { TOOL_BY_NAME, toolSpecs, type ToolContext } from './tools.js';
 import { transcript, userMessageCount } from './transcript.js';
+import { decidedSince, proposalsFor } from './proposals.js';
 
 /** Model steps per question. Each step may ask for several tools at once. */
 export const MAX_STEPS = 6;
@@ -34,7 +36,7 @@ export const STOPPED_EARLY =
 
 export interface Asker { userId: string; role: string; name?: string | null }
 
-export function copilotInstructions(asker: Asker, today = istToday()): string {
+export function copilotInstructions(asker: Asker, today = istToday(), decided: string[] = []): string {
   return [
     'You are the TravelOS copilot for GK Travels, a travel agency in Belagavi, Karnataka.',
     'You answer questions from the staff member using ONLY the results of the tools you are given.',
@@ -48,9 +50,13 @@ export function copilotInstructions(asker: Asker, today = istToday()): string {
     `- Today is ${today} (India Standard Time). Write dates as 12 Nov 2026.`,
     '- Mention trip and customer ids (e.g. GK-2026-0007) so the person can open them.',
     '- Be brief and plain: short sentences or a short list. No preamble.',
-    '- You cannot change anything. If asked to, say what they could do on the screen instead.',
+    '- You cannot change anything yourself. Tools whose names start with create_, draft_ or propose_ only PROPOSE: nothing is saved until the person approves it on screen. After proposing, say what you proposed and ask them to check and approve it below. Never say it is done, saved or sent.',
+    '- Messages to customers are polite and respectful ("Namaste Shri … Ji"), and only state facts from tool results.',
+    '- Money, invoices, receipts, payments, cancellations and sending messages are never done through you. If asked, say which screen they can use.',
+    '- If you have no tool for a change they ask for, say so plainly.',
     '',
     `The person asking has the role ${asker.role}.`,
+    ...(decided.length ? ['', 'Since your earlier proposals in this conversation, the person decided:', ...decided] : []),
   ].join('\n');
 }
 
@@ -76,9 +82,15 @@ export async function toolOutcome(call: AiToolCall, ctx: ToolContext): Promise<T
     return { error: 'invalid_input', output: { error: 'invalid_input', message } };
   }
   try {
-    return { error: null, output: plain(await tool.run(parsed.data as never, ctx)) };
+    const output = plain(await tool.run(parsed.data as never, ctx));
+    if (tool.kind === 'write') {
+      return { error: null, output: { proposed: output, status: 'PROPOSED', note: 'Nothing has been saved. The person must approve it on screen.' } };
+    }
+    return { error: null, output };
   } catch (err) {
     if (isAppError(err) && err.status === 404) return { error: 'not_found', output: { error: 'not_found', message: err.message } };
+    if (isAppError(err) && err.status === 400) return { error: 'invalid_input', output: { error: 'invalid_input', message: err.message } };
+    if (isAppError(err) && err.status === 409) return { error: 'not_possible', output: { error: 'not_possible', message: err.message } };
     if (isAppError(err) && err.status === 403) return { error: 'not_permitted', output: { error: 'not_permitted', message: 'This is not theirs to see.' } };
     // The model gets a plain message, never the internals.
     console.error('[copilot] tool failed', call.name, err instanceof Error ? err.message : err);
@@ -90,11 +102,14 @@ export async function toolOutcome(call: AiToolCall, ctx: ToolContext): Promise<T
 export async function runTool(call: AiToolCall, ctx: ToolContext, sessionId: string): Promise<unknown> {
   const started = Date.now();
   const { output, error } = await toolOutcome(call, ctx);
+  const kind = TOOL_BY_NAME.get(call.name)?.kind ?? 'read';
   await prisma.aiAction.create({
     data: {
       sessionId,
+      callId: call.id,
       tool: call.name,
-      kind: TOOL_BY_NAME.get(call.name)?.kind ?? 'read',
+      kind,
+      status: kind === 'write' && error === null ? 'PROPOSED' : 'DONE',
       input: (call.input ?? {}) as Prisma.InputJsonValue,
       output: output as Prisma.InputJsonValue,
       ok: error === null,
@@ -133,7 +148,7 @@ export async function ask(input: CopilotAsk, asker: Asker): Promise<CopilotAnswe
 
   const ctx: ToolContext = { userId: asker.userId, role: asker.role };
   const tools = toolSpecs(asker.role);
-  const instructions = copilotInstructions(asker);
+  const instructions = copilotInstructions(asker, istToday(), history.length ? await decidedSince(session.id) : []);
   const turns: AiTurn[] = [...history, { role: 'user', content: input.message }];
   const firstNew = history.length;
   let usage = { inputTokens: 0, outputTokens: 0 };
@@ -167,7 +182,7 @@ export async function ask(input: CopilotAsk, asker: Asker): Promise<CopilotAnswe
     },
   });
 
-  const said = transcript(turns.slice(firstNew)).filter(m => m.role === 'assistant');
+  const said = transcript(turns.slice(firstNew), await proposalsFor(session.id)).filter(m => m.role === 'assistant');
   const last = said[said.length - 1];
   return {
     sessionId: session.id,
@@ -195,7 +210,7 @@ export async function getSession(id: string, userId: string): Promise<CopilotSes
   const turns = row.turns as unknown as AiTurn[];
   return {
     id: row.id, title: row.title, model: row.model, messages: userMessageCount(turns),
-    updatedAt: row.updatedAt.toISOString(), transcript: transcript(turns),
+    updatedAt: row.updatedAt.toISOString(), transcript: transcript(turns, await proposalsFor(row.id)),
   };
 }
 

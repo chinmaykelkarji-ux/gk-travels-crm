@@ -14,18 +14,42 @@ export const CopilotAsk = z.object({
 });
 export type CopilotAsk = z.infer<typeof CopilotAsk>;
 
-/** One thing the copilot looked at to answer. */
+export const PROPOSAL_STATUS = ['PROPOSED', 'APPROVING', 'APPROVED', 'REJECTED'] as const;
+export type ProposalStatus = typeof PROPOSAL_STATUS[number];
+
+/** Something the copilot proposed. Nothing is saved until the person who asked approves it. */
+export interface CopilotProposal {
+  id: string;
+  tool: string;
+  status: ProposalStatus;
+  summary: string;
+  /** What the preview showed: the task, the message, the trip changes. */
+  preview: Record<string, unknown>;
+  input: Record<string, unknown>;
+  result: { type: string; id: string | null; label: string; link: string | null; external?: boolean } | null;
+  decidedAt: string | null;
+}
+
+/** One thing the copilot looked at to answer, or proposed. */
 export interface CopilotLook {
   tool: string;
   label: string;
   ok: boolean;
   /** Why it could not look — never an internal error. */
   note?: string | null;
+  proposal?: CopilotProposal | null;
 }
 
 export type CopilotMessage =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string; looked: CopilotLook[] };
+
+export const ProposalDecision = z.object({
+  /** Only the message wording can be edited before approving; everything else is approved as proposed. */
+  text: z.string().trim().min(2).max(3000).optional(),
+  subject: z.string().trim().max(200).optional().nullable(),
+});
+export type ProposalDecision = z.infer<typeof ProposalDecision>;
 
 export interface CopilotSessionSummary {
   id: string;
@@ -61,6 +85,11 @@ export const TOOL_LABELS: Record<string, string> = {
   get_supplier_dues: 'Read what we owe suppliers',
   find_documents: 'Searched the documents',
   get_documents_to_check: 'Read documents waiting to be checked',
+  search_enquiries: 'Searched the enquiries',
+  create_task: 'Proposed a task',
+  create_followup: 'Proposed a follow-up',
+  draft_message: 'Drafted a message',
+  propose_trip_update: 'Proposed a trip change',
 };
 
 export const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool.replace(/_/g, ' ');
