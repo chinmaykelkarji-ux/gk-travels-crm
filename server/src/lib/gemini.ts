@@ -1,7 +1,9 @@
 // ============================================================
 // GK TRAVELS CRM — Gemini AI client
 //
-// Thin wrapper around the Gemini API (free tier, gemini-2.5-flash-lite).
+// Thin wrapper around the Gemini API (free tier). The model is GEMINI_MODEL,
+// or `gemini-flash-lite-latest`: the alias every key can call (some keys get
+// 404 on pinned names such as gemini-2.5-flash-lite).
 // AI is used server-side only to generate structured text from
 // data already in the database — never to invent facts.
 // ============================================================
@@ -14,6 +16,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Express app from being constructed, taking down login and every other
 // endpoint because one optional key was missing.
 let genAI: GoogleGenerativeAI | null = null;
+
+export const DEFAULT_GEMINI_MODEL = 'gemini-flash-lite-latest';
+
+/** The Gemini model to call: `GEMINI_MODEL` when set, else the alias every key can use. */
+export function geminiModel(): string {
+  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+}
 
 /** True when the Gemini API key is configured — routes use this to return 503. */
 export function isAiConfigured(): boolean {
@@ -35,7 +44,7 @@ export async function callGemini(
 ): Promise<string> {
   try {
     const model = getClient().getGenerativeModel({
-      model: 'gemini-2.5-flash-lite',
+      model: geminiModel(),
       systemInstruction: systemPrompt,
       generationConfig: {
         maxOutputTokens: maxTokens,

@@ -7,14 +7,14 @@
 // adapter has no structured-output guarantee to measure.
 // ============================================================
 
-import { callGemini, isAiConfigured } from '../lib/gemini.js';
+import { callGemini, geminiModel, isAiConfigured } from '../lib/gemini.js';
 import { AiOutputError, type AiProvider, type AiTask, type ChatRequest, type ChatResponse, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
+export { DEFAULT_GEMINI_MODEL } from '../lib/gemini.js';
 
 export class GeminiProvider implements AiProvider {
   readonly name = 'gemini';
-  readonly model = DEFAULT_GEMINI_MODEL;
+  get model(): string { return geminiModel(); }
 
   isConfigured(): boolean { return isAiConfigured(); }
   supports(task: AiTask): boolean { return task === 'prose'; }

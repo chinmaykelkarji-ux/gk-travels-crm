@@ -10,8 +10,9 @@ import { aiProvider, aiStatus, resetAiProvider } from '../../server/src/ai/index
 import { RecordedProvider, recordingKey } from '../../server/src/ai/recorded';
 import { ClaudeProvider, filePart } from '../../server/src/ai/claude';
 import { AiOutputError } from '../../server/src/ai/types';
+import { GeminiProvider, DEFAULT_GEMINI_MODEL } from '../../server/src/ai/gemini';
 
-const ENV_KEYS = ['AI_PROVIDER', 'AI_MODEL', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'AI_RECORDINGS_DIR', 'STORAGE_PROVIDER'] as const;
+const ENV_KEYS = ['AI_PROVIDER', 'AI_MODEL', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'AI_RECORDINGS_DIR', 'STORAGE_PROVIDER'] as const;
 let saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -132,5 +133,14 @@ describe('recorded answers (replay)', () => {
     p.write(recordingKey('extract:OLD', 'q', []), { task: 'extract:OLD', model: 'claude-opus-5', data: { pnr: 42 } });
     await expect(p.extract({ task: 'extract:OLD', instructions: 'i', question: 'q', schema: Schema }))
       .rejects.toThrow(/no longer fits/);
+  });
+});
+
+describe('gemini model', () => {
+  it('uses the alias every key can call unless GEMINI_MODEL says otherwise', () => {
+    expect(new GeminiProvider().model).toBe(DEFAULT_GEMINI_MODEL);
+    expect(DEFAULT_GEMINI_MODEL).toBe('gemini-flash-lite-latest');
+    process.env.GEMINI_MODEL = ' gemini-flash-latest ';
+    expect(new GeminiProvider().model).toBe('gemini-flash-latest');
   });
 });
