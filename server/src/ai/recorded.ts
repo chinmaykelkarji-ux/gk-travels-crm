@@ -14,13 +14,16 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AiOutputError, type AiProvider, type AiTask, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
+import { AiOutputError, type AiProvider, type AiTask, type AiTurn, type ChatRequest, type ChatResponse, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
 
 export interface Recording {
   task: string;
   model: string;
   data?: unknown;
   text?: string;
+  /** For a chat step: what the model asked for next. */
+  toolCalls?: { id: string; name: string; input: Record<string, unknown> }[];
+  done?: boolean;
   usage?: { inputTokens: number; outputTokens: number };
   /** Set when the recorded run itself failed, so replays fail the same way. */
   error?: string;
@@ -32,6 +35,17 @@ export function recordingKey(task: string, question: string, files: { data: Buff
   h.update(task).update('\n').update(question).update('\n').update(text ?? '');
   for (const f of files) h.update(createHash('sha256').update(f.data).digest());
   return `${task.replace(/[^a-zA-Z0-9._-]/g, '_')}-${h.digest('hex').slice(0, 16)}`;
+}
+
+/**
+ * A chat step is keyed by the conversation so far, so replaying a whole
+ * exchange gives back exactly the steps the real model took.
+ */
+export function chatKey(task: string, turns: AiTurn[], toolNames: string[]): string {
+  const h = createHash('sha256');
+  h.update(task).update('|').update(toolNames.slice().sort().join(','));
+  for (const t of turns) h.update('|').update(JSON.stringify(t));
+  return `chat-${task.replace(/[^a-zA-Z0-9._-]/g, '_')}-${h.digest('hex').slice(0, 16)}`;
 }
 
 export class RecordedProvider implements AiProvider {
@@ -69,6 +83,20 @@ export class RecordedProvider implements AiProvider {
       throw new AiOutputError('The recorded answer no longer fits the fields', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
     }
     return { data: parsed.data as T, model: rec.model, usage: { inputTokens: 0, outputTokens: 0, ...rec.usage }, latencyMs: 0 };
+  }
+
+  async chat(req: ChatRequest): Promise<ChatResponse> {
+    const rec = this.read(chatKey(req.task, req.turns, req.tools.map(t => t.name)));
+    if (rec.error) throw new AiOutputError(rec.error);
+    const toolCalls = rec.toolCalls ?? [];
+    return {
+      text: rec.text ?? '',
+      toolCalls,
+      done: rec.done ?? toolCalls.length === 0,
+      model: rec.model,
+      usage: { inputTokens: 0, outputTokens: 0, ...rec.usage },
+      latencyMs: 0,
+    };
   }
 
   async writeProse(req: ProseRequest): Promise<ProseResponse> {

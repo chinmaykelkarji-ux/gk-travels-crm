@@ -17,7 +17,7 @@
 
 import type { z } from 'zod';
 
-export type AiTask = 'extraction' | 'prose';
+export type AiTask = 'extraction' | 'prose' | 'chat';
 export type AiEffort = 'low' | 'medium' | 'high';
 
 /** A file exactly as it was uploaded — never a transcription of it. */
@@ -69,6 +69,43 @@ export interface ProseResponse {
   latencyMs: number;
 }
 
+// ── Chat with tools (the copilot) ────────────────────────────
+
+/** A tool the model may ask for, described in the shape it must call it in. */
+export interface AiToolSpec {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+/** One turn of the conversation, in the order it happened. */
+export type AiTurn =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string; toolCalls?: AiToolCall[] }
+  | { role: 'tool'; callId: string; name: string; output: unknown };
+
+export interface AiToolCall { id: string; name: string; input: Record<string, unknown> }
+
+export interface ChatRequest {
+  task: string;
+  instructions: string;
+  turns: AiTurn[];
+  tools: AiToolSpec[];
+  maxTokens?: number;
+  effort?: AiEffort;
+}
+
+export interface ChatResponse {
+  /** What the model said to the person; empty while it is still calling tools. */
+  text: string;
+  toolCalls: AiToolCall[];
+  /** True when the model has finished and is not waiting for a tool result. */
+  done: boolean;
+  model: string;
+  usage: AiUsage;
+  latencyMs: number;
+}
+
 export interface AiProvider {
   /** `claude`, `gemini`, `recorded` — shown in settings and stored on every proposal. */
   readonly name: string;
@@ -77,6 +114,12 @@ export interface AiProvider {
   supports(task: AiTask): boolean;
   extract<T>(req: ExtractRequest<T>): Promise<ExtractResponse<T>>;
   writeProse(req: ProseRequest): Promise<ProseResponse>;
+  /**
+   * One step of a conversation the caller drives: the model either answers or
+   * asks for a tool. The loop, the permissions and the audit trail stay in
+   * `modules/copilot`, never in the adapter.
+   */
+  chat(req: ChatRequest): Promise<ChatResponse>;
 }
 
 /** Raised when the model answered, but not in a way we can trust or use. */

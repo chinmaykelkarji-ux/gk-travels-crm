@@ -12,7 +12,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { toJsonSchema } from '../../../src/shared/calc/jsonSchema.js';
-import { AiOutputError, type AiFilePart, type AiProvider, type AiTask, type AiUsage, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
+import { AiOutputError, type AiFilePart, type AiProvider, type AiTask, type AiToolCall, type AiTurn, type AiUsage, type ChatRequest, type ChatResponse, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
 
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5';
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -44,6 +44,33 @@ function usageOf(u: { input_tokens: number; output_tokens: number; cache_read_in
 
 function textOf(content: Anthropic.ContentBlock[]): string {
   return content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map(b => b.text).join('');
+}
+
+/**
+ * The conversation as the API wants it: a tool result is a user turn carrying
+ * `tool_result` blocks, and consecutive results are merged into one turn.
+ */
+export function toMessages(turns: AiTurn[]): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = [];
+  for (const turn of turns) {
+    if (turn.role === 'user') { out.push({ role: 'user', content: turn.content }); continue; }
+    if (turn.role === 'assistant') {
+      const content: Anthropic.ContentBlockParam[] = [];
+      if (turn.content) content.push({ type: 'text', text: turn.content });
+      for (const c of turn.toolCalls ?? []) content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.input });
+      if (content.length) out.push({ role: 'assistant', content });
+      continue;
+    }
+    const block: Anthropic.ContentBlockParam = {
+      type: 'tool_result',
+      tool_use_id: turn.callId,
+      content: [{ type: 'text', text: JSON.stringify(turn.output) }],
+    };
+    const last = out[out.length - 1];
+    if (last?.role === 'user' && Array.isArray(last.content)) (last.content as Anthropic.ContentBlockParam[]).push(block);
+    else out.push({ role: 'user', content: [block] });
+  }
+  return out;
 }
 
 export class ClaudeProvider implements AiProvider {
@@ -94,6 +121,38 @@ export class ClaudeProvider implements AiProvider {
       throw new AiOutputError('The answer did not fit the fields it had to fill', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
     }
     return { data: parsed.data as T, model: response.model, usage: usageOf(response.usage), latencyMs };
+  }
+
+  async chat(req: ChatRequest): Promise<ChatResponse> {
+    const started = Date.now();
+    const response = await getClient().messages.create({
+      model: this.model,
+      max_tokens: req.maxTokens ?? 4000,
+      system: req.instructions,
+      messages: toMessages(req.turns),
+      ...(req.effort ? { output_config: { effort: req.effort } } : {}),
+      tools: req.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+        // Every argument arrives in the shape the tool declared, or not at all.
+        strict: true,
+      })),
+    });
+    if (response.stop_reason === 'refusal') {
+      throw new AiOutputError('The model declined to answer this', response.stop_details?.explanation ?? undefined);
+    }
+    const toolCalls: AiToolCall[] = response.content
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+      .map(b => ({ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> }));
+    return {
+      text: textOf(response.content),
+      toolCalls,
+      done: response.stop_reason !== 'tool_use' && toolCalls.length === 0,
+      model: response.model,
+      usage: usageOf(response.usage),
+      latencyMs: Date.now() - started,
+    };
   }
 
   async writeProse(req: ProseRequest): Promise<ProseResponse> {

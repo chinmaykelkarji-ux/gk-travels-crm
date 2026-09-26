@@ -30,7 +30,7 @@ export const TENANT_MODELS: ReadonlySet<string> = new Set([
   'Traveller', 'TripTraveller', 'CompanySettings', 'NumberingSequence', 'Invoice', 'InvoiceLineItem',
   'CreditNote', 'CreditNoteLineItem', 'DebitNote', 'DebitNoteLineItem', 'TripService',
   'OutboxEvent', 'MessageLog', 'Enquiry', 'SalesQuote', 'SalesQuoteItem', 'Session',
-  'Job', 'Document', 'DocumentLink', 'DocumentExtraction', 'CustomerRelationship',
+  'Job', 'Document', 'DocumentLink', 'DocumentExtraction', 'AiSession', 'AiAction', 'CustomerRelationship',
   'SalesQuoteOptionGroup', 'SalesQuoteParty', 'SalesQuoteItemRate', 'BookingContract', 'PaymentScheduleItem',
   'Hotel', 'HotelRoomType', 'HotelRate', 'Vehicle', 'Driver', 'Activity',
   'HotelBooking', 'VehicleAssignment', 'ActivityBooking',

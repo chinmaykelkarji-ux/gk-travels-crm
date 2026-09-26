@@ -77,6 +77,8 @@ model Organization {
   documents              Document[]
   documentLinks          DocumentLink[]
   documentExtractions    DocumentExtraction[]
+  aiSessions             AiSession[]
+  aiActions              AiAction[]
   customerRelationships  CustomerRelationship[]
   tripTravellers         TripTraveller[]
   salesQuoteOptionGroups SalesQuoteOptionGroup[]
@@ -302,8 +304,56 @@ model DocumentExtraction {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, status])
-  @@index([documentId])
-  @@map("document_extractions")
+  @@index([documentId])
+  @@map("document_extractions")
+}
+
+/// One conversation with the copilot, kept so it can be continued and read back.
+model AiSession {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  /// The session runs as this person and can never exceed their role.
+  userId         String
+  role           String
+  title          String
+  /// The conversation so far: user turns, the model's turns, and tool results.
+  turns          Json
+  provider       String
+  model          String
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  actions        AiAction[]
+
+  @@index([organizationId, userId])
+  @@map("ai_sessions")
+}
+
+/// Every tool the copilot used, with what it asked and what came back.
+/// A write tool also records who approved it — the model never approves itself.
+model AiAction {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  sessionId      String
+  session        AiSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tool           String
+  kind           String       @default("read")
+  input          Json
+  output         Json?
+  ok             Boolean      @default(true)
+  error          String?
+  latencyMs      Int?
+  requestedById  String?
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, sessionId])
+  @@index([organizationId, tool])
+  @@map("ai_actions")
 }
 
 model Customer {

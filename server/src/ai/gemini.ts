@@ -8,7 +8,7 @@
 // ============================================================
 
 import { callGemini, isAiConfigured } from '../lib/gemini.js';
-import { AiOutputError, type AiProvider, type AiTask, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
+import { AiOutputError, type AiProvider, type AiTask, type ChatRequest, type ChatResponse, type ExtractRequest, type ExtractResponse, type ProseRequest, type ProseResponse } from './types.js';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
 
@@ -21,6 +21,10 @@ export class GeminiProvider implements AiProvider {
 
   async extract<T>(_req: ExtractRequest<T>): Promise<ExtractResponse<T>> {
     throw new AiOutputError('Gemini is configured for wording only', 'Reading documents into fields needs the Claude provider.');
+  }
+
+  async chat(_req: ChatRequest): Promise<ChatResponse> {
+    throw new AiOutputError('Gemini is configured for wording only', 'The copilot needs the Claude provider, which can use tools.');
   }
 
   async writeProse(req: ProseRequest): Promise<ProseResponse> {
