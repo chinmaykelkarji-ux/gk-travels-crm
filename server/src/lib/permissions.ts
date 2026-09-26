@@ -22,6 +22,8 @@
 //                 trip workspace (write: BOOKING, OPERATIONS; read: all staff)
 //   copilot:use — ask the copilot (all staff); what it can look up is each
 //                 tool's own permission (modules/copilot/tools.ts)
+//   insights:read — the insights feed (all staff); each insight is counted
+//                 only for a role that could open its screen
 //   DRIVER     — driver:duties only; requireAuth also fences a DRIVER session
 //                to /api/v2/driver, /api/v2/me and /api/auth (middleware/auth.ts)
 // ============================================================
@@ -49,7 +51,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'masters:read', 'masters:write', 'rates:write',
     'operations:read', 'operations:write',
     'expenses:read',
-    'ai:use', 'copilot:use',
+    'ai:use', 'copilot:use', 'insights:read',
   ],
 
   ACCOUNTS: [
@@ -68,7 +70,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'commissions:read', 'commissions:write',
     'documents:read', 'documents:write',
     'reports:read',
-    'copilot:use',
+    'copilot:use', 'insights:read',
     'masters:read',
     'operations:read',
   ],
@@ -87,7 +89,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'tasks:read', 'tasks:write',
     'messaging:read', 'messaging:write',
     'documents:read', 'documents:write',
-    'copilot:use',
+    'copilot:use', 'insights:read',
   ],
   // Driver view only (/driver): their own confirmed duties and status updates.
   DRIVER: [

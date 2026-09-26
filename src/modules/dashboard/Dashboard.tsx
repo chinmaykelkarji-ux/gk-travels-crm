@@ -24,6 +24,7 @@ import { cn } from '@/shared/utils/cn';
 import { Badge } from '@/shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Separator } from '@/shared/components/ui/separator';
+import { InsightsPanel } from '@/features/insights/components/InsightsPanel';
 
 // ─── KPI Card ────────────────────────────────────────────────
 
@@ -454,6 +455,9 @@ export default function Dashboard() {
 
   return (
     <div className="p-5 space-y-5 animate-fade-in">
+
+      {/* ── Needs attention (v2 insights, counted by the server) ── */}
+      <InsightsPanel />
 
       {/* ── Overdue Alert ──────────────────────────────── */}
       {stats.overdueTrips.length > 0 && (

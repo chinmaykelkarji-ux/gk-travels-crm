@@ -10,6 +10,7 @@ import { useToday } from '../hooks';
 import { TaskRow } from '../components/TaskRow';
 import { NewTaskForm } from '../components/NewTaskForm';
 import { usePendingReviews } from '@/features/extraction/hooks';
+import { InsightsPanel } from '@/features/insights/components/InsightsPanel';
 
 const BUCKET_STYLE: Record<string, string> = { OVERDUE: 'text-red-700', NOW: 'text-amber-700', TODAY: 'text-slate-800', TOMORROW: 'text-slate-700', THIS_WEEK: 'text-slate-600', NO_DATE: 'text-slate-500' };
 
@@ -36,6 +37,7 @@ export default function TodayPage() {
           <Link to="/settings/task-rules" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800"><Settings2 className="w-3.5 h-3.5" />Rules</Link>
         </div>} />
       <div className="px-5 py-4 space-y-4 max-w-5xl">
+        <InsightsPanel />
         {toCheck > 0 && (
           <Link to="/documents/review" className="block rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 hover:bg-amber-100">
             <ScanLine className="inline w-4 h-4 mr-1.5 -mt-0.5" />

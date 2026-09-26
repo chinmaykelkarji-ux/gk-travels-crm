@@ -1,4 +1,4 @@
-# TravelOS — continuation master prompt (Phase 6 → 9)
+# TravelOS — continuation master prompt (Phase 7 → 9)
 
 Paste this whole file into a new session to carry the work on. It is written to be
 self-contained: what TravelOS is, what is already built, exactly where the work
@@ -68,7 +68,8 @@ owe", "Documents to check". Messages to customers are polite and respectful
 
 ## Branch and state
 
-Branch: `claude/travelos-phase-3-41f57b` (nothing merges to `main`).
+Branch: `claude/admiring-edison-ibfdfg` — a fast-forward of `claude/travelos-phase-3-41f57b`
+(which stops at the Phase 6 groundwork, `1a6b6822`). Nothing merges to `main`.
 Remote: `chinmaykelkarji-ux/gk-travels-crm`.
 
 | Phase | State |
@@ -77,84 +78,31 @@ Remote: `chinmaykelkarji-ux/gk-travels-crm`.
 | 3 travel operations (identity, masters, hotel/vehicle/activity, tickets, trip control centre, itinerary, task engine, driver view) | ☑ |
 | 4 finance (ledger, receipts per family party, supplier bills, expenses, tax rates as data, invoices in the books, receivables + trip profit, Money page, late money raises tasks) | ☑ `fe057ff5` |
 | 5 document intelligence (AI provider interface, document centre, reading documents into proposals, evaluation harness) | ☑ `48a641cb` |
-| 6 copilot | **groundwork only** — `778853a5` |
+| 6 copilot and insights (ask loop, Ask TravelOS screen, proposals a person approves, Needs attention) | ☑ at its checkpoint — see `PROGRESS.md` |
 | 7 comms + automation, 8 customer portal, 9 analytics + platform | not started |
 
-Phase 4 and Phase 5 were both tested by the owner at their checkpoints.
+Phases 4 and 5 were tested by the owner. **Phase 6 waits for the owner's manual
+test**; do not start Phase 7 until they say continue.
 
-## Where Phase 6 stopped
+## What Phase 6 left in place (reuse it)
 
-Committed groundwork (`778853a5`), typechecks clean, 238 unit tests green,
-migration chain replays with no drift:
+- `modules/copilot/service.ts` — `ask()` runs up to six model steps; every tool
+  call is looked up, its permission re-checked for the asker, validated, run and
+  written to `ai_actions`. `copilot:use` opens it (all staff, never a driver).
+- `modules/copilot/tools.ts` (twelve reads) and `writeTools.ts` (four proposals:
+  `create_task`, `create_followup`, `draft_message`, `propose_trip_update`, each
+  with `apply` that calls the ordinary service). `proposals.ts` approves/rejects —
+  only the asker, once, permission re-checked, audited.
+- `draft_message` never sends: approving returns a WhatsApp / mail link
+  (`src/shared/calc/messageLinks.ts`). **Phase 7 is where real sending lands** —
+  through the job runner and the official Meta Cloud API, logged per record.
+- `modules/insights/service.ts` + `src/shared/calc/insights.ts` — deterministic
+  insights; `phrase()` drops a model's wording if it adds any number
+  (`numbersAddedBy`). Phase 7 automation can raise the same facts as events.
+- Tests script a recorded exchange by running the same tools: `script()` in
+  `tests/integration/copilot.v2.test.ts`.
 
-- **`AiProvider.chat()`** (`server/src/ai/types.ts`) — one step of a conversation
-  the caller drives: the model either answers or asks for a tool. The loop, the
-  permissions and the audit trail stay in `modules/copilot`, never in the adapter.
-  - `claude.ts` maps turns to `tool_use` / `tool_result` blocks, `strict: true` on
-    every tool, and refuses to pretend when `stop_reason` is `refusal`.
-  - `gemini.ts` says plainly it cannot (wording only).
-  - `recorded.ts` replays a whole exchange step by step (`chatKey()` hashes the
-    conversation so far), so tests never reach the network.
-- **`server/src/modules/copilot/tools.ts`** — eleven read tools, each declaring
-  the permission it needs: `search_trips`, `get_trip`, `search_customers`,
-  `get_customer`, `get_open_tasks`, `get_money_summary`, `get_receivables`,
-  `get_trip_profit`, `get_supplier_dues`, `find_documents`,
-  `get_documents_to_check`. `toolsFor(role)` / `toolSpecs(role)` hand the model
-  only the tools that person already has, so the copilot can never fetch what
-  they could not open themselves.
-- **`ai_sessions` and `ai_actions`** tables + migration
-  `20260926000000_copilot_sessions` (additive, reverse SQL in its header),
-  registered in `TENANT_MODELS`.
-
-**Not built yet: everything that makes it usable.**
-
-## What to do next
-
-### 6.0 (finish it) — the loop, the route, the tests
-
-- `server/src/modules/copilot/service.ts`
-  - `ask({ message, sessionId })` running **as the user**: load or create an
-    `AiSession` (store the conversation in `turns`), then loop at most ~6 steps:
-    `provider.chat({ task: 'copilot', instructions, turns, tools: toolSpecs(role) })`
-    → for each tool call, look it up, **check the permission again**, validate the
-    input with its zod schema, run it, write an `AiAction` row (tool, input,
-    output, ok, latency), append the assistant turn and the tool turns → repeat
-    until the model answers or the step limit is hit.
-  - System prompt rules: answer only from tool results; if a tool returns
-    nothing, say so; never invent a number; rupees; today's date in IST; say
-    plainly when something is not theirs to see; short, plain answers.
-  - `notConfigured('The copilot (AI)')` when no provider — never a fake answer.
-- `server/src/routes/v2/copilot.ts` — `POST /ask` (`ai:use`), `GET /sessions`,
-  `GET /sessions/:id`; mount in `server/src/app.ts`.
-- Tests: unit for `toolsFor`/`toolSpecs` (a SALES/BOOKING role is not offered
-  finance tools; schemas are strict). Integration with `AI_PROVIDER=recorded`:
-  ask two or three real owner questions end to end, assert the answer, assert an
-  `AiAction` row per tool call, and assert **a role without `finance:read` cannot
-  get finance through the copilot** (the Phase 6 exit criterion).
-
-### 6.1 — the chat surface
-
-A panel in the shell (`src/features/copilot/`), TanStack Query hooks, showing
-what it looked at ("read: receivables, trip GK-2026-0007") under each answer, the
-session list, and "Not configured" when it is off. Responsive at 375 px.
-
-### 6.2 — write tools with confirmation
-
-`create_task`, `draft_message`, `create_followup`, `propose_trip_update`. Each
-returns a **proposal**; the person presses the button; the record is created
-through the ordinary service, and `AiAction.approvedById/approvedAt` records who
-agreed. Money, invoices, cancellations and outbound sends are **never** tools.
-
-### 6.3 — insights feed
-
-`GET /api/v2/insights` computed by deterministic queries (never the model):
-trips departing soon with something unconfirmed, money overdue past 30 days,
-waitlisted tickets, thin margins, passports lapsing. The model may only phrase
-them, and the plain text must read well on its own. Show it on the dashboard.
-
-Then **stop at the Phase 6 checkpoint** with a testing checklist.
-
-### After Phase 6
+## What to do next (after the owner says continue)
 
 - **Phase 7 — communication and automation**: templates, provider configuration
   UI with honest status, one communications log per record, in-app
@@ -167,8 +115,8 @@ Then **stop at the Phase 6 checkpoint** with a testing checklist.
   serialiser.
 - **Phase 9 — analytics and platform**: sales/operations/finance/customer
   analytics on read models, RBAC tables and custom roles, per-organisation
-  settings and numbering, organisation onboarding, API keys, supplier network
-  groundwork.
+  settings and numbering (the insight thresholds in `calc/insights.ts` move
+  there), organisation onboarding, API keys, supplier network groundwork.
 
 ## Environment facts that save time
 
