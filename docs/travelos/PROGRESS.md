@@ -107,8 +107,14 @@ Built on `claude/admiring-edison-ibfdfg` after the owner said "continue all" on 
 | 7.3 | **Notifications** under the bell: a task given to you, a message you queued that failed (automatic ones go to the owner), a document waiting for you to check, an automation that failed. Only your own; never for your own act; never twice | ☑ | `e8eab09b` | Migration `20260930000000_notifications`. The classic reminders count stays in the bell as a link |
 | 7.4 | **Automation rules with run history** (Settings → Automations): payment reminder before departure, departure reminder, supplier not confirmed, ticket still waitlisted, thank-you for a payment, feedback request. Rules that message customers **start off**; only events after a rule is switched on are acted on; each event once; every run records what each action did, including why a message was not sent; a failed run tells the owner once a day. Replaces the classic scheduler; anything left in the classic outbox is closed unsent with the reason | ☑ | `83ad324f` | Migration `20261001000000_automation_rules`. P7-1…P7-5 |
 
-## Phase 8 — Portal · Phase 9 — Analytics + platform
-☐ (Phase 9 also: RBAC tables and custom roles, per-organisation numbering without column defaults, organisation onboarding)
+## Phase 8 — Customer portal
+
+| # | Module | Status | Commit | Notes |
+|---|--------|--------|--------|-------|
+| 8.0 | **The customer's own page** (`/p/<link>`, GK navy and gold, made for a phone): their trips; the itinerary as it was shared (or "being updated" while the office changes it); pickup points; tickets with their own seats; stays; transport, with the driver shown only for a confirmed duty from two days before; payments with the instalment schedule and receipts; documents the office marked for them (60-second links); messages TravelOS sent them; feedback once the trip has started. **Access**: a private link (256-bit token, only its hash kept, shown once, lapses, revocable, every visit counted), optionally also a six-digit code sent through a configured channel (10 minutes, five tries, one a minute; masked in the office log and cleared once sent), then a 12-hour cookie scoped to `/api/portal` and that link. **Strict read models**: every field is listed by hand; a test scans every response for internal keys and known cost / margin / note values. **Families on a group tour** see their own travellers, seats, stays and money only. Office side: **Customer page** tab (make, copy, open in WhatsApp, revoke, what they said), feedback on the trip's Messages tab; `{{portal_link}}` in a template makes a fresh link only when the message is really sent | ☑ | (this commit) | Migration `20261002000000_customer_portal`. P8-1…P8-4 |
+
+## Phase 9 — Analytics + platform
+☐ (RBAC tables and custom roles, per-organisation numbering without column defaults, organisation onboarding)
 
 ## Requests for the owner
 - A Neon branch connection string (or a `NEON_API_KEY`) if you want schema work rehearsed on Neon as well as on the local container. Not blocking: the local container covers every automated check.

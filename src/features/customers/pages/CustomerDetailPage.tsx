@@ -11,6 +11,7 @@ import { formatPhone } from '@/shared/calc/phone';
 import { ApiError } from '@/lib/api';
 import { DocumentsPanel } from '@/features/documents/components/DocumentsPanel';
 import { MessagesPanel } from '@/features/comms/components/MessagesPanel';
+import { PortalLinksPanel } from '@/features/portal/PortalLinksPanel';
 import { useCustomer, useUpdateCustomer, useDeleteCustomer, useMergeCustomers, useRelationships } from '../hooks';
 import { CustomerForm } from '../components/CustomerForm';
 import { CustomerPicker } from '../components/CustomerPicker';
@@ -20,7 +21,7 @@ import { PassportPill } from '@/features/travellers/components/PassportPill';
 import { useCreateTraveller } from '@/features/travellers/hooks';
 
 const TRIP_TONE: Record<string, Tone> = { draft: 'neutral', quotation: 'info', confirmed: 'accent', in_progress: 'warning', completed: 'success', cancelled: 'danger' };
-const TABS = ['Overview', 'Trips', 'Sales', 'Finance', 'Travellers', 'Documents', 'Messages', 'Activity'] as const;
+const TABS = ['Overview', 'Trips', 'Sales', 'Finance', 'Travellers', 'Documents', 'Messages', 'Customer page', 'Activity'] as const;
 type Tab = typeof TABS[number];
 
 export default function CustomerDetailPage() {
@@ -109,6 +110,7 @@ export default function CustomerDetailPage() {
         {tab === 'Travellers' && <TravellersTab data={data} canWrite={canWrite} />}
         {tab === 'Documents' && <DocumentsTab data={data} />}
         {tab === 'Messages' && <MessagesPanel customerId={c.id} />}
+        {tab === 'Customer page' && <PortalLinksPanel customerId={c.id} customerName={c.name} phone={c.phone ?? null} />}
         {tab === 'Activity' && <ActivityTab data={data} />}
       </div>
 

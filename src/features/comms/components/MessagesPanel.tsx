@@ -5,7 +5,7 @@ import { EmptyState, StatusPill, type Tone } from '@/design-system';
 import { Button } from '@/shared/components/ui/button';
 import { usePermissions } from '@/shared/hooks/usePermissions';
 import { toast } from '@/shared/hooks/useToast';
-import type { ApiError } from '@/lib/api';
+import { api, type ApiError } from '@/lib/api';
 import type { CommChannel, CommView } from '@/shared/contracts/comms';
 import { templatesApi } from '@/features/templates/api';
 import { commsApi } from '../api';
@@ -59,6 +59,7 @@ export function MessagesPanel({ tripId, customerId }: { tripId?: string; custome
   });
   const options = (templates.data?.items ?? []).filter(t => t.channel === channel && t.enabled);
   const p = preview.data;
+  const feedback = useQuery({ queryKey: ['feedback', 'trip', tripId], queryFn: () => api.get<{ items: { id: string; customer: string | null; rating: number; comments: string | null; at: string }[] }>('/v2/feedback', { tripId }), enabled: Boolean(tripId) });
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -101,6 +102,15 @@ export function MessagesPanel({ tripId, customerId }: { tripId?: string; custome
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {feedback.data && feedback.data.items.length > 0 && (
+        <section className="bg-white border border-slate-200 rounded-md p-4">
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">Feedback from the customer page</h3>
+          <ul className="space-y-1.5 text-sm">{feedback.data.items.map(f => (
+            <li key={f.id}><span className="text-amber-600">{'★'.repeat(f.rating)}</span><span className="text-slate-300">{'★'.repeat(5 - f.rating)}</span> {f.customer} · {when(f.at)}{f.comments && <p className="text-slate-700 whitespace-pre-wrap">{f.comments}</p>}</li>
+          ))}</ul>
         </section>
       )}
 

@@ -68,6 +68,7 @@ const CopilotPage         = lazy(() => import('@/features/copilot/pages/CopilotP
 const TemplatesPage       = lazy(() => import('@/features/templates/pages/TemplatesPage'));
 const MessagingStatusPage = lazy(() => import('@/features/comms/pages/MessagingStatusPage'));
 const AutomationsPage     = lazy(() => import('@/features/automation/pages/AutomationsPage'));
+const PortalPage          = lazy(() => import('@/portal/PortalPage'));
 const DocumentsPage       = lazy(() => import('@/features/documents/pages/DocumentsPage'));
 const DocumentReviewPage  = lazy(() => import('@/features/extraction/pages/ReviewPage'));
 const MoneyPage           = lazy(() => import('@/features/finance/pages/MoneyPage'));
@@ -269,6 +270,9 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+
+            {/* ── Customer portal: a private link, no staff session ── */}
+            <Route path="/p/:token" element={<Suspense fallback={<PageSpinner />}><PortalPage /></Suspense>} />
 
             {/* ── Public routes (unauthenticated only) ─────────── */}
             <Route element={<PublicRoute redirectTo="/" />}>

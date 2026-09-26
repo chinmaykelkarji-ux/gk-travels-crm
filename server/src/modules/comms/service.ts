@@ -17,7 +17,7 @@
 // switched on (7.4).
 // ============================================================
 
-import type { Communication, Prisma } from '@prisma/client';
+import { Prisma, type Communication } from '@prisma/client';
 import { prisma, prismaUnscoped } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
 import { enqueueJob } from '../../core/jobs.js';
@@ -32,10 +32,24 @@ import { templateValues } from './values.js';
 export const MAX_SEND_ATTEMPTS = 3;
 const ORDER: Record<string, number> = { QUEUED: 0, SENDING: 1, SENT: 2, DELIVERED: 3, READ: 4 };
 
-async function prepare(input: CommSend, extra?: Record<string, string>) {
+/** Templates whose text carries a secret: the log shows it masked, and it is cleared once sent. */
+export const SENSITIVE_TEMPLATES = new Set(['portal_code']);
+const mask = (text: string | null) => (text ? text.replace(/\b\d{6}\b/g, '••••••') : text);
+
+async function prepare(input: CommSend, extra?: Record<string, string>, issueLink = false) {
   const template = await activeTemplate(input.templateKey, input.channel as TemplateChannel);
   if (!template) throw notFound(`An active ${input.channel === 'WHATSAPP' ? 'WhatsApp' : 'email'} template "${input.templateKey}"`);
   const { values, to } = await templateValues({ ...input, extra });
+  // {{portal_link}}: a fresh private link for this message — made only when it is actually sent.
+  if (/\{\{\s*portal_link\s*\}\}/.test(template.body) && !values.portal_link) {
+    const trip = input.tripId ? await prisma.trip.findUnique({ where: { id: input.tripId }, select: { customerId: true } }) : null;
+    const customerId = input.customerId ?? trip?.customerId ?? null;
+    const { portalBaseUrl, issueAccess } = await import('../portal/access.js');
+    if (customerId && portalBaseUrl()) {
+      if (issueLink) values.portal_link = (await issueAccess({ customerId, days: 90, requireCode: false, label: `Sent with "${template.name}"` }, null)).url!;
+      else values.portal_link = `${portalBaseUrl()}/p/… (a new private link, made when sent)`;
+    }
+  }
   const r = renderTemplate(template, values);
   const recipient = input.to ?? (input.channel === 'WHATSAPP' ? to.phone : to.email);
   const status = channelStatus();
@@ -59,11 +73,13 @@ export async function previewMessage(input: CommSend): Promise<CommPreview> {
 /** Queues a message for TravelOS to send. Refuses rather than sending anything incomplete. */
 export async function sendMessage(input: CommSend, actorId: string | null, source: 'HUMAN' | 'AUTOMATION' = 'HUMAN', automationRunId: string | null = null, extra?: Record<string, string>) {
   if (!channelConfigured(input.channel)) throw notConfigured(input.channel === 'WHATSAPP' ? 'WhatsApp' : 'Email');
-  const { template, rendered, recipient, preview } = await prepare(input, extra);
-  if (rendered.missing.length) {
-    throw new AppError('VALIDATION_ERROR', 400, `Cannot send: TravelOS does not have ${rendered.missing.map(m => `{{${m}}}`).join(', ')} for this message`, { missing: rendered.missing.join(',') });
+  // Checked first without side effects; a private link is only made once the message will really go.
+  const check = await prepare(input, extra, false);
+  if (check.rendered.missing.length) {
+    throw new AppError('VALIDATION_ERROR', 400, `Cannot send: TravelOS does not have ${check.rendered.missing.map(m => `{{${m}}}`).join(', ')} for this message`, { missing: check.rendered.missing.join(',') });
   }
-  if (preview.cannotSend) throw new AppError('STATE_CONFLICT', 409, preview.cannotSend);
+  if (check.preview.cannotSend) throw new AppError('STATE_CONFLICT', 409, check.preview.cannotSend);
+  const { template, rendered, recipient } = /\{\{\s*portal_link\s*\}\}/.test(check.template.body) ? await prepare(input, extra, true) : check;
   const trip = input.tripId ? await prisma.trip.findUnique({ where: { id: input.tripId }, select: { customerId: true } }) : null;
   const customerId = input.customerId ?? trip?.customerId ?? null;
   const row = await prisma.$transaction(async tx => {
@@ -98,15 +114,16 @@ export async function deliver(communicationId: string): Promise<{ status: string
       : { ok: false as const, error: 'The template lost its Meta-approved name before sending', retryable: false })
     : await sendEmail({ to: c.recipient, subject: c.subject ?? '', text: c.body ?? '' });
 
+  const scrub = c.templateKey && SENSITIVE_TEMPLATES.has(c.templateKey) ? { body: mask(c.body), subject: mask(c.subject), params: Prisma.DbNull } : {};
   if (result.ok) {
-    await prisma.communication.update({ where: { id: c.id }, data: { status: 'SENT', sentAt: new Date(), providerMessageId: result.providerMessageId, statusReason: null } });
+    await prisma.communication.update({ where: { id: c.id }, data: { status: 'SENT', sentAt: new Date(), providerMessageId: result.providerMessageId, statusReason: null, ...scrub } });
     return { status: 'SENT' };
   }
   if (result.retryable && attempt < MAX_SEND_ATTEMPTS) {
     await prisma.communication.update({ where: { id: c.id }, data: { status: 'QUEUED', statusReason: `Attempt ${attempt} failed: ${result.error}` } });
     throw new Error(`send attempt ${attempt} failed: ${result.error}`);
   }
-  await prisma.communication.update({ where: { id: c.id }, data: { status: 'FAILED', failedAt: new Date(), statusReason: result.error } });
+  await prisma.communication.update({ where: { id: c.id }, data: { status: 'FAILED', failedAt: new Date(), statusReason: result.error, ...scrub } });
   await onFailed?.(c, result.error);
   return { status: 'FAILED' };
 }
@@ -134,7 +151,9 @@ function commView(c: Communication, by: string | null): CommView {
   return {
     id: c.id, channel: (c.channel ?? (c.type === 'email' ? 'EMAIL' : c.type === 'whatsapp' ? 'WHATSAPP' : null)) as CommView['channel'],
     via: c.via === 'TRAVELOS' ? 'TRAVELOS' : 'APP', status, statusLabel: COMM_STATUS_LABEL[status] ?? status, reason: c.statusReason,
-    to: c.recipient, subject: c.subject, text: c.body, templateKey: c.templateKey, source: c.source, by, at: c.createdAt.toISOString(),
+    to: c.recipient, subject: c.subject,
+    text: c.templateKey && SENSITIVE_TEMPLATES.has(c.templateKey) ? mask(c.body) : c.body,
+    templateKey: c.templateKey, source: c.source, by, at: c.createdAt.toISOString(),
   };
 }
 

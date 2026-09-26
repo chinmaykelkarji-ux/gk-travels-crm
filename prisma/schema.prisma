@@ -59,6 +59,8 @@ model Organization {
   notifications         Notification[]
   automationRules       AutomationRule[]
   automationRuns        AutomationRun[]
+  portalAccesses        PortalAccess[]
+  feedbacks             Feedback[]
   vouchers              Voucher[]
   passengers            Traveller[]
   companySettingss      CompanySettings[]
@@ -3072,4 +3074,51 @@ model AutomationRun {
   @@unique([ruleId, eventKey])
   @@index([organizationId, ruleId, createdAt])
   @@map("automation_runs")
+}
+
+// A private link to a customer's own page (Phase 8). Only the SHA-256 of the
+// token is kept; the link is shown once when it is made. It lapses, can be
+// revoked, and may also need a one-time code sent to the customer.
+model PortalAccess {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  customerId     String
+  tokenHash      String       @unique
+  label          String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  revokedById    String?
+  requireCode    Boolean      @default(false)
+  /// WHATSAPP | EMAIL — how the one-time code is sent.
+  codeChannel    String?
+  codeHash       String?
+  codeExpiresAt  DateTime?
+  codeSentAt     DateTime?
+  codeAttempts   Int          @default(0)
+  lastUsedAt     DateTime?
+  useCount       Int          @default(0)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, customerId])
+  @@map("portal_access")
+}
+
+// What a customer said about a trip, from their page. One per customer per trip; they may change it.
+model Feedback {
+  id             String       @id @default(cuid())
+  organizationId String       @default("org_gktravels")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  tripId         String
+  customerId     String
+  rating         Int
+  comments       String?
+  portalAccessId String?
+  submittedAt    DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, tripId, customerId])
+  @@index([organizationId, tripId])
+  @@map("feedback")
 }
