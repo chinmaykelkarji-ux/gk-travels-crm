@@ -86,7 +86,17 @@ In progress on `claude/travelos-phase-3-41f57b`.
 | 5.2 | Reading a document (`/api/v2/extractions`, **Documents to check**): a small state machine on the job runner — **classify** what the document is, **extract** the fields for that kind, **match** it to the trip and the supplier — then it stops and waits. Every field comes back as `{value, confidence}`; a field the document does not show is `null`, shown as "unable to confidently identify", never guessed. The review screen puts the document itself beside what was read: the fields are editable, the trip and supplier are pickable (with the reason for each suggestion in words), and **nothing is written until a person presses Save**. Approval creates the real record through the same services a person would use — ticket with its legs and passengers, hotel stay, or supplier bill (refused unless its own amounts add up) — attaches the document to it, and is audited as that person's act with the model's answer kept beside it. A kind TravelOS cannot read yet is said plainly; approving a bill needs `finance:write`, a ticket or stay `operations:write` | ☑ | (this commit) | Migration `20260921030000_document_extractions` (additive, reverse SQL in header). Tested end to end against recorded answers — the suite never reaches the network |
 | 5.3 | Evaluation harness (`npm run eval:extraction`) over the real documents in `eval-docs/` — never committed, and the report never prints what a document says. Beside each PDF sits a `<name>.expected.json` a person wrote; the harness classifies and reads each one and scores every field as **correct**, **missed** (the document shows it, the model said nothing — safe, a person is asked), **wrong** (a value that differs — the dangerous one) or **guessed** (a value where the document shows nothing, which rule 8 forbids). A single guess fails the whole run. It reports how much was read and how much of that was right, separately, per kind of document, with tokens and seconds per provider and model; `--record` keeps the answers so `--replay` can score them again for nothing, and `--model` compares one model against another | ☑ | (this commit) | The scoring is pure and unit-tested; the verdict itself needs the owner's own documents, which only they hold (P5-5) |
 
-## Phase 6 — Copilot · Phase 7 — Comms + automation · Phase 8 — Portal · Phase 9 — Analytics + platform
+## Phase 6 — AI copilot and insights
+In progress on `claude/travelos-phase-3-41f57b`. The handover prompt for this phase is `CONTINUATION-PROMPT.md`.
+
+| # | Module | Status | Commit | Notes |
+|---|--------|--------|--------|-------|
+| 6.0 | Copilot: `AiProvider.chat()` (the model answers or asks for a tool; the loop, permissions and audit stay in `modules/copilot`), the read-tool registry where each tool declares the permission it needs, sessions and per-call audit (`ai_sessions`, `ai_actions`), `POST /api/v2/copilot/ask` | ◐ groundwork | `778853a5` | Provider + tools + tables done. The loop, the route and the tests are next |
+| 6.1 | Chat surface in the shell, showing what it looked at under each answer | ☐ | | |
+| 6.2 | Write tools that produce a proposal a person confirms (task, draft, follow-up); money, invoices, cancellations and sends are never tools | ☐ | | |
+| 6.3 | Deterministic insights feed on the dashboard; the model may only phrase it | ☐ | | |
+
+## Phase 7 — Comms + automation · Phase 8 — Portal · Phase 9 — Analytics + platform
 ☐ (Phase 9 also: RBAC tables and custom roles, per-organisation numbering without column defaults, organisation onboarding)
 
 ## Requests for the owner
