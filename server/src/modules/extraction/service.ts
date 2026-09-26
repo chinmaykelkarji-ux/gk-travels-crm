@@ -18,6 +18,7 @@
 import type { Prisma } from '@prisma/client';
 import type { ZodType } from 'zod';
 import { prisma } from '../../lib/prisma.js';
+import { notify } from '../notifications/service.js';
 import { audit } from '../../core/audit.js';
 import { AppError, notFound, notConfigured, stateConflict } from '../../core/errors.js';
 import { getStorage } from '../../core/storage.js';
@@ -155,6 +156,7 @@ export async function advanceExtraction(id: string): Promise<{ done: boolean; st
           description: `"${doc.title}" read as ${DOCUMENT_TYPE_LABEL[row.kind as DocumentTypeName]} — waiting for a person to check it`,
           after: { kind: row.kind, tripId, vendorId },
         });
+        await notify({ userIds: [row.requestedById], type: 'document_ready', title: `"${doc.title}" is read and waiting for you to check it`, link: `/documents/review`, entityType: 'document', entityId: doc.id, dedupeKey: `document_ready:${id}` }, tx);
       });
       return { done: true, step: 'done' };
     }

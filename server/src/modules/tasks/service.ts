@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Prisma, Role, Task } from '@prisma/client';
+import { notify } from '../notifications/service.js';
 import { prisma } from '../../lib/prisma.js';
 import { audit } from '../../core/audit.js';
 import { AppError, notFound, stateConflict } from '../../core/errors.js';
@@ -97,6 +98,7 @@ export async function createTask(input: TaskCreate, actorId?: string | null) {
       include: INCLUDE,
     });
     await audit(tx, { action: 'task_created', entityType: 'task', entityId: t.id, userId: actorId, description: `Task created: ${t.title}${who ? ` for ${who.name}` : ''}`, after: { title: t.title, dueAt: input.dueAt ?? null, assignedTo: who?.name ?? null } });
+    if (who) await notify({ userIds: [who.id], actorId, type: 'task_assigned', title: `Task for you: ${t.title}`, link: t.tripId ? `/trips/${t.tripId}` : '/today', entityType: 'task', entityId: t.id, dedupeKey: `task_assigned:${t.id}:${who.id}` }, tx);
     return t;
   });
   return taskDto(row);
@@ -131,6 +133,9 @@ export async function updateTask(id: string, patch: TaskUpdate, actorId?: string
     const t = await tx.task.update({ where: { id }, data, include: INCLUDE });
     const action = patch.status === 'completed' ? 'task_completed' : patch.status === 'cancelled' ? 'task_cancelled' : patch.status && !OPEN_TASK.includes(before.status) ? 'task_reopened' : 'task_updated';
     await audit(tx, { action, entityType: 'task', entityId: id, userId: actorId, description: `${action.replace('task_', 'Task ')}: ${t.title}${patch.note ? ` — ${patch.note}` : ''}`, before: snap(before), after: snap(t) });
+    if (t.assignedToUserId && t.assignedToUserId !== before.assignedToUserId) {
+      await notify({ userIds: [t.assignedToUserId], actorId, type: 'task_assigned', title: `Task for you: ${t.title}`, link: t.tripId ? `/trips/${t.tripId}` : '/today', entityType: 'task', entityId: t.id, dedupeKey: `task_assigned:${t.id}:${t.assignedToUserId}` }, tx);
+    }
     return t;
   });
   return taskDto(row);

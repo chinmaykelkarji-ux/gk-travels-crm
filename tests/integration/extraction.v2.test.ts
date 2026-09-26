@@ -113,6 +113,8 @@ describe.skipIf(!hasTestDb)('reading documents', () => {
     expect(await prisma.ticket.count()).toBe(0);
     expect((await prisma.document.findUnique({ where: { id: doc.id } }))!.status).toBe('NEEDS_REVIEW');
     expect(await prisma.activityLog.count({ where: { action: 'document_read', source: 'AI' } })).toBe(1);
+    // Whoever sent it to be read is told it is waiting for them.
+    expect(await prisma.notification.count({ where: { userId: USER_IDS.OPERATIONS, type: 'document_ready' } })).toBe(1);
 
     // A person corrects the class and approves; now the ticket exists.
     const approved = await as('OPERATIONS').post(`/api/v2/extractions/${extraction.id}/approve`, {

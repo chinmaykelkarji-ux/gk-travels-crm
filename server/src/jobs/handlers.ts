@@ -34,6 +34,7 @@ import { importLegacyPayments } from '../modules/receipts/legacyImport.js';
 import { advanceExtraction } from '../modules/extraction/service.js';
 import { enqueueJob } from '../core/jobs.js';
 import { deliver as deliverMessage } from '../modules/comms/service.js';
+import '../modules/notifications/hooks.js';
 
 registerJobHandler('scheduler.rules', async () => runSchedulerRules());
 registerJobHandler('outbox.dispatch', async () => processOutboxBatch());
