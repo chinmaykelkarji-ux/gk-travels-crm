@@ -60,8 +60,9 @@ export async function setupChecklist(): Promise<{ done: number; total: number; i
   const ai = aiStatus();
   const comms = channelStatus();
   const staff = people.filter(p => p.role !== 'ADMIN' && p.role !== 'DRIVER').reduce((s, p) => s + p._count._all, 0);
-  const profileMissing = company ? (['companyName', 'gstin', 'stateCode', 'addressLine1', 'phone', 'email'] as const).filter(k => !company[k]) : ['everything'];
-  const bankMissing = company ? (['bankName', 'bankAccountNumber', 'bankIfsc'] as const).filter(k => !company[k]) : ['bank details'];
+  const WORDS: Record<string, string> = { companyName: 'name', gstin: 'GSTIN', stateCode: 'state', addressLine1: 'address', phone: 'phone', email: 'email', bankName: 'bank name', bankAccountNumber: 'account number', bankIfsc: 'IFSC' };
+  const profileMissing = company ? (['companyName', 'gstin', 'stateCode', 'addressLine1', 'phone', 'email'] as const).filter(k => !company[k]).map(k => WORDS[k]) : ['everything'];
+  const bankMissing = company ? (['bankName', 'bankAccountNumber', 'bankIfsc'] as const).filter(k => !company[k]).map(k => WORDS[k]) : ['bank details'];
   const items: SetupItem[] = [
     { key: 'profile', title: 'Company profile', done: profileMissing.length === 0, detail: profileMissing.length ? `Still missing: ${profileMissing.join(', ')}` : 'Name, GSTIN, state, address, phone and email are on invoices and messages.', link: '/settings' },
     { key: 'bank', title: 'Bank details for invoices', done: bankMissing.length === 0, detail: bankMissing.length ? `Still missing: ${bankMissing.join(', ')}` : 'Printed on invoices.', link: '/settings' },

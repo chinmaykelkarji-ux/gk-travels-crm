@@ -1,4 +1,4 @@
-# TravelOS — continuation master prompt (Phase 7 → 9)
+# TravelOS — continuation master prompt (after Phase 9)
 
 Paste this whole file into a new session to carry the work on. It is written to be
 self-contained: what TravelOS is, what is already built, exactly where the work
@@ -68,55 +68,30 @@ owe", "Documents to check". Messages to customers are polite and respectful
 
 ## Branch and state
 
-Branch: `claude/admiring-edison-ibfdfg` — a fast-forward of `claude/travelos-phase-3-41f57b`
-(which stops at the Phase 6 groundwork, `1a6b6822`). Nothing merges to `main`.
-Remote: `chinmaykelkarji-ux/gk-travels-crm`.
+Branch: `claude/admiring-edison-ibfdfg` (a fast-forward of `claude/travelos-phase-3-41f57b`).
+Nothing merges to `main`. Remote: `chinmaykelkarji-ux/gk-travels-crm`.
 
-| Phase | State |
-|---|---|
-| 0 audit, 1 platform core, 2 CRM + sales | ☑ |
-| 3 travel operations (identity, masters, hotel/vehicle/activity, tickets, trip control centre, itinerary, task engine, driver view) | ☑ |
-| 4 finance (ledger, receipts per family party, supplier bills, expenses, tax rates as data, invoices in the books, receivables + trip profit, Money page, late money raises tasks) | ☑ `fe057ff5` |
-| 5 document intelligence (AI provider interface, document centre, reading documents into proposals, evaluation harness) | ☑ `48a641cb` |
-| 6 copilot and insights (ask loop, Ask TravelOS screen, proposals a person approves, Needs attention) | ☑ at its checkpoint — see `PROGRESS.md` |
-| 7 comms + automation, 8 customer portal, 9 analytics + platform | not started |
+All nine phases are built (see `PROGRESS.md`). Phases 4 and 5 were tested by
+the owner; **Phases 6–9 wait for the owner's manual test** — the owner said
+"continue all" after Phase 6, so the checkpoints were reported together.
 
-Phases 4 and 5 were tested by the owner. **Phase 6 waits for the owner's manual
-test**; do not start Phase 7 until they say continue.
+## What the last session left in place (reuse it)
 
-## What Phase 6 left in place (reuse it)
+- Copilot (`modules/copilot`), proposals, insights (`modules/insights`, thresholds per organisation).
+- Messaging: templates (`modules/templates`), channels (`server/src/comms`, Meta Cloud API + SMTP,
+  `COMMS_TRANSPORT=memory` in tests), sends through `modules/comms/service.ts` on the job runner,
+  the delivery webhook, notifications, automation rules (`modules/automation`).
+- Customer portal (`modules/portal`, `server/src/routes/portal.ts`, `src/portal/`): strict read models.
+- Reports (`modules/analytics`), custom roles and API keys as principals (`core/principals.ts`),
+  organisation settings and onboarding (`modules/organization`).
 
-- `modules/copilot/service.ts` — `ask()` runs up to six model steps; every tool
-  call is looked up, its permission re-checked for the asker, validated, run and
-  written to `ai_actions`. `copilot:use` opens it (all staff, never a driver).
-- `modules/copilot/tools.ts` (twelve reads) and `writeTools.ts` (four proposals:
-  `create_task`, `create_followup`, `draft_message`, `propose_trip_update`, each
-  with `apply` that calls the ordinary service). `proposals.ts` approves/rejects —
-  only the asker, once, permission re-checked, audited.
-- `draft_message` never sends: approving returns a WhatsApp / mail link
-  (`src/shared/calc/messageLinks.ts`). **Phase 7 is where real sending lands** —
-  through the job runner and the official Meta Cloud API, logged per record.
-- `modules/insights/service.ts` + `src/shared/calc/insights.ts` — deterministic
-  insights; `phrase()` drops a model's wording if it adds any number
-  (`numbersAddedBy`). Phase 7 automation can raise the same facts as events.
-- Tests script a recorded exchange by running the same tools: `script()` in
-  `tests/integration/copilot.v2.test.ts`.
+## What is next (only when the owner asks)
 
-## What to do next (after the owner says continue)
-
-- **Phase 7 — communication and automation**: templates, provider configuration
-  UI with honest status, one communications log per record, in-app
-  notifications, WhatsApp/email through the job runner (official Meta Cloud API
-  only), automation rules with run history; the existing scheduler rules become
-  visible `AutomationRule` rows.
-- **Phase 8 — customer portal**: token/OTP access to their own trip, itinerary,
-  tickets, stays, transport, driver, payments and documents marked
-  customer-visible. Strict read models — no internal field can reach a portal
-  serialiser.
-- **Phase 9 — analytics and platform**: sales/operations/finance/customer
-  analytics on read models, RBAC tables and custom roles, per-organisation
-  settings and numbering (the insight thresholds in `calc/insights.ts` move
-  there), organisation onboarding, API keys, supplier network groundwork.
+- Fix whatever the owner's manual tests of Phases 6–9 find.
+- Deferred on purpose (decision P9-5): removing the `organizationId` column defaults; moving the
+  classic screens' role guards to permissions; the shared supplier network (P9-4, H.9).
+- The classic `/api/messaging` send route still uses the retired BSP gateway; retire it with the
+  classic messaging screen.
 
 ## Environment facts that save time
 

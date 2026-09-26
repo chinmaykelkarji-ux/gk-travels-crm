@@ -113,6 +113,11 @@ Extraction schemas are registered per document type in `modules/documents/schema
 - Built-in actions: `create_booking_from_quotation`, `create_trip`, `create_payment_schedule`, `create_tasks(template)`, `notify(users|customer, template)`, `send(channel, template)`.
 - The existing scheduler rules become seeded `AutomationRule` rows, so the owner can see and switch them.
 
+### H.9 Supplier network (groundwork — decision P9-4)
+
+- Built: per-organisation supplier scorecards (Reports → Suppliers) — bills, amounts owed and overdue per supplier; each hotel's confirmation rate and median hours to confirm — computed only from that organisation's records.
+- Designed, not built: an opt-in shared directory keyed by a supplier's GSTIN (or verified phone). Each organisation may publish only aggregates (confirmation rate, median hours, share of bills disputed) over a minimum number of bookings, never prices, volumes or customer data. Joining, publishing and reading would each be a separate owner decision, with the other side's consent.
+
 ### H.8 Deployment and environments
 
 - Vercel keeps serving SPA + API. Add `vercel.json` cron: `*/1 * * * *` → `/api/jobs/tick`; `maxDuration` 60 for the tick and document routes (Pro plan) or chunked 25 s budgets on Hobby.
