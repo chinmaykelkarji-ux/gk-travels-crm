@@ -683,6 +683,7 @@ export default function Settings() {
         <Link to="/settings/automations" className="text-indigo-700 hover:underline">Automations</Link>
         <Link to="/settings/roles" className="text-indigo-700 hover:underline">Roles</Link>
         <Link to="/settings/api-keys" className="text-indigo-700 hover:underline">API keys</Link>
+        <Link to="/settings/organisation" className="text-indigo-700 hover:underline">Organisation &amp; setup</Link>
       </nav>
 
       {/* User Management calls /api/users, which is ADMIN-only. Landing a

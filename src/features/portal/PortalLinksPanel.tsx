@@ -21,7 +21,9 @@ export function PortalLinksPanel({ customerId, customerName, phone }: { customer
   const links = useQuery({ queryKey: key, queryFn: () => api.get<{ items: LinkView[]; baseUrl: string | null }>('/v2/portal-links', { customerId }) });
   const feedback = useQuery({ queryKey: ['feedback', customerId], queryFn: () => api.get<{ items: FeedbackView[] }>('/v2/feedback', { customerId }) });
   const status = useQuery({ queryKey: ['comms', 'status'], queryFn: commsApi.status });
-  const [days, setDays] = useState(90);
+  const org = useQuery({ queryKey: ['organization'], queryFn: () => api.get<{ settings: { portal: { defaultLinkDays: number } } }>('/v2/organization') });
+  const [daysTouched, setDays] = useState<number | null>(null);
+  const days = daysTouched ?? org.data?.settings.portal.defaultLinkDays ?? 90;
   const [requireCode, setRequireCode] = useState(false);
   const [codeChannel, setCodeChannel] = useState<'WHATSAPP' | 'EMAIL'>('WHATSAPP');
   const [made, setMade] = useState<{ url: string | null; path: string } | null>(null);

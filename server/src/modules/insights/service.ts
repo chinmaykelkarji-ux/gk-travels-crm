@@ -11,6 +11,8 @@
 // on its own (src/shared/calc/insights.ts). `phrase()` may ask a model to turn
 // those sentences into a short note, and throws its wording away if it adds a
 // number the facts do not contain (architecture H.6).
+// Thresholds are the organisation's own (Phase 9.3), defaulting to
+// INSIGHT_LIMITS.
 // ============================================================
 
 import { prisma } from '../../lib/prisma.js';
@@ -22,19 +24,22 @@ import { istToday, addDays } from '../../../../src/shared/calc/istTime.js';
 import { formatInr, toPaise, sumPaise } from '../../../../src/shared/calc/money.js';
 import { passportStatus, travellerDisplayName } from '../../../../src/shared/calc/travellers.js';
 import {
-  INSIGHT_LIMITS, departingText, expectedMargin, numbersAddedBy, overdueText, passportText, sortInsights, thinMarginText, waitlistText,
+  departingText, expectedMargin, numbersAddedBy, overdueText, passportText, sortInsights, thinMarginText, waitlistText,
   type Insight,
 } from '../../../../src/shared/calc/insights.js';
 import { readiness } from '../trips/stage.js';
 import * as finance from '../finance/service.js';
+import { getSettings } from '../organization/service.js';
+
+type Limits = Awaited<ReturnType<typeof getSettings>>['insights'];
 
 const OPEN_STAGES = ['PLANNING', 'CONFIRMING', 'READY', 'ONGOING'] as const;
 /** Enough to act on; the link opens the full list. */
 const ITEMS = 8;
 const fmtDay = (d: string | null) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : 'no date');
 
-async function departingUnconfirmed(today: string): Promise<Insight | null> {
-  const days = INSIGHT_LIMITS.departingWithinDays;
+async function departingUnconfirmed(today: string, L: Limits): Promise<Insight | null> {
+  const days = L.departingWithinDays;
   const trips = await prisma.trip.findMany({
     where: { stage: { in: [...OPEN_STAGES] }, departure: { gte: today, lte: addDays(today, days) } },
     orderBy: { departure: 'asc' }, take: 40, select: { id: true, tourName: true, destination: true, departure: true },
@@ -54,8 +59,8 @@ async function departingUnconfirmed(today: string): Promise<Insight | null> {
   };
 }
 
-async function passports(today: string): Promise<Insight | null> {
-  const days = INSIGHT_LIMITS.passportWithinDays;
+async function passports(today: string, L: Limits): Promise<Insight | null> {
+  const days = L.passportWithinDays;
   const rows = await prisma.tripTraveller.findMany({
     where: { trip: { isInternational: true, stage: { in: [...OPEN_STAGES] }, departure: { gte: today, lte: addDays(today, days) } } },
     select: {
@@ -97,8 +102,8 @@ async function waitlisted(): Promise<Insight | null> {
   };
 }
 
-async function overdue(today: string): Promise<Insight | null> {
-  const days = INSIGHT_LIMITS.overdueDays;
+async function overdue(today: string, L: Limits): Promise<Insight | null> {
+  const days = L.overdueDays;
   const r = await finance.receivables(today);
   const late = r.customers
     .map(c => ({ c, invoices: c.invoices.filter(i => i.daysOverdue > days) }))
@@ -115,8 +120,8 @@ async function overdue(today: string): Promise<Insight | null> {
   };
 }
 
-async function thinMargins(today: string): Promise<Insight | null> {
-  const pct = INSIGHT_LIMITS.thinMarginPct;
+async function thinMargins(today: string, L: Limits): Promise<Insight | null> {
+  const pct = L.thinMarginPct;
   const trips = await prisma.trip.findMany({
     where: { stage: { in: [...OPEN_STAGES] }, OR: [{ departure: null }, { departure: { gte: addDays(today, -30) } }] },
     orderBy: { departure: 'asc' }, take: 40, select: { id: true },
@@ -140,10 +145,12 @@ async function thinMargins(today: string): Promise<Insight | null> {
 /** What this person should look at today. Only insights they could open themselves are counted at all. */
 export async function insightsFor(role: string, today = istToday()) {
   const can = (p: string) => hasPermission(role as never, p);
+  // The organisation's own numbers (Settings → Organisation), defaulting to INSIGHT_LIMITS.
+  const L = (await getSettings()).insights;
   const jobs: Promise<Insight | null>[] = [];
-  if (can('operations:read')) jobs.push(departingUnconfirmed(today), passports(today), waitlisted());
-  if (can('finance:read')) jobs.push(overdue(today));
-  if (canSeeCommercials(role)) jobs.push(thinMargins(today));
+  if (can('operations:read')) jobs.push(departingUnconfirmed(today, L), passports(today, L), waitlisted());
+  if (can('finance:read')) jobs.push(overdue(today, L));
+  if (canSeeCommercials(role)) jobs.push(thinMargins(today, L));
   const items = sortInsights((await Promise.all(jobs)).filter((x): x is Insight => x !== null));
   return { today, items };
 }
