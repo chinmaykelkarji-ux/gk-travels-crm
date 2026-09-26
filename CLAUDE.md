@@ -50,6 +50,13 @@ Read this file first in every session. The detailed contract documents are in `d
 
 ## Commands (PowerShell)
 
+Run the app on the owner's PC against the local Docker database only (WhatsApp, email and R2 switched off for that window):
+
+```powershell
+.\scripts\run-local.ps1          # http://localhost:3000 — owner@gktravels.local / Owner@12345
+.\scripts\run-local.ps1 -Demo    # plus GK sample data (scripts/demo-data.mjs, through the API, localhost only)
+```
+
 ```powershell
 npm ci                                   # once per worktree (a junction to another node_modules breaks prisma generate)
 docker start travelos-pg                 # local Postgres on port 5434 (Docker Desktop must be running)
